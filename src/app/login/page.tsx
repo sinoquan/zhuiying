@@ -12,50 +12,68 @@ import { toast } from "sonner"
 export default function LoginPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    username: "",
-    password: "",
-  })
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [errorMsg, setErrorMsg] = useState("")
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleLogin = async () => {
+    // 清除错误
+    setErrorMsg("")
     
-    if (!formData.username) {
+    // 验证输入
+    if (!username.trim()) {
+      setErrorMsg("请输入账号")
       toast.error("请输入账号")
       return
     }
     
-    if (!formData.password) {
+    if (!password.trim()) {
+      setErrorMsg("请输入密码")
       toast.error("请输入密码")
       return
     }
 
     setLoading(true)
+    console.log("开始登录...", { username: username.trim() })
+    
     try {
       const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ 
+          username: username.trim(), 
+          password: password.trim() 
+        }),
       })
 
       const data = await response.json()
+      console.log("登录响应:", data)
       
       if (!response.ok) {
         throw new Error(data.error || "登录失败")
       }
 
-      toast.success("登录成功")
+      toast.success("登录成功！")
       
-      // 使用 setTimeout 确保 cookie 设置完成后再跳转
+      // 使用 window.location 进行完整页面跳转
       setTimeout(() => {
-        router.push("/")
-        router.refresh()
-      }, 100)
+        window.location.href = "/"
+      }, 300)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "登录失败")
+      console.error("登录错误:", error)
+      const msg = error instanceof Error ? error.message : "登录失败，请重试"
+      setErrorMsg(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
+  }
+
+  // 处理表单提交
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    console.log("表单提交")
+    handleLogin()
   }
 
   return (
@@ -92,12 +110,14 @@ export default function LoginPage() {
                 <Input
                   id="username"
                   type="text"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value)
+                    setErrorMsg("")
+                  }}
                   placeholder="请输入账号"
-                  className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20"
+                  className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-blue-500"
                   disabled={loading}
-                  autoComplete="username"
                 />
               </div>
             </div>
@@ -111,15 +131,24 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    setErrorMsg("")
+                  }}
                   placeholder="请输入密码"
-                  className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20"
+                  className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-blue-500"
                   disabled={loading}
-                  autoComplete="current-password"
                 />
               </div>
             </div>
+            
+            {/* 错误信息 */}
+            {errorMsg && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                {errorMsg}
+              </div>
+            )}
             
             <p className="text-xs text-slate-500">
               默认账号: admin / 密码: admin
@@ -127,7 +156,7 @@ export default function LoginPage() {
             
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg shadow-blue-500/25"
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg h-11"
               disabled={loading}
             >
               {loading ? (

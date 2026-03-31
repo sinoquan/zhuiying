@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inspector } from 'react-dev-inspector';
 import './globals.css';
 import { MainLayout } from '@/components/layout/main-layout';
+import { Toaster } from '@/components/ui/sonner';
 
 export const metadata: Metadata = {
   title: {
@@ -40,6 +41,7 @@ export default function RootLayout({
       <body className={`antialiased`}>
         {isDev && <Inspector />}
         <MainLayout>{children}</MainLayout>
+        <Toaster position="top-center" richColors />
       </body>
     </html>
   );
