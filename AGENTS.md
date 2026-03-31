@@ -33,28 +33,50 @@
 │   │   ├── cloud-drives/   # 网盘管理
 │   │   ├── assistant/      # 智能助手
 │   │   ├── share/          # 分享管理
-│   │   │   ├── monitor/    # 文件监控
-│   │   │   ├── manual/     # 手动分享
-│   │   │   ├── smart/      # 智能分享
-│   │   │   └── records/    # 分享记录
 │   │   ├── push/           # 推送管理
-│   │   │   ├── channels/   # 推送渠道
-│   │   │   ├── rules/      # 推送规则
-│   │   │   ├── templates/  # 推送模板
-│   │   │   └── records/    # 推送记录
 │   │   ├── logs/           # 实时日志
 │   │   └── settings/       # 系统设置
 │   ├── components/         # 组件
 │   │   ├── layout/         # 布局组件
 │   │   └── ui/             # UI组件库
+│   ├── lib/                # 核心库
+│   │   ├── cloud-drive/    # 网盘SDK
+│   │   ├── push/           # 推送服务
+│   │   ├── tmdb/           # TMDB服务
+│   │   ├── monitor/        # 监控服务
+│   │   └── auth/           # 认证服务
 │   ├── storage/            # 数据存储
 │   │   └── database/       # 数据库配置
 │   ├── hooks/              # 自定义 Hooks
-│   └── lib/                # 工具库
+│   └── lib/utils.ts        # 工具函数
 ├── next.config.ts          # Next.js 配置
 ├── package.json            # 项目依赖管理
 └── tsconfig.json           # TypeScript 配置
 ```
+
+## 核心模块
+
+### 1. 网盘服务 (src/lib/cloud-drive/)
+支持多种网盘的真实API调用：
+- 115网盘 - Pan115Service
+- 阿里云盘 - AliyunService
+- 夸克网盘 - QuarkService
+- 天翼网盘 - TianyiService
+- 百度网盘 - BaiduService
+
+### 2. 推送服务 (src/lib/push/)
+- TelegramPushService - Telegram Bot推送
+- QQPushService - QQ消息推送
+
+### 3. TMDB服务 (src/lib/tmdb/)
+- TMDBService - 智能识别影视内容
+- 支持电影/电视剧识别
+- 自动提取季数、集数、年份
+
+### 4. 文件监控服务 (src/lib/monitor/)
+- FileMonitorService - 定时扫描文件
+- 自动分享新文件
+- 自动推送到配置的渠道
 
 ## 数据库表结构
 
@@ -68,20 +90,14 @@
 - **system_settings** - 系统设置表
 - **operation_logs** - 操作日志表
 
-## 包管理规范
-
-**仅允许使用 pnpm** 作为包管理器，**严禁使用 npm 或 yarn**。
-
-## 开发规范
-
-- **Hydration 错误预防**：严禁在 JSX 渲染逻辑中直接使用 typeof window、Date.now()、Math.random() 等动态数据。必须使用 'use client' 并配合 useEffect + useState 确保动态内容仅在客户端挂载后渲染。
-- **字段命名**：数据库字段使用 snake_case，前端使用对应的 snake_case
-- **错误处理**：所有 Supabase 操作必须检查 error 并 throw
-- **类型安全**：禁止使用 `createClient<Database>` 泛型，用 as 断言
-
 ## API 接口
 
-### 统计相关
+### 认证
+- `POST /api/auth` - 登录
+- `GET /api/auth` - 检查登录状态
+- `DELETE /api/auth` - 登出
+
+### 统计
 - `GET /api/dashboard/stats` - 获取统计数据
 
 ### 网盘管理
@@ -89,35 +105,55 @@
 - `POST /api/cloud-drives` - 创建网盘
 - `PUT /api/cloud-drives/[id]` - 更新网盘
 - `DELETE /api/cloud-drives/[id]` - 删除网盘
+- `GET /api/cloud-drives/[id]/files` - 列出文件
+- `GET /api/cloud-drives/[id]/validate` - 验证配置
+- `POST /api/cloud-drives/[id]/share` - 创建分享
 
 ### 分享管理
-- `GET /api/share/monitor` - 获取监控任务列表
+- `GET /api/share/monitor` - 获取监控任务
 - `POST /api/share/monitor` - 创建监控任务
-- `PUT /api/share/monitor/[id]` - 更新监控任务
-- `DELETE /api/share/monitor/[id]` - 删除监控任务
 - `POST /api/share/manual` - 手动分享
-- `GET /api/share/records` - 获取分享记录
+- `GET /api/share/records` - 分享记录
 
 ### 推送管理
-- `GET /api/push/channels` - 获取推送渠道列表
+- `GET /api/push/channels` - 推送渠道列表
 - `POST /api/push/channels` - 创建推送渠道
-- `PUT /api/push/channels/[id]` - 更新推送渠道
-- `DELETE /api/push/channels/[id]` - 删除推送渠道
-- `GET /api/push/records` - 获取推送记录
+- `GET /api/push/channels/[id]/test` - 测试推送
+- `POST /api/push/send` - 发送推送
 
-### 智能助手
-- `POST /api/assistant/analyze` - 分析分享链接
-- `POST /api/assistant/push` - 推送分享链接
+### TMDB
+- `POST /api/tmdb/identify` - 智能识别
+- `GET /api/tmdb/search` - 搜索内容
 
-### 日志管理
-- `GET /api/logs` - 获取操作日志
+### 监控
+- `POST /api/monitor/scan` - 触发扫描
+- `GET /api/monitor/scan` - 监控状态
+
+### 日志
+- `GET /api/logs` - 获取日志
 - `DELETE /api/logs` - 清空日志
 
-## UI 设计与组件规范
+## 包管理规范
 
-- 使用 shadcn/ui 组件库，位于 `src/components/ui/` 目录下
-- 布局组件位于 `src/components/layout/` 目录下
-- 所有页面使用统一的 MainLayout 布局
-- 左侧菜单使用 Sidebar 组件
+**仅允许使用 pnpm** 作为包管理器，**严禁使用 npm 或 yarn**。
+
+## 开发规范
+
+- **Hydration 错误预防**：严禁在 JSX 渲染逻辑中直接使用 typeof window、Date.now()、Math.random() 等动态数据
+- **字段命名**：数据库字段使用 snake_case
+- **错误处理**：所有 Supabase 操作必须检查 error 并 throw
+- **类型安全**：禁止使用 `createClient<Database>` 泛型
+
+## 配置说明
+
+### TMDB API
+在系统设置中配置 TMDB API Key，或设置环境变量 `TMDB_API_KEY`
+
+### 认证
+默认密码: admin
+可通过环境变量 `SYSTEM_PASSWORD` 设置，或在系统设置中修改
+
+### 禁用认证
+开发环境可设置 `DISABLE_AUTH=true` 禁用认证
 
 
