@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -30,7 +31,19 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { FileCode, Plus, MoreHorizontal, Edit, Trash2, Copy } from "lucide-react"
+import { 
+  FileCode, 
+  Plus, 
+  MoreHorizontal, 
+  Edit, 
+  Trash2, 
+  Copy, 
+  Check,
+  MessageSquare,
+  Send,
+  Image as ImageIcon,
+  Sparkles
+} from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,13 +51,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
+import { PRESET_TEMPLATES, TEMPLATE_VARIABLES } from "@/lib/push/types"
+import { renderTemplate, getPreviewData } from "@/lib/push/template-renderer"
 
 interface PushTemplate {
   id: number
-  cloud_drive_id: number
+  cloud_drive_id: number | null
   name: string
-  content_type: string
-  template_content: string
+  content_type: 'movie' | 'tv_series' | 'completed'
+  telegram_template: string
+  qq_template: string
+  include_image: boolean
   is_active: boolean
   created_at: string
   cloud_drives?: {
@@ -65,11 +82,14 @@ export default function PushTemplatesPage() {
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<PushTemplate | null>(null)
+  const [activePreset, setActivePreset] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     cloud_drive_id: "",
     name: "",
-    content_type: "",
-    template_content: "",
+    content_type: "movie" as 'movie' | 'tv_series' | 'completed',
+    telegram_template: "",
+    qq_template: "",
+    include_image: true,
   })
 
   useEffect(() => {
@@ -93,15 +113,33 @@ export default function PushTemplatesPage() {
     }
   }
 
+  const handlePresetSelect = (presetId: string) => {
+    const preset = PRESET_TEMPLATES.find(p => p.id === presetId)
+    if (preset) {
+      setFormData({
+        ...formData,
+        name: preset.name,
+        content_type: preset.content_type,
+        telegram_template: preset.telegram_template,
+        qq_template: preset.qq_template,
+        include_image: preset.include_image,
+      })
+      setActivePreset(presetId)
+      toast.success(`已应用预设模板: ${preset.name}`)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     try {
       const payload = {
-        cloud_drive_id: parseInt(formData.cloud_drive_id),
+        cloud_drive_id: formData.cloud_drive_id ? parseInt(formData.cloud_drive_id) : null,
         name: formData.name,
         content_type: formData.content_type,
-        template_content: formData.template_content,
+        telegram_template: formData.telegram_template,
+        qq_template: formData.qq_template,
+        include_image: formData.include_image,
       }
 
       if (editingTemplate) {
@@ -164,52 +202,54 @@ export default function PushTemplatesPage() {
     setFormData({
       cloud_drive_id: "",
       name: "",
-      content_type: "",
-      template_content: `🎬 **{title}** 更新啦！
-
-📁 文件: {file_name}
-📦 大小: {file_size}
-
-🔗 链接: {share_url}
-🔑 提取码: {share_code}
-
-#追影 #自动推送`,
+      content_type: "movie",
+      telegram_template: "",
+      qq_template: "",
+      include_image: true,
     })
     setEditingTemplate(null)
+    setActivePreset(null)
   }
 
   const openEditDialog = (template: PushTemplate) => {
     setEditingTemplate(template)
     setFormData({
-      cloud_drive_id: template.cloud_drive_id.toString(),
+      cloud_drive_id: template.cloud_drive_id?.toString() || "",
       name: template.name,
       content_type: template.content_type,
-      template_content: template.template_content,
+      telegram_template: template.telegram_template,
+      qq_template: template.qq_template,
+      include_image: template.include_image,
     })
     setDialogOpen(true)
   }
 
-  const previewTemplate = (content: string) => {
-    return content
-      .replace("{title}", "权力的游戏")
-      .replace("{file_name}", "Game.of.Thrones.S08E06.mkv")
-      .replace("{file_size}", "4.5 GB")
-      .replace("{share_url}", "https://pan.example.com/s/abc123")
-      .replace("{share_code}", "xyz9")
-  }
-
-  const getContentTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      tv_series: "电视剧",
-      movie: "电影",
-      completed: "完结剧集",
-    }
-    return labels[type] || type
+  const getPreviewContent = (template: string, format: 'telegram' | 'qq') => {
+    const previewData = getPreviewData(formData.content_type)
+    return renderTemplate(template, previewData, format)
   }
 
   const copyTemplate = (content: string) => {
     navigator.clipboard.writeText(content)
     toast.success("模板内容已复制")
+  }
+
+  const getContentTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      tv_series: "剧集",
+      movie: "电影",
+      completed: "完结",
+    }
+    return labels[type] || type
+  }
+
+  const getContentTypeEmoji = (type: string) => {
+    const emojis: Record<string, string> = {
+      tv_series: "📺",
+      movie: "🎬",
+      completed: "✅",
+    }
+    return emojis[type] || "📄"
   }
 
   return (
@@ -218,7 +258,7 @@ export default function PushTemplatesPage() {
         <div>
           <h1 className="text-3xl font-bold">推送模板</h1>
           <p className="text-muted-foreground mt-2">
-            自定义推送消息模板，支持变量替换
+            自定义推送消息模板，支持Telegram富文本和QQ纯文本两种格式
           </p>
         </div>
         <Button onClick={() => { resetForm(); setDialogOpen(true) }}>
@@ -227,9 +267,48 @@ export default function PushTemplatesPage() {
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-4">
+        {/* 预设模板 */}
+        <div className="lg:col-span-1 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                预设模板
+              </CardTitle>
+              <CardDescription>
+                选择预设模板快速创建
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {PRESET_TEMPLATES.map((preset) => (
+                <div
+                  key={preset.id}
+                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                    activePreset === preset.id 
+                      ? 'border-primary bg-primary/5' 
+                      : 'hover:border-primary/50'
+                  }`}
+                  onClick={() => handlePresetSelect(preset.id)}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-sm">{preset.name}</span>
+                    {preset.include_image && (
+                      <ImageIcon className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{preset.description}</p>
+                  <Badge variant="outline" className="mt-2 text-xs">
+                    {getContentTypeEmoji(preset.content_type)} {getContentTypeLabel(preset.content_type)}
+                  </Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
         {/* 模板列表 */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-3">
           <Card>
             <CardHeader>
               <CardTitle>模板列表</CardTitle>
@@ -244,9 +323,9 @@ export default function PushTemplatesPage() {
                 <div className="text-center py-8">
                   <FileCode className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-muted-foreground">暂无推送模板</p>
-                  <Button className="mt-4" onClick={() => { resetForm(); setDialogOpen(true) }}>
-                    创建第一个模板
-                  </Button>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    选择左侧预设模板快速创建，或点击新建按钮自定义
+                  </p>
                 </div>
               ) : (
                 <Table>
@@ -255,6 +334,7 @@ export default function PushTemplatesPage() {
                       <TableHead>模板名称</TableHead>
                       <TableHead>内容类型</TableHead>
                       <TableHead>绑定网盘</TableHead>
+                      <TableHead>图片</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
@@ -269,10 +349,22 @@ export default function PushTemplatesPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{getContentTypeLabel(template.content_type)}</Badge>
+                          <Badge variant="outline">
+                            {getContentTypeEmoji(template.content_type)} {getContentTypeLabel(template.content_type)}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           {template.cloud_drives?.alias || template.cloud_drives?.name || "所有网盘"}
+                        </TableCell>
+                        <TableCell>
+                          {template.include_image ? (
+                            <Badge variant="secondary">
+                              <ImageIcon className="h-3 w-3 mr-1" />
+                              包含
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -297,9 +389,9 @@ export default function PushTemplatesPage() {
                                 <Edit className="mr-2 h-4 w-4" />
                                 编辑
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => copyTemplate(template.template_content)}>
+                              <DropdownMenuItem onClick={() => copyTemplate(template.telegram_template)}>
                                 <Copy className="mr-2 h-4 w-4" />
-                                复制
+                                复制TG模板
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleDelete(template.id)}>
                                 <Trash2 className="mr-2 h-4 w-4" />
@@ -316,128 +408,46 @@ export default function PushTemplatesPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* 变量说明 */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">模板变量</CardTitle>
-              <CardDescription>
-                在模板中使用这些变量，推送时自动替换
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div className="p-2 bg-muted rounded flex justify-between items-center">
-                  <code className="text-primary">{"{title}"}</code>
-                  <span className="text-muted-foreground">影视标题</span>
-                </div>
-                <div className="p-2 bg-muted rounded flex justify-between items-center">
-                  <code className="text-primary">{"{file_name}"}</code>
-                  <span className="text-muted-foreground">文件名称</span>
-                </div>
-                <div className="p-2 bg-muted rounded flex justify-between items-center">
-                  <code className="text-primary">{"{share_url}"}</code>
-                  <span className="text-muted-foreground">分享链接</span>
-                </div>
-                <div className="p-2 bg-muted rounded flex justify-between items-center">
-                  <code className="text-primary">{"{share_code}"}</code>
-                  <span className="text-muted-foreground">提取码</span>
-                </div>
-                <div className="p-2 bg-muted rounded flex justify-between items-center">
-                  <code className="text-primary">{"{file_size}"}</code>
-                  <span className="text-muted-foreground">文件大小</span>
-                </div>
-                <div className="p-2 bg-muted rounded flex justify-between items-center">
-                  <code className="text-primary">{"{season}"}</code>
-                  <span className="text-muted-foreground">季数</span>
-                </div>
-                <div className="p-2 bg-muted rounded flex justify-between items-center">
-                  <code className="text-primary">{"{episode}"}</code>
-                  <span className="text-muted-foreground">集数</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">示例模板</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="p-3 bg-muted rounded-lg text-xs font-mono whitespace-pre-wrap">
-{`🎬 **{title}** 更新啦！
-
-📁 文件: {file_name}
-📦 大小: {file_size}
-
-🔗 链接: {share_url}
-🔑 提取码: {share_code}`}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => {
-                    setFormData({
-                      ...formData,
-                      template_content: `🎬 **{title}** 更新啦！
-
-📁 文件: {file_name}
-📦 大小: {file_size}
-
-🔗 链接: {share_url}
-🔑 提取码: {share_code}
-
-#追影 #自动推送`,
-                    })
-                    toast.success("已应用示例模板")
-                  }}
-                >
-                  使用此模板
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingTemplate ? "编辑推送模板" : "新建推送模板"}
             </DialogTitle>
             <DialogDescription>
-              自定义推送消息格式，支持变量替换
+              自定义推送消息格式，支持Telegram富文本和QQ纯文本两种格式
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">模板名称 *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="给模板起个名字"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              {/* 基本信息 */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">模板名称 *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="给模板起个名字"
+                  />
+                </div>
                 <div className="grid gap-2">
                   <Label>内容类型 *</Label>
                   <Select
                     value={formData.content_type}
-                    onValueChange={(value) => setFormData({ ...formData, content_type: value })}
+                    onValueChange={(value: 'movie' | 'tv_series' | 'completed') => 
+                      setFormData({ ...formData, content_type: value })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="选择内容类型" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="tv_series">电视剧</SelectItem>
-                      <SelectItem value="movie">电影</SelectItem>
-                      <SelectItem value="completed">完结剧集</SelectItem>
+                      <SelectItem value="movie">🎬 电影</SelectItem>
+                      <SelectItem value="tv_series">📺 剧集</SelectItem>
+                      <SelectItem value="completed">✅ 完结</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -451,6 +461,7 @@ export default function PushTemplatesPage() {
                       <SelectValue placeholder="所有网盘" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="">所有网盘</SelectItem>
                       {drives.map((drive) => (
                         <SelectItem key={drive.id} value={drive.id.toString()}>
                           {drive.alias || drive.name}
@@ -460,29 +471,104 @@ export default function PushTemplatesPage() {
                   </Select>
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label>模板内容 *</Label>
-                <textarea
-                  className="flex min-h-[150px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-                  value={formData.template_content}
-                  onChange={(e) => setFormData({ ...formData, template_content: e.target.value })}
-                  placeholder="输入模板内容..."
-                />
-              </div>
-              {formData.template_content && (
-                <div className="grid gap-2">
-                  <Label>预览效果</Label>
-                  <div className="p-3 bg-muted rounded-lg text-sm whitespace-pre-wrap">
-                    {previewTemplate(formData.template_content)}
-                  </div>
+
+              {/* 选项 */}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={formData.include_image}
+                    onCheckedChange={(checked) => setFormData({ ...formData, include_image: checked })}
+                  />
+                  <Label className="flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4" />
+                    包含海报图片（TG专用）
+                  </Label>
                 </div>
-              )}
+              </div>
+
+              {/* 模板编辑 */}
+              <Tabs defaultValue="telegram" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="telegram" className="flex items-center gap-2">
+                    <Send className="h-4 w-4" />
+                    Telegram模板
+                  </TabsTrigger>
+                  <TabsTrigger value="qq" className="flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    QQ模板
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="telegram" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Telegram模板内容</Label>
+                      <textarea
+                        className="flex min-h-[300px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                        value={formData.telegram_template}
+                        onChange={(e) => setFormData({ ...formData, telegram_template: e.target.value })}
+                        placeholder="输入Telegram模板内容..."
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>预览效果</Label>
+                      <div className="min-h-[300px] p-3 bg-slate-900 text-slate-100 rounded-lg text-sm whitespace-pre-wrap overflow-auto">
+                        {formData.telegram_template ? (
+                          getPreviewContent(formData.telegram_template, 'telegram')
+                        ) : (
+                          <span className="text-muted-foreground">模板预览将显示在这里...</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="qq" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>QQ模板内容（纯文本）</Label>
+                      <textarea
+                        className="flex min-h-[300px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                        value={formData.qq_template}
+                        onChange={(e) => setFormData({ ...formData, qq_template: e.target.value })}
+                        placeholder="输入QQ模板内容..."
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>预览效果</Label>
+                      <div className="min-h-[300px] p-3 bg-slate-100 rounded-lg text-sm whitespace-pre-wrap overflow-auto">
+                        {formData.qq_template ? (
+                          getPreviewContent(formData.qq_template, 'qq')
+                        ) : (
+                          <span className="text-muted-foreground">模板预览将显示在这里...</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              {/* 变量说明 */}
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">可用变量</CardTitle>
+                </CardHeader>
+                <CardContent className="py-2">
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    {TEMPLATE_VARIABLES.slice(0, 12).map((v) => (
+                      <div key={v.key} className="p-2 bg-muted rounded flex items-center gap-2">
+                        <code className="text-primary font-mono">{v.key}</code>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 取消
               </Button>
-              <Button type="submit">
+              <Button type="submit" disabled={!formData.name || !formData.telegram_template}>
                 {editingTemplate ? "保存" : "创建"}
               </Button>
             </DialogFooter>

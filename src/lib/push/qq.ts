@@ -39,9 +39,20 @@ export class QQPushService implements IPushService {
     }
   }
 
-  async sendRichText(message: PushMessage): Promise<PushResult> {
-    // QQ推送通常不支持富文本，使用普通发送
-    return this.send(message)
+  async sendWithImage(message: PushMessage, imageUrl: string): Promise<PushResult> {
+    // QQ推送图片需要特殊处理，这里尝试使用CQHTTP的图片发送
+    try {
+      if (imageUrl && this.webhookUrl.includes('cqhttp')) {
+        return await this.sendViaCQHTTPWithImage(message, imageUrl)
+      }
+      // 不支持图片的推送方式，降级为纯文本
+      return this.send(message)
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '发送失败',
+      }
+    }
   }
 
   async testConnection(): Promise<boolean> {
@@ -98,6 +109,49 @@ export class QQPushService implements IPushService {
     }
   }
 
+  private async sendViaCQHTTPWithImage(message: PushMessage, imageUrl: string): Promise<PushResult> {
+    // CQHTTP 图片发送格式：[CQ:image,file=URL]
+    const imageCQ = `[CQ:image,file=${imageUrl}]`
+    const content = `${imageCQ}\n${this.formatMessage(message)}`
+    
+    const endpoint = this.pushType === 'group' ? 'send_group_msg' : 'send_private_msg'
+    
+    const body: any = {
+      action: endpoint,
+      params: {},
+    }
+    
+    if (this.pushType === 'group') {
+      body.params = {
+        group_id: this.groupId,
+        message: content,
+      }
+    } else {
+      body.params = {
+        user_id: this.qqNumber,
+        message: content,
+      }
+    }
+    
+    const response = await fetch(this.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    
+    const data = await response.json()
+    
+    if (data.status === 'ok' || data.retcode === 0) {
+      return {
+        success: true,
+        message_id: data.data?.message_id?.toString(),
+      }
+    }
+    
+    // 图片发送失败，降级为纯文本
+    return this.send(message)
+  }
+
   private async sendViaYPush(message: PushMessage): Promise<PushResult> {
     const content = `${message.title}\n\n${message.content}`
     
@@ -147,21 +201,63 @@ export class QQPushService implements IPushService {
   }
 
   private formatMessage(message: PushMessage): string {
-    let content = `【${message.title}】\n\n`
-    content += message.content
+    const lines: string[] = []
     
+    // 标题
+    lines.push(`【${message.title}】`)
+    lines.push('')
+    
+    // 内容
+    if (message.content) {
+      lines.push(message.content)
+      lines.push('')
+    }
+    
+    // 分享链接
     if (message.url) {
-      content += `\n\n📎 链接: ${message.url}`
+      lines.push(`🔗 链接: ${message.url}`)
     }
     
+    // 提取码
     if (message.code) {
-      content += `\n🔑 提取码: ${message.code}`
+      lines.push(`🔑 提取码: ${message.code}`)
     }
     
-    if (message.extra?.file_size) {
-      content += `\n💾 大小: ${message.extra.file_size}`
+    // 扩展信息
+    if (message.extra) {
+      const extra = message.extra
+      
+      if (extra.rating) {
+        lines.push(`⭐️ 评分: ${extra.rating}`)
+      }
+      
+      if (extra.genres?.length) {
+        lines.push(`🎭 类型: ${extra.genres.join(', ')}`)
+      }
+      
+      if (extra.quality) {
+        lines.push(`🎞️ 质量: ${extra.quality}`)
+      }
+      
+      if (extra.file_size) {
+        lines.push(`💾 大小: ${extra.file_size}`)
+      }
+      
+      if (extra.file_count) {
+        lines.push(`📦 文件: ${extra.file_count} 个`)
+      }
+      
+      if (extra.note) {
+        lines.push(`🏷️ 备注: ${extra.note}`)
+      }
     }
     
-    return content
+    // 标签
+    if (message.extra?.tags?.length) {
+      lines.push('')
+      lines.push(message.extra.tags.map(tag => `#${tag.replace(/\s+/g, '')}`).join(' '))
+    }
+    
+    return lines.join('\n')
   }
 }

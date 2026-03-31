@@ -1,5 +1,6 @@
 /**
  * Telegram 推送服务实现
+ * 支持发送文本、富文本和图片消息
  */
 
 import { IPushService, PushMessage, PushResult, PushChannelConfig } from './types'
@@ -51,34 +52,48 @@ export class TelegramPushService implements IPushService {
     }
   }
 
-  async sendRichText(message: PushMessage): Promise<PushResult> {
+  async sendWithImage(message: PushMessage, imageUrl: string): Promise<PushResult> {
     try {
-      const text = this.formatRichMessage(message)
-      
-      const response = await fetch(`${this.apiUrl}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: this.chatId,
-          text: text,
-          parse_mode: 'MarkdownV2',
-          disable_web_page_preview: false,
-        }),
-      })
-      
-      const data = await response.json()
-      
-      if (!data.ok) {
-        // 如果MarkdownV2失败，降级为HTML
-        return this.send(message)
+      // 如果有图片，使用 sendPhoto 方法
+      if (imageUrl) {
+        const caption = this.formatMessage(message)
+        
+        // Telegram caption 限制 1024 字符
+        const truncatedCaption = caption.length > 1000 
+          ? caption.substring(0, 1000) + '...' 
+          : caption
+        
+        const response = await fetch(`${this.apiUrl}/sendPhoto`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: this.chatId,
+            photo: imageUrl,
+            caption: truncatedCaption,
+            parse_mode: 'HTML',
+          }),
+        })
+        
+        const data = await response.json()
+        
+        if (data.ok) {
+          return {
+            success: true,
+            message_id: data.result?.message_id?.toString(),
+          }
+        }
+        
+        // 如果图片发送失败（可能是URL无效），降级为纯文本
+        console.warn('Telegram photo send failed, falling back to text:', data.description)
       }
       
-      return {
-        success: true,
-        message_id: data.result?.message_id?.toString(),
-      }
-    } catch (error) {
+      // 没有图片或图片发送失败，发送纯文本
       return this.send(message)
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '发送失败',
+      }
     }
   }
 
@@ -93,40 +108,64 @@ export class TelegramPushService implements IPushService {
   }
 
   private formatMessage(message: PushMessage): string {
-    let text = `<b>${this.escapeHtml(message.title)}</b>\n\n`
-    text += message.content
+    const lines: string[] = []
     
+    // 标题（加粗）
+    lines.push(`<b>${this.escapeHtml(message.title)}</b>`)
+    lines.push('')
+    
+    // 内容
+    if (message.content) {
+      lines.push(this.escapeHtml(message.content))
+      lines.push('')
+    }
+    
+    // 分享链接
     if (message.url) {
-      text += `\n\n📎 <a href="${message.url}">下载链接</a>`
+      lines.push(`🔗 <a href="${this.escapeHtml(message.url)}">下载链接</a>`)
     }
     
+    // 提取码
     if (message.code) {
-      text += `\n🔑 提取码: <code>${message.code}</code>`
+      lines.push(`🔑 提取码: <code>${this.escapeHtml(message.code)}</code>`)
     }
     
-    if (message.extra?.file_size) {
-      text += `\n💾 文件大小: ${message.extra.file_size}`
+    // 扩展信息
+    if (message.extra) {
+      const extra = message.extra
+      
+      if (extra.rating) {
+        lines.push(`⭐️ 评分: ${extra.rating}`)
+      }
+      
+      if (extra.genres?.length) {
+        lines.push(`🎭 类型: ${extra.genres.join(', ')}`)
+      }
+      
+      if (extra.quality) {
+        lines.push(`🎞️ 质量: ${extra.quality}`)
+      }
+      
+      if (extra.file_size) {
+        lines.push(`💾 大小: ${extra.file_size}`)
+      }
+      
+      if (extra.file_count) {
+        lines.push(`📦 文件: ${extra.file_count} 个`)
+      }
+      
+      if (extra.note) {
+        lines.push(`🏷️ 备注: ${this.escapeHtml(extra.note)}`)
+      }
     }
     
-    return text
-  }
-
-  private formatRichMessage(message: PushMessage): string {
-    // Telegram MarkdownV2 需要转义特殊字符
-    const escape = (text: string) => text.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&')
-    
-    let text = `*${escape(message.title)}*\n\n`
-    text += escape(message.content)
-    
-    if (message.url) {
-      text += `\n\n📎 [下载链接](${message.url})`
+    // 标签
+    if (message.extra?.tags?.length) {
+      lines.push('')
+      lines.push(message.extra.tags.map(tag => `#${tag.replace(/\s+/g, '')}`).join(' '))
     }
     
-    if (message.code) {
-      text += `\n🔑 提取码: \`${message.code}\``
-    }
-    
-    return text
+    return lines.join('\n')
   }
 
   private escapeHtml(text: string): string {
