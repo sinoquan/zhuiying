@@ -78,43 +78,23 @@ export type PushChannelType = 'telegram' | 'qq' | 'wechat'
 // 模板内容类型
 export type TemplateContentType = 'movie' | 'tv_series' | 'completed'
 
-// 模板格式类型
-export type TemplateFormatType = 'telegram' | 'qq'
-
 // 推送模板
 export interface PushTemplate {
   id: number
-  cloud_drive_id: number | null
+  cloud_drive_id: number
   name: string
+  channel_type: PushChannelType
   content_type: TemplateContentType
-  telegram_template: string
-  qq_template: string
+  template_content: string
   include_image: boolean
   is_active: boolean
   created_at: string
-  updated_at: string | null
 }
 
-// 预设模板
-export interface PresetTemplate {
-  id: string
-  name: string
-  content_type: TemplateContentType
-  description: string
-  telegram_template: string
-  qq_template: string
-  include_image: boolean
-}
-
-// 预设模板列表
-export const PRESET_TEMPLATES: PresetTemplate[] = [
-  {
-    id: 'movie_standard',
-    name: '电影标准模板',
-    content_type: 'movie',
-    description: '电影推送标准格式，包含TMDB信息、演员、简介',
-    include_image: true,
-    telegram_template: `🎬 电影：{title} ({year})
+// 渠道默认模板
+export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentType, string>> = {
+  telegram: {
+    movie: `🎬 电影：{title} ({year})
 {note}
 🍿 TMDB ID: {tmdb_id}
 ⭐️ 评分: {rating}
@@ -129,7 +109,39 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
 🔗 链接: {share_url}
 
 #{category_tag}`,
-    qq_template: `【电影推送】
+    tv_series: `📺 电视剧：{title} ({year}) - S{season:02d}E{episode:02d}
+{note}
+🍿 TMDB ID: {tmdb_id}
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+📂 分类: {category}
+🎞️ 质量: {quality}
+📦 文件: {file_count} 个
+💾 大小: {file_size}
+👥 主演: {cast}
+📝 简介: {overview}
+
+🔗 链接: {share_url}
+
+#{category_tag}`,
+    completed: `📺 电视剧：{title} ({year}) - S{season:02d}E{episode:02d}-E{episode_end:02d}(完结)
+{note}
+🍿 TMDB ID: {tmdb_id}
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+📂 分类: {category}
+🎞️ 质量: {quality}
+📦 文件: {file_count} 个
+💾 大小: {file_size}
+👥 主演: {cast}
+📝 简介: {overview}
+
+🔗 链接: {share_url}
+
+#{category_tag}`,
+  },
+  qq: {
+    movie: `【电影推送】
 🎬 {title} ({year})
 {note}
 ⭐️ 评分: {rating}
@@ -144,29 +156,7 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
 🔗 链接: {share_url}
 
 #{category_tag}`,
-  },
-  {
-    id: 'tv_series_standard',
-    name: '剧集标准模板',
-    content_type: 'tv_series',
-    description: '电视剧/动漫单集推送格式',
-    include_image: true,
-    telegram_template: `📺 电视剧：{title} ({year}) - S{season:02d}E{episode:02d}
-{note}
-🍿 TMDB ID: {tmdb_id}
-⭐️ 评分: {rating}
-🎭 类型: {genres}
-📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
-💾 大小: {file_size}
-👥 主演: {cast}
-📝 简介: {overview}
-
-🔗 链接: {share_url}
-
-#{category_tag}`,
-    qq_template: `【剧集更新】
+    tv_series: `【剧集更新】
 📺 {title} ({year}) - 第{season}季第{episode}集
 {note}
 ⭐️ 评分: {rating}
@@ -181,29 +171,7 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
 🔗 链接: {share_url}
 
 #{category_tag}`,
-  },
-  {
-    id: 'completed_standard',
-    name: '完结剧集模板',
-    content_type: 'completed',
-    description: '剧集完结打包推送格式',
-    include_image: true,
-    telegram_template: `📺 电视剧：{title} ({year}) - S{season:02d}E{episode:02d}-E{episode_end:02d}(完结)
-{note}
-🍿 TMDB ID: {tmdb_id}
-⭐️ 评分: {rating}
-🎭 类型: {genres}
-📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
-💾 大小: {file_size}
-👥 主演: {cast}
-📝 简介: {overview}
-
-🔗 链接: {share_url}
-
-#{category_tag}`,
-    qq_template: `【完结剧集】
+    completed: `【完结剧集】
 📺 {title} ({year}) - 第{season}季 第{episode}-{episode_end}集(完结)
 {note}
 ⭐️ 评分: {rating}
@@ -219,41 +187,56 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
 
 #{category_tag}`,
   },
-  {
-    id: 'movie_simple',
-    name: '电影简约模板',
-    content_type: 'movie',
-    description: '简洁的电影推送格式',
-    include_image: false,
-    telegram_template: `🎬 {title} ({year})
-{quality} | {file_size}
+  wechat: {
+    movie: `🎬 电影推送
+{title} ({year})
 {note}
-
-🔗 {share_url}`,
-    qq_template: `【电影】{title} ({year})
-{quality} | {file_size}
+━━━━━━━━━━━━
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+📂 分类: {category}
+🎞️ 质量: {quality}
+📦 文件: {file_count} 个
+💾 大小: {file_size}
+━━━━━━━━━━━━
+👥 主演: {cast}
+📝 简介: {overview}
+━━━━━━━━━━━━
+🔗 链接: {share_url}`,
+    tv_series: `📺 剧集更新
+{title} ({year})
+第{season}季第{episode}集
 {note}
-
-🔗 {share_url}`,
+━━━━━━━━━━━━
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+📂 分类: {category}
+🎞️ 质量: {quality}
+📦 文件: {file_count} 个
+💾 大小: {file_size}
+━━━━━━━━━━━━
+👥 主演: {cast}
+📝 简介: {overview}
+━━━━━━━━━━━━
+🔗 链接: {share_url}`,
+    completed: `📺 完结剧集
+{title} ({year})
+第{season}季 第{episode}-{episode_end}集(完结)
+{note}
+━━━━━━━━━━━━
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+📂 分类: {category}
+🎞️ 质量: {quality}
+📦 文件: {file_count} 个
+💾 大小: {file_size}
+━━━━━━━━━━━━
+👥 主演: {cast}
+📝 简介: {overview}
+━━━━━━━━━━━━
+🔗 链接: {share_url}`,
   },
-  {
-    id: 'tv_series_simple',
-    name: '剧集简约模板',
-    content_type: 'tv_series',
-    description: '简洁的剧集推送格式',
-    include_image: false,
-    telegram_template: `📺 {title} S{season:02d}E{episode:02d}
-{quality} | {file_size}
-{note}
-
-🔗 {share_url}`,
-    qq_template: `【剧集】{title} 第{season}季第{episode}集
-{quality} | {file_size}
-{note}
-
-🔗 {share_url}`,
-  },
-]
+}
 
 // 模板变量说明
 export const TEMPLATE_VARIABLES = [

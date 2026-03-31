@@ -3,7 +3,7 @@
  * 用于将模板变量替换为实际值
  */
 
-import { PushMessage, PushMessageExtra, TemplateFormatType } from './types'
+import { PushMessage, PushMessageExtra, PushChannelType } from './types'
 
 // 渲染模板
 export function renderTemplate(
@@ -15,7 +15,7 @@ export function renderTemplate(
     share_code?: string
     extra?: PushMessageExtra
   },
-  format: TemplateFormatType = 'telegram'
+  format: PushChannelType = 'telegram'
 ): string {
   let result = template
   

@@ -5,11 +5,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 
-// GET - 获取所有模板
-export async function GET() {
+// GET - 获取所有模板（支持按渠道类型过滤）
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const channelType = searchParams.get('channel_type')
+    
     const client = getSupabaseClient()
-    const { data, error } = await client
+    
+    let query = client
       .from('push_templates')
       .select(`
         *,
@@ -19,6 +23,12 @@ export async function GET() {
         )
       `)
       .order('created_at', { ascending: false })
+    
+    if (channelType) {
+      query = query.eq('channel_type', channelType)
+    }
+    
+    const { data, error } = await query
     
     if (error) {
       // 如果表不存在，返回空数组
@@ -41,18 +51,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const client = getSupabaseClient()
     
-    const insertData: any = {
+    const insertData = {
+      cloud_drive_id: body.cloud_drive_id,
       name: body.name,
+      channel_type: body.channel_type,
       content_type: body.content_type,
-      telegram_template: body.telegram_template,
-      qq_template: body.qq_template,
+      template_content: body.template_content,
       include_image: body.include_image ?? true,
       is_active: true,
-    }
-    
-    // 只有当 cloud_drive_id 有值时才添加
-    if (body.cloud_drive_id) {
-      insertData.cloud_drive_id = body.cloud_drive_id
     }
     
     const { data, error } = await client

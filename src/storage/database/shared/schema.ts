@@ -104,13 +104,16 @@ export const pushTemplates = pgTable(
     id: serial().primaryKey(),
     cloud_drive_id: integer("cloud_drive_id").notNull().references(() => cloudDrives.id),
     name: varchar("name", { length: 100 }).notNull(),
+    channel_type: varchar("channel_type", { length: 20 }).notNull(), // telegram/qq/wechat
     content_type: varchar("content_type", { length: 20 }).notNull(), // tv_series/movie/completed
     template_content: text("template_content").notNull(), // 模板内容
+    include_image: boolean("include_image").default(true), // 是否包含图片
     is_active: boolean("is_active").default(true).notNull(),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("push_templates_cloud_drive_id_idx").on(table.cloud_drive_id),
+    index("push_templates_channel_type_idx").on(table.channel_type),
     index("push_templates_content_type_idx").on(table.content_type),
   ]
 );

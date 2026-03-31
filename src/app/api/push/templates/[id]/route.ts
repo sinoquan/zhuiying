@@ -47,12 +47,12 @@ export async function PUT(
     const body = await request.json()
     const client = getSupabaseClient()
     
-    const updateData: any = {}
+    const updateData: Record<string, any> = {}
     
     if (body.name !== undefined) updateData.name = body.name
+    if (body.channel_type !== undefined) updateData.channel_type = body.channel_type
     if (body.content_type !== undefined) updateData.content_type = body.content_type
-    if (body.telegram_template !== undefined) updateData.telegram_template = body.telegram_template
-    if (body.qq_template !== undefined) updateData.qq_template = body.qq_template
+    if (body.template_content !== undefined) updateData.template_content = body.template_content
     if (body.include_image !== undefined) updateData.include_image = body.include_image
     if (body.is_active !== undefined) updateData.is_active = body.is_active
     if (body.cloud_drive_id !== undefined) updateData.cloud_drive_id = body.cloud_drive_id
