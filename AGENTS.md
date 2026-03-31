@@ -11,6 +11,7 @@
 - **分享与推送分离**：数据逻辑严格分开
 - **状态驱动**：分享状态正常才允许推送
 - **网盘独立配置**：每个网盘有自己的渠道/规则/模板
+- **多频道推送**：支持为每个网盘配置独立的 Telegram 频道/群组，115 推 115 的频道，阿里推阿里的频道
 
 ### 版本技术栈
 
@@ -98,7 +99,7 @@
 - `DELETE /api/auth` - 登出
 
 ### 统计
-- `GET /api/dashboard/stats` - 获取统计数据
+- `GET /api/dashboard/stats` - 获取统计数据（含今日待推送、警告、失败、热门文件、网盘活动统计）
 
 ### 网盘管理
 - `GET /api/cloud-drives` - 获取网盘列表
@@ -132,6 +133,11 @@
 ### 日志
 - `GET /api/logs` - 获取日志
 - `DELETE /api/logs` - 清空日志
+
+### Telegram 频道管理
+- `GET /api/telegram/bot-info` - 获取机器人信息
+- `GET /api/telegram/channels` - 获取机器人所在的频道/群组列表
+- `POST /api/telegram/channels` - 发送测试消息到指定频道
 
 ## 包管理规范
 

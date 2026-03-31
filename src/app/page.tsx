@@ -2,9 +2,16 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { HardDrive, Share2, Send, Activity, TrendingUp, AlertCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { 
+  HardDrive, Share2, Send, Activity, TrendingUp, AlertCircle, 
+  Clock, XCircle, FileText, Zap, ChevronRight, CheckCircle2
+} from "lucide-react"
+import Link from "next/link"
 
 interface DashboardStats {
+  // 基础统计
   totalDrives: number
   activeDrives: number
   totalShares: number
@@ -12,6 +19,32 @@ interface DashboardStats {
   totalPushes: number
   todayPushes: number
   activeMonitors: number
+  
+  // 新增统计
+  todayPending: number
+  todayPushFailed: number
+  todayShareFailed: number
+  todayWarnings: number
+  
+  // 热门文件
+  topFiles: Array<{
+    id: number
+    file_name: string
+    file_size: string | null
+    cloud_drive_id: number
+    push_count: number
+    created_at: string
+  }>
+  
+  // 网盘统计
+  driveStats: Array<{
+    id: number
+    name: string
+    alias: string
+    is_active: boolean
+    todayShares: number
+    todayPushes: number
+  }>
 }
 
 export default function DashboardPage() {
@@ -23,11 +56,20 @@ export default function DashboardPage() {
     totalPushes: 0,
     todayPushes: 0,
     activeMonitors: 0,
+    todayPending: 0,
+    todayPushFailed: 0,
+    todayShareFailed: 0,
+    todayWarnings: 0,
+    topFiles: [],
+    driveStats: [],
   })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetchStats()
+    // 每30秒刷新一次
+    const interval = setInterval(fetchStats, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   const fetchStats = async () => {
@@ -42,6 +84,35 @@ export default function DashboardPage() {
     }
   }
 
+  // 今日状态卡片
+  const todayStatusCards = [
+    {
+      title: "待推送",
+      value: stats.todayPending,
+      icon: Clock,
+      color: "text-amber-600",
+      bgColor: "bg-amber-100 dark:bg-amber-950",
+      description: "等待发送",
+    },
+    {
+      title: "警告",
+      value: stats.todayWarnings,
+      icon: AlertCircle,
+      color: "text-orange-600",
+      bgColor: "bg-orange-100 dark:bg-orange-950",
+      description: "需要关注",
+    },
+    {
+      title: "失败",
+      value: stats.todayPushFailed + stats.todayShareFailed,
+      icon: XCircle,
+      color: "text-red-600",
+      bgColor: "bg-red-100 dark:bg-red-950",
+      description: `推送${stats.todayPushFailed} / 分享${stats.todayShareFailed}`,
+    },
+  ]
+
+  // 基础统计卡片
   const statCards = [
     {
       title: "网盘账号",
@@ -49,36 +120,62 @@ export default function DashboardPage() {
       description: `${stats.activeDrives} 个在线`,
       icon: HardDrive,
       color: "text-blue-600",
-      bgColor: "bg-blue-100",
+      bgColor: "bg-blue-100 dark:bg-blue-950",
     },
     {
-      title: "分享记录",
-      value: stats.totalShares,
-      description: `今日新增 ${stats.todayShares}`,
+      title: "今日分享",
+      value: stats.todayShares,
+      description: `累计 ${stats.totalShares}`,
       icon: Share2,
       color: "text-green-600",
-      bgColor: "bg-green-100",
+      bgColor: "bg-green-100 dark:bg-green-950",
     },
     {
-      title: "推送记录",
-      value: stats.totalPushes,
-      description: `今日推送 ${stats.todayPushes}`,
+      title: "今日推送",
+      value: stats.todayPushes,
+      description: `累计 ${stats.totalPushes}`,
       icon: Send,
       color: "text-purple-600",
-      bgColor: "bg-purple-100",
+      bgColor: "bg-purple-100 dark:bg-purple-950",
     },
     {
       title: "监控任务",
       value: stats.activeMonitors,
       description: "个活跃任务",
       icon: Activity,
-      color: "text-orange-600",
-      bgColor: "bg-orange-100",
+      color: "text-cyan-600",
+      bgColor: "bg-cyan-100 dark:bg-cyan-950",
     },
   ]
 
+  // 网盘类型图标映射
+  const driveIcons: Record<string, string> = {
+    "115": "💾",
+    "aliyun": "☁️",
+    "quark": "🔷",
+    "tianyi": "📶",
+    "baidu": "🔵",
+  }
+
+  // 格式化文件大小
+  const formatFileSize = (size: string | null) => {
+    if (!size) return "-"
+    return size
+  }
+
+  // 格式化时间
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
   return (
-    <div className="p-8">
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold">控制台</h1>
@@ -87,116 +184,226 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        {statCards.map((stat) => {
+      {/* 今日状态 - 醒目展示 */}
+      <div className="grid gap-4 md:grid-cols-3 mb-8">
+        {todayStatusCards.map((stat) => {
           const Icon = stat.icon
+          const isWarning = stat.value > 0
           return (
-            <Card key={stat.title}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {stat.title}
-                </CardTitle>
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <Icon className={`h-4 w-4 ${stat.color}`} />
+            <Card 
+              key={stat.title} 
+              className={`${isWarning ? 'border-2 border-orange-300 dark:border-orange-800' : ''}`}
+            >
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
+                    <p className={`text-3xl font-bold mt-1 ${isWarning ? stat.color : ''}`}>
+                      {loading ? "..." : stat.value}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
+                  </div>
+                  <div className={`p-3 rounded-full ${stat.bgColor}`}>
+                    <Icon className={`h-6 w-6 ${stat.color}`} />
+                  </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{loading ? "..." : stat.value}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {stat.description}
-                </p>
               </CardContent>
             </Card>
           )
         })}
       </div>
 
-      {/* Main Content */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* System Status */}
+      {/* 基础统计 */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        {statCards.map((stat) => {
+          const Icon = stat.icon
+          return (
+            <Card key={stat.title}>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
+                    <p className="text-2xl font-bold mt-1">
+                      {loading ? "..." : stat.value}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
+                  </div>
+                  <div className={`p-2.5 rounded-lg ${stat.bgColor}`}>
+                    <Icon className={`h-5 w-5 ${stat.color}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* 主要内容区 */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* 网盘活动统计 */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <HardDrive className="h-5 w-5" />
+              网盘活动统计
+            </CardTitle>
+            <CardDescription>今日各网盘分享和推送数据</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {stats.driveStats.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                暂无网盘数据
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {stats.driveStats.map((drive) => {
+                  const total = stats.todayShares || 1
+                  const sharePercent = (drive.todayShares / total) * 100
+                  
+                  return (
+                    <div key={drive.id} className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-lg">
+                        {driveIcons[drive.name] || "💾"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium truncate">{drive.alias}</span>
+                          <div className="flex items-center gap-3 text-sm">
+                            <span className="text-green-600 dark:text-green-400">
+                              分享 {drive.todayShares}
+                            </span>
+                            <span className="text-purple-600 dark:text-purple-400">
+                              推送 {drive.todayPushes}
+                            </span>
+                          </div>
+                        </div>
+                        <Progress value={sharePercent} className="h-2" />
+                      </div>
+                      <Badge variant={drive.is_active ? "default" : "secondary"} className="ml-2">
+                        {drive.is_active ? "在线" : "离线"}
+                      </Badge>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 热门文件排行 */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
-              系统状态
+              热门文件
             </CardTitle>
-            <CardDescription>系统运行状态概览</CardDescription>
+            <CardDescription>推送次数最多的文件</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-sm font-medium">系统运行正常</span>
-                </div>
-                <span className="text-xs text-muted-foreground">运行中</span>
+            {stats.topFiles.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                暂无数据
               </div>
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">监控任务活跃</span>
-                </div>
-                <span className="text-xs font-medium">{stats.activeMonitors} 个</span>
+            ) : (
+              <div className="space-y-3">
+                {stats.topFiles.map((file, index) => (
+                  <div 
+                    key={file.id} 
+                    className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      index === 0 ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300" :
+                      index === 1 ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" :
+                      index === 2 ? "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" :
+                      "bg-muted text-muted-foreground"
+                    }`}>
+                      {index + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" title={file.file_name}>
+                        {file.file_name}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                        <span>{formatFileSize(file.file_size)}</span>
+                        <span>·</span>
+                        <span>推送 {file.push_count} 次</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Share2 className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">分享服务</span>
-                </div>
-                <span className="text-xs font-medium text-green-600">正常</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5" />
-              快捷操作
-            </CardTitle>
-            <CardDescription>常用功能快速访问</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3">
-              <a
-                href="/cloud-drives"
-                className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors"
-              >
-                <HardDrive className="h-5 w-5 text-blue-600" />
-                <div>
-                  <div className="font-medium">添加网盘账号</div>
-                  <div className="text-xs text-muted-foreground">配置新的网盘连接</div>
-                </div>
-              </a>
-              <a
-                href="/share/monitor"
-                className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors"
-              >
-                <Activity className="h-5 w-5 text-orange-600" />
-                <div>
-                  <div className="font-medium">创建监控任务</div>
-                  <div className="text-xs text-muted-foreground">监控指定目录的新文件</div>
-                </div>
-              </a>
-              <a
-                href="/push/channels"
-                className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors"
-              >
-                <Send className="h-5 w-5 text-purple-600" />
-                <div>
-                  <div className="font-medium">配置推送渠道</div>
-                  <div className="text-xs text-muted-foreground">设置Telegram、QQ等推送方式</div>
-                </div>
-              </a>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Features */}
+      {/* 快捷操作 */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="h-5 w-5" />
+            快捷操作
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-4">
+            <Link
+              href="/cloud-drives"
+              className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <HardDrive className="h-5 w-5 text-blue-600" />
+                <div>
+                  <div className="font-medium">网盘管理</div>
+                  <div className="text-xs text-muted-foreground">添加/配置网盘</div>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+            </Link>
+            <Link
+              href="/share/monitor"
+              className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <Activity className="h-5 w-5 text-orange-600" />
+                <div>
+                  <div className="font-medium">监控任务</div>
+                  <div className="text-xs text-muted-foreground">创建文件监控</div>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+            </Link>
+            <Link
+              href="/push/channels"
+              className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <Send className="h-5 w-5 text-purple-600" />
+                <div>
+                  <div className="font-medium">推送渠道</div>
+                  <div className="text-xs text-muted-foreground">配置推送方式</div>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+            </Link>
+            <Link
+              href="/settings"
+              className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <FileText className="h-5 w-5 text-gray-600" />
+                <div>
+                  <div className="font-medium">系统设置</div>
+                  <div className="text-xs text-muted-foreground">API/代理配置</div>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 系统特性 */}
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>系统特性</CardTitle>
@@ -205,19 +412,28 @@ export default function DashboardPage() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="p-4 border rounded-lg">
-              <h3 className="font-semibold mb-2">多网盘独立隔离</h3>
+              <h3 className="font-semibold mb-2 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                多网盘独立隔离
+              </h3>
               <p className="text-sm text-muted-foreground">
                 支持115、阿里云、夸克、天翼、百度等多个网盘，每个网盘配置完全独立，互不干扰
               </p>
             </div>
             <div className="p-4 border rounded-lg">
-              <h3 className="font-semibold mb-2">只推新文件</h3>
+              <h3 className="font-semibold mb-2 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                只推新文件
+              </h3>
               <p className="text-sm text-muted-foreground">
                 以监控任务创建时间为界，只推送新文件，绝不推送历史文件
               </p>
             </div>
             <div className="p-4 border rounded-lg">
-              <h3 className="font-semibold mb-2">智能识别推送</h3>
+              <h3 className="font-semibold mb-2 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                智能识别推送
+              </h3>
               <p className="text-sm text-muted-foreground">
                 自动识别追剧、完结、电影等类型，按规则自动推送到指定渠道
               </p>
