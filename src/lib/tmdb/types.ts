@@ -7,6 +7,7 @@
 export interface TMDBConfig {
   apiKey: string
   language?: string
+  proxyUrl?: string  // 代理地址
 }
 
 // 搜索结果
@@ -71,12 +72,14 @@ export interface ContentIdentifyResult {
 export class TMDBService {
   private apiKey: string
   private language: string
+  private proxyUrl: string | null
   private baseUrl = 'https://api.themoviedb.org/3'
   private imageBaseUrl = 'https://image.tmdb.org/t/p/w500'
 
   constructor(config: TMDBConfig) {
     this.apiKey = config.apiKey
     this.language = config.language || 'zh-CN'
+    this.proxyUrl = config.proxyUrl || null
   }
 
   private async request(endpoint: string, params: Record<string, string> = {}) {
@@ -87,8 +90,50 @@ export class TMDBService {
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, value)
     }
+
+    // 如果配置了代理，设置环境变量方式（简单有效）
+    if (this.proxyUrl) {
+      // 使用全局代理设置
+      const originalProxy = process.env.HTTPS_PROXY
+      process.env.HTTPS_PROXY = this.proxyUrl
+      process.env.HTTP_PROXY = this.proxyUrl
+      
+      try {
+        const response = await fetch(url.toString(), {
+          headers: { 'Accept': 'application/json' },
+        })
+        
+        // 恢复原始设置
+        if (originalProxy) {
+          process.env.HTTPS_PROXY = originalProxy
+          process.env.HTTP_PROXY = originalProxy
+        } else {
+          delete process.env.HTTPS_PROXY
+          delete process.env.HTTP_PROXY
+        }
+        
+        if (!response.ok) {
+          throw new Error(`TMDB API错误: ${response.status}`)
+        }
+        
+        return response.json()
+      } catch (error) {
+        // 确保恢复环境变量
+        if (originalProxy) {
+          process.env.HTTPS_PROXY = originalProxy
+          process.env.HTTP_PROXY = originalProxy
+        } else {
+          delete process.env.HTTPS_PROXY
+          delete process.env.HTTP_PROXY
+        }
+        throw error
+      }
+    }
     
-    const response = await fetch(url.toString())
+    // 无代理，直接请求
+    const response = await fetch(url.toString(), {
+      headers: { 'Accept': 'application/json' },
+    })
     
     if (!response.ok) {
       throw new Error(`TMDB API错误: ${response.status}`)

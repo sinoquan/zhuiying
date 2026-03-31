@@ -18,11 +18,13 @@ export async function POST(request: NextRequest) {
     const { data: settings } = await client
       .from('system_settings')
       .select('setting_key, setting_value')
-      .in('setting_key', ['tmdb', 'tmdb_api_key', 'tmdb_language'])
+      .in('setting_key', ['tmdb', 'tmdb_api_key', 'tmdb_language', 'proxy_enabled', 'proxy_url'])
     
     // 解析配置
     let apiKey: string | undefined
     let language = 'zh-CN'
+    let proxyEnabled = false
+    let proxyUrl: string | undefined
     
     settings?.forEach((item) => {
       if (item.setting_key === 'tmdb') {
@@ -35,6 +37,10 @@ export async function POST(request: NextRequest) {
         apiKey = item.setting_value as string
       } else if (item.setting_key === 'tmdb_language') {
         language = (item.setting_value as string) || language
+      } else if (item.setting_key === 'proxy_enabled') {
+        proxyEnabled = item.setting_value === true || item.setting_value === 'true'
+      } else if (item.setting_key === 'proxy_url') {
+        proxyUrl = item.setting_value as string
       }
     })
     
@@ -49,6 +55,7 @@ export async function POST(request: NextRequest) {
     const tmdbService = new TMDBService({
       apiKey,
       language,
+      proxyUrl: proxyEnabled && proxyUrl ? proxyUrl : undefined,
     })
     
     // 识别内容
