@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -20,9 +20,11 @@ import {
   Terminal,
   Settings,
   ChevronDown,
+  LogOut,
 } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 
 const menuItems = [
   {
@@ -74,7 +76,9 @@ const menuItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [openMenus, setOpenMenus] = useState<string[]>(["分享管理", "推送管理"])
+  const [loggingOut, setLoggingOut] = useState(false)
 
   const toggleMenu = (title: string) => {
     setOpenMenus((prev) =>
@@ -83,6 +87,27 @@ export function Sidebar() {
   }
 
   const isActive = (href: string) => pathname === href
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      const response = await fetch("/api/auth", {
+        method: "DELETE",
+      })
+      
+      if (response.ok) {
+        toast.success("已退出登录")
+        router.push("/login")
+        router.refresh()
+      } else {
+        toast.error("退出失败")
+      }
+    } catch (error) {
+      toast.error("退出失败")
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   return (
     <div className="flex h-screen w-64 flex-col border-r bg-background">
@@ -172,7 +197,16 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="border-t p-4">
+      <div className="border-t p-4 space-y-3">
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          onClick={handleLogout}
+          disabled={loggingOut}
+        >
+          <LogOut className="mr-3 h-4 w-4" />
+          {loggingOut ? "登出中..." : "退出登录"}
+        </Button>
         <div className="text-xs text-muted-foreground">
           <p>多网盘独立隔离</p>
           <p>自动化推送系统 v1.0</p>
