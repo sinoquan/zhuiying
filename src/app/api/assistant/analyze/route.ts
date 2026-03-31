@@ -235,20 +235,39 @@ export async function POST(request: NextRequest) {
 async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'unknown', year?: number) {
   try {
     const client = getSupabaseClient()
+    
+    // 获取TMDB配置 - 支持两种格式
     const { data: settings } = await client
       .from('system_settings')
-      .select('setting_value')
-      .eq('setting_key', 'tmdb')
-      .single()
+      .select('setting_key, setting_value')
+      .in('setting_key', ['tmdb', 'tmdb_api_key', 'tmdb_language'])
     
-    const tmdbConfig = settings?.setting_value as any
-    const apiKey = tmdbConfig?.api_key || process.env.TMDB_API_KEY
+    // 解析配置
+    let apiKey: string | undefined
+    let language = 'zh-CN'
+    
+    settings?.forEach((item) => {
+      if (item.setting_key === 'tmdb') {
+        // 嵌套格式
+        const config = item.setting_value as any
+        apiKey = config?.api_key || apiKey
+        language = config?.language || language
+      } else if (item.setting_key === 'tmdb_api_key') {
+        // 扁平格式
+        apiKey = item.setting_value as string
+      } else if (item.setting_key === 'tmdb_language') {
+        language = (item.setting_value as string) || language
+      }
+    })
+    
+    // 回退到环境变量
+    apiKey = apiKey || process.env.TMDB_API_KEY
     
     if (!apiKey) return null
     
     const tmdbService = new TMDBService({
       apiKey,
-      language: tmdbConfig?.language || 'zh-CN',
+      language,
     })
     
     const tmdbResult = await tmdbService.identifyFromFileName(

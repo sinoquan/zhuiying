@@ -192,11 +192,22 @@ export default function SettingsPage() {
       const response = await fetch("/api/tmdb/search?query=avatar")
       const data = await response.json()
       
-      if (data.error) throw new Error(data.error)
+      if (data.error) {
+        // 友好的错误提示
+        if (data.error.includes('fetch failed') || data.error.includes('网络')) {
+          throw new Error('网络连接失败，请检查服务器是否能访问 api.themoviedb.org，或配置代理')
+        }
+        throw new Error(data.error)
+      }
       
       toast.success("TMDB API 连接成功")
     } catch (error) {
-      toast.error("TMDB API 测试失败: " + (error instanceof Error ? error.message : "未知错误"))
+      const errorMsg = error instanceof Error ? error.message : "未知错误"
+      if (errorMsg.includes('fetch failed')) {
+        toast.error("网络连接失败，请检查服务器是否能访问 TMDB API（可能需要配置代理）")
+      } else {
+        toast.error("TMDB API 测试失败: " + errorMsg)
+      }
     } finally {
       setTesting(null)
     }
