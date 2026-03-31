@@ -38,8 +38,6 @@ import {
   Edit, 
   Trash2, 
   Copy,
-  Send,
-  MessageSquare,
   Image as ImageIcon,
 } from "lucide-react"
 import {
@@ -51,7 +49,28 @@ import {
 import { toast } from "sonner"
 import { TEMPLATE_VARIABLES, DEFAULT_TEMPLATES, PushChannelType, TemplateContentType, PushTemplate } from "@/lib/push/types"
 import { renderTemplate, getPreviewData } from "@/lib/push/template-renderer"
-import { getPushChannelIcon } from "@/lib/icons"
+import { pushChannelIcons } from "@/lib/icons"
+
+// 扩展模板类型，支持预设标记
+interface DisplayTemplate extends PushTemplate {
+  isPreset?: boolean
+}
+
+// 渠道图标组件
+function ChannelIcon({ type, size = 16 }: { type: PushChannelType; size?: number }) {
+  const iconData = pushChannelIcons[type]
+  if (!iconData) return null
+  return (
+    <img 
+      src={iconData.icon} 
+      alt={iconData.name}
+      width={size}
+      height={size}
+      className="inline-block"
+      style={{ borderRadius: 2 }}
+    />
+  )
+}
 
 interface CloudDrive {
   id: number
@@ -59,13 +78,24 @@ interface CloudDrive {
   alias: string | null
 }
 
+// 预设模板配置
+const PRESET_TEMPLATE_CONFIGS: Array<{
+  name: string
+  content_type: TemplateContentType
+  include_image: boolean
+}> = [
+  { name: '电影标准模板', content_type: 'movie', include_image: true },
+  { name: '剧集标准模板', content_type: 'tv_series', include_image: true },
+  { name: '完结剧集模板', content_type: 'completed', include_image: true },
+]
+
 export default function PushTemplatesPage() {
   const [templates, setTemplates] = useState<PushTemplate[]>([])
   const [drives, setDrives] = useState<CloudDrive[]>([])
   const [loading, setLoading] = useState(true)
   const [activeChannel, setActiveChannel] = useState<PushChannelType>('telegram')
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingTemplate, setEditingTemplate] = useState<PushTemplate | null>(null)
+  const [editingTemplate, setEditingTemplate] = useState<DisplayTemplate | null>(null)
   const [formData, setFormData] = useState({
     cloud_drive_id: "",
     name: "",
@@ -77,16 +107,6 @@ export default function PushTemplatesPage() {
   useEffect(() => {
     fetchData()
   }, [])
-
-  useEffect(() => {
-    // 切换渠道时，如果模板内容为空，填充默认模板
-    if (!formData.template_content && formData.content_type) {
-      setFormData(prev => ({
-        ...prev,
-        template_content: DEFAULT_TEMPLATES[activeChannel][prev.content_type]
-      }))
-    }
-  }, [activeChannel, formData.content_type])
 
   const fetchData = async () => {
     try {
@@ -105,6 +125,30 @@ export default function PushTemplatesPage() {
     }
   }
 
+  // 获取当前渠道的模板（数据库 + 预设）
+  const getDisplayTemplates = (): DisplayTemplate[] => {
+    const dbTemplates = templates.filter(t => t.channel_type === activeChannel)
+    const existingTypes = new Set(dbTemplates.map(t => t.content_type))
+    
+    // 添加未创建的预设模板
+    const presetTemplates: DisplayTemplate[] = PRESET_TEMPLATE_CONFIGS
+      .filter(config => !existingTypes.has(config.content_type))
+      .map((config, index) => ({
+        id: -index - 1, // 负数ID表示预设模板
+        cloud_drive_id: 0,
+        name: config.name,
+        channel_type: activeChannel,
+        content_type: config.content_type,
+        template_content: DEFAULT_TEMPLATES[activeChannel][config.content_type],
+        include_image: config.include_image,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        isPreset: true,
+      }))
+    
+    return [...dbTemplates, ...presetTemplates]
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -118,7 +162,8 @@ export default function PushTemplatesPage() {
         include_image: formData.include_image,
       }
 
-      if (editingTemplate) {
+      if (editingTemplate && editingTemplate.id > 0) {
+        // 更新现有模板
         const response = await fetch(`/api/push/templates/${editingTemplate.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -127,6 +172,7 @@ export default function PushTemplatesPage() {
         if (!response.ok) throw new Error("更新失败")
         toast.success("更新成功")
       } else {
+        // 创建新模板（包括从预设模板创建）
         const response = await fetch("/api/push/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -145,6 +191,9 @@ export default function PushTemplatesPage() {
   }
 
   const handleToggle = async (template: PushTemplate) => {
+    // 预设模板不支持切换状态
+    if (template.id < 0) return
+    
     try {
       const response = await fetch(`/api/push/templates/${template.id}`, {
         method: "PUT",
@@ -160,6 +209,10 @@ export default function PushTemplatesPage() {
   }
 
   const handleDelete = async (id: number) => {
+    if (id < 0) {
+      toast.error("预设模板无法删除")
+      return
+    }
     if (!confirm("确定要删除这个推送模板吗？")) return
 
     try {
@@ -194,14 +247,14 @@ export default function PushTemplatesPage() {
     setDialogOpen(true)
   }
 
-  const openEditDialog = (template: PushTemplate) => {
+  const openEditDialog = (template: DisplayTemplate) => {
     setEditingTemplate(template)
     setActiveChannel(template.channel_type)
     setFormData({
       cloud_drive_id: template.cloud_drive_id?.toString() || "",
       name: template.name || "",
       content_type: (template.content_type || "movie") as TemplateContentType,
-      template_content: template.template_content || "",
+      template_content: template.template_content || DEFAULT_TEMPLATES[template.channel_type][template.content_type as TemplateContentType],
       include_image: template.include_image ?? true,
     })
     setDialogOpen(true)
@@ -250,15 +303,10 @@ export default function PushTemplatesPage() {
   }
 
   const getChannelLabel = (type: PushChannelType) => {
-    const labels: Record<PushChannelType, string> = {
-      telegram: "Telegram",
-      qq: "QQ",
-      wechat: "微信"
-    }
-    return labels[type]
+    return pushChannelIcons[type]?.name || type
   }
 
-  const filteredTemplates = templates.filter(t => t.channel_type === activeChannel)
+  const displayTemplates = getDisplayTemplates()
 
   return (
     <div className="p-8">
@@ -279,15 +327,15 @@ export default function PushTemplatesPage() {
       <Tabs value={activeChannel} onValueChange={(v) => setActiveChannel(v as PushChannelType)}>
         <TabsList className="grid w-full grid-cols-3 h-12 mb-6">
           <TabsTrigger value="telegram" className="flex items-center gap-2 text-sm">
-            <Send className="h-4 w-4" />
+            <ChannelIcon type="telegram" />
             Telegram
           </TabsTrigger>
           <TabsTrigger value="qq" className="flex items-center gap-2 text-sm">
-            <MessageSquare className="h-4 w-4" />
+            <ChannelIcon type="qq" />
             QQ
           </TabsTrigger>
           <TabsTrigger value="wechat" className="flex items-center gap-2 text-sm">
-            {getPushChannelIcon('wechat')}
+            <ChannelIcon type="wechat" />
             微信
           </TabsTrigger>
         </TabsList>
@@ -297,17 +345,17 @@ export default function PushTemplatesPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  {getPushChannelIcon(channel)}
+                  <ChannelIcon type={channel} size={20} />
                   {getChannelLabel(channel)} 模板
                 </CardTitle>
                 <CardDescription>
-                  已配置 {filteredTemplates.length} 个 {getChannelLabel(channel)} 推送模板
+                  已配置 {templates.filter(t => t.channel_type === channel).length} 个 {getChannelLabel(channel)} 推送模板
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {loading ? (
                   <div className="text-center py-8 text-muted-foreground">加载中...</div>
-                ) : filteredTemplates.length === 0 ? (
+                ) : displayTemplates.length === 0 ? (
                   <div className="text-center py-8">
                     <FileCode className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                     <p className="text-muted-foreground">暂无 {getChannelLabel(channel)} 推送模板</p>
@@ -328,12 +376,15 @@ export default function PushTemplatesPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredTemplates.map((template) => (
+                      {displayTemplates.map((template) => (
                         <TableRow key={template.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <FileCode className="h-4 w-4" />
                               <span className="font-medium">{template.name}</span>
+                              {template.isPreset && (
+                                <Badge variant="outline" className="text-xs">预设</Badge>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -359,6 +410,7 @@ export default function PushTemplatesPage() {
                               <Switch
                                 checked={template.is_active}
                                 onCheckedChange={() => handleToggle(template)}
+                                disabled={template.isPreset}
                               />
                               <Badge variant={template.is_active ? "default" : "secondary"}>
                                 {template.is_active ? "启用" : "禁用"}
@@ -375,19 +427,21 @@ export default function PushTemplatesPage() {
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => openEditDialog(template)}>
                                   <Edit className="mr-2 h-4 w-4" />
-                                  编辑
+                                  {template.isPreset ? "编辑并保存" : "编辑"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => copyTemplate(template.template_content || "")}>
                                   <Copy className="mr-2 h-4 w-4" />
                                   复制模板
                                 </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  onClick={() => handleDelete(template.id)}
-                                  className="text-destructive"
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  删除
-                                </DropdownMenuItem>
+                                {!template.isPreset && (
+                                  <DropdownMenuItem 
+                                    onClick={() => handleDelete(template.id)}
+                                    className="text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    删除
+                                  </DropdownMenuItem>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -407,11 +461,14 @@ export default function PushTemplatesPage() {
         <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-xl">
-              {editingTemplate ? "编辑推送模板" : "新建推送模板"}
+              {editingTemplate?.isPreset ? "编辑预设模板" : editingTemplate ? "编辑推送模板" : "新建推送模板"}
             </DialogTitle>
             <DialogDescription className="flex items-center gap-2">
-              {getPushChannelIcon(activeChannel)}
+              <ChannelIcon type={activeChannel} />
               {getChannelLabel(activeChannel)} 渠道模板
+              {editingTemplate?.isPreset && (
+                <Badge variant="outline" className="ml-2">编辑后将保存到数据库</Badge>
+              )}
             </DialogDescription>
           </DialogHeader>
           
@@ -536,7 +593,7 @@ export default function PushTemplatesPage() {
               取消
             </Button>
             <Button type="submit" form="template-form" disabled={!formData.name || !formData.template_content}>
-              {editingTemplate ? "保存修改" : "创建模板"}
+              {editingTemplate?.isPreset ? "保存模板" : editingTemplate ? "保存修改" : "创建模板"}
             </Button>
           </DialogFooter>
         </DialogContent>
