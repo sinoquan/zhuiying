@@ -417,168 +417,173 @@ export default function PushTemplatesPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl w-[95vw] h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-xl">
               {editingTemplate ? "编辑推送模板" : "新建推送模板"}
             </DialogTitle>
             <DialogDescription>
               自定义推送消息格式，支持Telegram富文本和QQ纯文本两种格式
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              {/* 基本信息 */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">模板名称 *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="给模板起个名字"
-                  />
+          
+          <div className="flex-1 overflow-y-auto -mx-6 px-6">
+            <form onSubmit={handleSubmit} id="template-form">
+              <div className="grid gap-6 py-4">
+                {/* 基本信息 */}
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="grid gap-2">
+                    <Label htmlFor="name" className="text-sm font-medium">模板名称 *</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="给模板起个名字"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-sm font-medium">内容类型 *</Label>
+                    <Select
+                      value={formData.content_type}
+                      onValueChange={(value: 'movie' | 'tv_series' | 'completed') => 
+                        setFormData({ ...formData, content_type: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择内容类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="movie">🎬 电影</SelectItem>
+                        <SelectItem value="tv_series">📺 剧集</SelectItem>
+                        <SelectItem value="completed">✅ 完结</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-sm font-medium">绑定网盘</Label>
+                    <Select
+                      value={formData.cloud_drive_id || "all"}
+                      onValueChange={(value) => setFormData({ ...formData, cloud_drive_id: value === "all" ? "" : value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="所有网盘" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">所有网盘</SelectItem>
+                        {drives.map((drive) => (
+                          <SelectItem key={drive.id} value={drive.id.toString()}>
+                            {drive.alias || drive.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label>内容类型 *</Label>
-                  <Select
-                    value={formData.content_type}
-                    onValueChange={(value: 'movie' | 'tv_series' | 'completed') => 
-                      setFormData({ ...formData, content_type: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择内容类型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="movie">🎬 电影</SelectItem>
-                      <SelectItem value="tv_series">📺 剧集</SelectItem>
-                      <SelectItem value="completed">✅ 完结</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                {/* 选项 */}
+                <div className="flex items-center gap-4 py-2">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="include_image"
+                      checked={formData.include_image}
+                      onCheckedChange={(checked) => setFormData({ ...formData, include_image: checked })}
+                    />
+                    <Label htmlFor="include_image" className="flex items-center gap-2 cursor-pointer">
+                      <ImageIcon className="h-4 w-4" />
+                      包含海报图片（TG专用）
+                    </Label>
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label>绑定网盘</Label>
-                  <Select
-                    value={formData.cloud_drive_id || "all"}
-                    onValueChange={(value) => setFormData({ ...formData, cloud_drive_id: value === "all" ? "" : value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="所有网盘" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">所有网盘</SelectItem>
-                      {drives.map((drive) => (
-                        <SelectItem key={drive.id} value={drive.id.toString()}>
-                          {drive.alias || drive.name}
-                        </SelectItem>
+
+                {/* 模板编辑 */}
+                <Tabs defaultValue="telegram" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 h-11">
+                    <TabsTrigger value="telegram" className="flex items-center gap-2 text-sm">
+                      <Send className="h-4 w-4" />
+                      Telegram模板
+                    </TabsTrigger>
+                    <TabsTrigger value="qq" className="flex items-center gap-2 text-sm">
+                      <MessageSquare className="h-4 w-4" />
+                      QQ模板
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="telegram" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="grid gap-2">
+                        <Label className="text-sm font-medium">Telegram模板内容</Label>
+                        <textarea
+                          className="flex min-h-[400px] w-full rounded-md border border-input bg-background px-4 py-3 text-sm font-mono leading-relaxed resize-y"
+                          value={formData.telegram_template}
+                          onChange={(e) => setFormData({ ...formData, telegram_template: e.target.value })}
+                          placeholder="输入Telegram模板内容..."
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label className="text-sm font-medium">预览效果</Label>
+                        <div className="min-h-[400px] p-4 bg-gradient-to-b from-slate-900 to-slate-800 text-slate-100 rounded-lg text-sm whitespace-pre-wrap overflow-auto font-mono leading-relaxed shadow-inner">
+                          {formData.telegram_template ? (
+                            getPreviewContent(formData.telegram_template, 'telegram')
+                          ) : (
+                            <span className="text-slate-500 italic">模板预览将显示在这里...</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="qq" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="grid gap-2">
+                        <Label className="text-sm font-medium">QQ模板内容（纯文本）</Label>
+                        <textarea
+                          className="flex min-h-[400px] w-full rounded-md border border-input bg-background px-4 py-3 text-sm font-mono leading-relaxed resize-y"
+                          value={formData.qq_template}
+                          onChange={(e) => setFormData({ ...formData, qq_template: e.target.value })}
+                          placeholder="输入QQ模板内容..."
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label className="text-sm font-medium">预览效果</Label>
+                        <div className="min-h-[400px] p-4 bg-white border rounded-lg text-sm whitespace-pre-wrap overflow-auto font-mono leading-relaxed shadow-inner">
+                          {formData.qq_template ? (
+                            getPreviewContent(formData.qq_template, 'qq')
+                          ) : (
+                            <span className="text-muted-foreground italic">模板预览将显示在这里...</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+
+                {/* 变量说明 */}
+                <Card className="border-dashed">
+                  <CardHeader className="py-3 px-4">
+                    <CardTitle className="text-sm font-medium">📋 可用变量</CardTitle>
+                  </CardHeader>
+                  <CardContent className="py-3 px-4">
+                    <div className="grid grid-cols-5 gap-2 text-xs">
+                      {TEMPLATE_VARIABLES.slice(0, 15).map((v) => (
+                        <div key={v.key} className="p-2 bg-muted/50 rounded border" title={v.description}>
+                          <code className="text-primary font-mono">{v.key}</code>
+                        </div>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-
-              {/* 选项 */}
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.include_image}
-                    onCheckedChange={(checked) => setFormData({ ...formData, include_image: checked })}
-                  />
-                  <Label className="flex items-center gap-2">
-                    <ImageIcon className="h-4 w-4" />
-                    包含海报图片（TG专用）
-                  </Label>
-                </div>
-              </div>
-
-              {/* 模板编辑 */}
-              <Tabs defaultValue="telegram" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="telegram" className="flex items-center gap-2">
-                    <Send className="h-4 w-4" />
-                    Telegram模板
-                  </TabsTrigger>
-                  <TabsTrigger value="qq" className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    QQ模板
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="telegram" className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Telegram模板内容</Label>
-                      <textarea
-                        className="flex min-h-[300px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-                        value={formData.telegram_template}
-                        onChange={(e) => setFormData({ ...formData, telegram_template: e.target.value })}
-                        placeholder="输入Telegram模板内容..."
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label>预览效果</Label>
-                      <div className="min-h-[300px] p-3 bg-slate-900 text-slate-100 rounded-lg text-sm whitespace-pre-wrap overflow-auto">
-                        {formData.telegram_template ? (
-                          getPreviewContent(formData.telegram_template, 'telegram')
-                        ) : (
-                          <span className="text-muted-foreground">模板预览将显示在这里...</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="qq" className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>QQ模板内容（纯文本）</Label>
-                      <textarea
-                        className="flex min-h-[300px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-                        value={formData.qq_template}
-                        onChange={(e) => setFormData({ ...formData, qq_template: e.target.value })}
-                        placeholder="输入QQ模板内容..."
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label>预览效果</Label>
-                      <div className="min-h-[300px] p-3 bg-slate-100 rounded-lg text-sm whitespace-pre-wrap overflow-auto">
-                        {formData.qq_template ? (
-                          getPreviewContent(formData.qq_template, 'qq')
-                        ) : (
-                          <span className="text-muted-foreground">模板预览将显示在这里...</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-
-              {/* 变量说明 */}
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">可用变量</CardTitle>
-                </CardHeader>
-                <CardContent className="py-2">
-                  <div className="grid grid-cols-4 gap-2 text-xs">
-                    {TEMPLATE_VARIABLES.slice(0, 12).map((v) => (
-                      <div key={v.key} className="p-2 bg-muted rounded flex items-center gap-2">
-                        <code className="text-primary font-mono">{v.key}</code>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                取消
-              </Button>
-              <Button type="submit" disabled={!formData.name || !formData.telegram_template}>
-                {editingTemplate ? "保存" : "创建"}
-              </Button>
-            </DialogFooter>
-          </form>
+            </form>
+          </div>
+          
+          <DialogFooter className="mt-4 pt-4 border-t">
+            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+              取消
+            </Button>
+            <Button type="submit" form="template-form" disabled={!formData.name || !formData.telegram_template}>
+              {editingTemplate ? "保存修改" : "创建模板"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
