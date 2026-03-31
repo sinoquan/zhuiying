@@ -7,6 +7,7 @@ import {
   ICloudDriveService,
   CloudFile,
   ShareInfo,
+  SharedFileInfo,
   ListResult,
   CloudDriveConfig,
   SpaceInfo,
@@ -201,6 +202,88 @@ export class Pan115Service implements ICloudDriveService {
       return true
     } catch {
       return false
+    }
+  }
+
+  /**
+   * 访问分享链接，获取文件信息
+   * 115网盘分享链接格式：https://115.com/s/xxx 或 https://115cdn.com/s/xxx
+   */
+  async getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
+    try {
+      // 1. 获取分享信息
+      const shareInfoUrl = `https://webapi.115.com/share/getinfo?share_code=${shareId}`
+      const shareInfoRes = await fetch(shareInfoUrl, {
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      })
+      const shareInfoData = await shareInfoRes.json()
+      
+      if (!shareInfoData.state && shareInfoData.errno !== 0) {
+        // 如果需要提取码但没有提供
+        if (shareInfoData.errno === 20001 || shareInfoData.errno === 20002) {
+          if (!shareCode) {
+            throw new Error('需要提取码')
+          }
+        } else {
+          throw new Error(shareInfoData.error || '获取分享信息失败')
+        }
+      }
+      
+      // 2. 获取文件列表
+      const fileListUrl = `https://webapi.115.com/share/list?share_code=${shareId}${shareCode ? `&receive_code=${shareCode}` : ''}&cid=0`
+      const fileListRes = await fetch(fileListUrl, {
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      })
+      const fileListData = await fileListRes.json()
+      
+      if (!fileListData.state && fileListData.errno !== 0) {
+        throw new Error(fileListData.error || '获取文件列表失败')
+      }
+      
+      const files = (fileListData.data || []).map((item: any) => ({
+        file_id: item.fid || item.cid,
+        file_name: item.n || item.name,
+        file_size: item.s || item.size || 0,
+        is_dir: !!item.pc, // pc 字段存在表示是目录
+      }))
+      
+      // 如果是单个文件
+      if (files.length === 1 && !files[0].is_dir) {
+        return {
+          share_id: shareId,
+          share_code: shareCode,
+          file_id: files[0].file_id,
+          file_name: files[0].file_name,
+          file_size: files[0].file_size,
+          is_dir: false,
+        }
+      }
+      
+      // 如果是目录或多个文件
+      const folderName = shareInfoData.data?.name || shareInfoData.data?.share_name || '未知文件夹'
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: '0',
+        file_name: folderName,
+        file_size: files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0),
+        is_dir: true,
+        file_count: files.length,
+        files: files.map((f: { file_id: string; file_name: string; file_size: number; is_dir: boolean }) => ({
+          ...f,
+          share_id: shareId,
+          share_code: shareCode,
+        })),
+      }
+    } catch (error) {
+      console.error('115分享链接访问失败:', error)
+      throw error
     }
   }
 }

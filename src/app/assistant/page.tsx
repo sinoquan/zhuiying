@@ -22,7 +22,8 @@ import {
   Hash,
   ExternalLink,
   CheckCircle2,
-  XCircle
+  XCircle,
+  FileText
 } from "lucide-react"
 import { toast } from "sonner"
 import Image from "next/image"
@@ -56,6 +57,10 @@ interface AnalyzeResult {
   file?: {
     name: string
     type: 'movie' | 'tv_series' | 'unknown'
+    season?: number
+    episode?: number
+    episode_end?: number
+    is_completed?: boolean
   }
   tmdb?: {
     id: number
@@ -69,7 +74,14 @@ interface AnalyzeResult {
     genres?: string[]
     cast?: string[]
   }
+  // 文件列表（如果是文件夹）
+  files?: Array<{
+    name: string
+    size: string
+    is_dir: boolean
+  }>
   error?: string
+  warning?: string
 }
 
 export default function AssistantPage() {
@@ -298,6 +310,23 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
               <CardContent>
                 {analyzeResult.success ? (
                   <div className="space-y-6">
+                    {/* 警告信息 */}
+                    {analyzeResult.warning && (
+                      <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <Brain className="h-4 w-4 text-amber-600 mt-0.5" />
+                          <div className="text-sm">
+                            <p className="font-medium text-amber-800 dark:text-amber-200">
+                              提示
+                            </p>
+                            <p className="text-amber-700 dark:text-amber-300 mt-1">
+                              {analyzeResult.warning}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* 链接信息 */}
                     <div className="p-4 bg-muted/50 rounded-lg">
                       <div className="flex items-center gap-2 mb-3">
@@ -309,6 +338,11 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                               {analyzeResult.file.type === 'movie' ? '电影' : 
                                analyzeResult.file.type === 'tv_series' ? '剧集' : '未知'}
                             </span>
+                          </Badge>
+                        )}
+                        {analyzeResult.file?.is_completed && (
+                          <Badge variant="secondary" className="bg-green-100 text-green-700">
+                            完结
                           </Badge>
                         )}
                       </div>
@@ -335,12 +369,51 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                         )}
                         {analyzeResult.file?.name && (
                           <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground">文件名:</span>
-                            <span>{analyzeResult.file.name}</span>
+                            <span className="text-muted-foreground">内容名称:</span>
+                            <span className="font-medium">{analyzeResult.file.name}</span>
+                          </div>
+                        )}
+                        {/* 季集数信息 */}
+                        {(analyzeResult.file?.season || analyzeResult.file?.episode) && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">季/集:</span>
+                            <span>
+                              {analyzeResult.file.season && `S${String(analyzeResult.file.season).padStart(2, '0')}`}
+                              {analyzeResult.file.episode && (
+                                analyzeResult.file.episode_end 
+                                  ? ` E${String(analyzeResult.file.episode).padStart(2, '0')}-E${String(analyzeResult.file.episode_end).padStart(2, '0')}`
+                                  : `E${String(analyzeResult.file.episode).padStart(2, '0')}`
+                              )}
+                            </span>
                           </div>
                         )}
                       </div>
                     </div>
+
+                    {/* 文件列表 */}
+                    {analyzeResult.files && analyzeResult.files.length > 0 && (
+                      <div className="p-4 bg-muted/30 rounded-lg">
+                        <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          文件列表 ({analyzeResult.files.length} 项)
+                        </h4>
+                        <div className="max-h-48 overflow-y-auto space-y-1">
+                          {analyzeResult.files.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between text-sm p-2 bg-background rounded">
+                              <div className="flex items-center gap-2">
+                                {file.is_dir ? (
+                                  <Badge variant="outline" className="text-xs">文件夹</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs">文件</Badge>
+                                )}
+                                <span className="truncate max-w-[300px]">{file.name}</span>
+                              </div>
+                              <span className="text-muted-foreground text-xs">{file.size}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* TMDB 信息 + 预览 */}
                     {analyzeResult.tmdb ? (
@@ -482,7 +555,7 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                                 无法识别影视信息
                               </p>
                               <p className="text-amber-700 dark:text-amber-300 mt-1">
-                                请在链接下方添加文件名，或手动编辑推送内容
+                                系统已自动获取文件信息，但未能匹配 TMDB 影视数据
                               </p>
                             </div>
                           </div>

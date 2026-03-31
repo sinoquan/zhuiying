@@ -23,6 +23,18 @@ export interface ShareInfo {
   expire_time?: string
 }
 
+// 分享链接文件信息
+export interface SharedFileInfo {
+  share_id: string      // 分享ID
+  share_code?: string   // 提取码
+  file_id: string       // 文件ID
+  file_name: string     // 文件名
+  file_size: number     // 文件大小
+  is_dir: boolean       // 是否为目录
+  file_count?: number   // 文件数量（如果是目录）
+  files?: SharedFileInfo[] // 子文件列表（如果是目录）
+}
+
 // 目录列表结果
 export interface ListResult {
   files: CloudFile[]
@@ -63,6 +75,9 @@ export interface ICloudDriveService {
   
   // 创建分享链接
   createShare(fileIds: string[], expireDays?: number): Promise<ShareInfo>
+  
+  // 访问分享链接，获取文件信息
+  getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo>
   
   // 检查文件是否为新文件（根据监控任务创建时间）
   checkNewFiles(path: string, sinceTime: Date): Promise<CloudFile[]>

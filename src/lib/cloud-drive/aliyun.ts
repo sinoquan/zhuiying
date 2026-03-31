@@ -7,6 +7,7 @@ import {
   ICloudDriveService,
   CloudFile,
   ShareInfo,
+  SharedFileInfo,
   ListResult,
   CloudDriveConfig,
   SpaceInfo,
@@ -256,6 +257,84 @@ export class AliyunService implements ICloudDriveService {
       return true
     } catch {
       return false
+    }
+  }
+
+  /**
+   * 访问分享链接，获取文件信息
+   * 阿里云盘分享链接格式：https://www.alipan.com/s/xxx
+   */
+  async getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
+    try {
+      // 1. 获取分享信息
+      const shareInfoRes = await fetch(`${this.baseUrl}/adrive/v1.0/share/getShareInfo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ share_id: shareId }),
+      })
+      const shareInfoData = await shareInfoRes.json()
+      
+      if (shareInfoData.code) {
+        if (shareInfoData.code === 'SharePwdRequired' && !shareCode) {
+          throw new Error('需要提取码')
+        }
+        throw new Error(shareInfoData.message || '获取分享信息失败')
+      }
+      
+      // 2. 获取文件列表
+      const fileListRes = await fetch(`${this.baseUrl}/adrive/v1.0/share/listShareFiles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          share_id: shareId,
+          share_pwd: shareCode || '',
+          parent_file_id: 'root',
+        }),
+      })
+      const fileListData = await fileListRes.json()
+      
+      if (fileListData.code) {
+        throw new Error(fileListData.message || '获取文件列表失败')
+      }
+      
+      const files = (fileListData.items || []).map((item: any) => ({
+        file_id: item.file_id,
+        file_name: item.name,
+        file_size: item.size || 0,
+        is_dir: item.type === 'folder',
+      }))
+      
+      // 如果是单个文件
+      if (files.length === 1 && !files[0].is_dir) {
+        return {
+          share_id: shareId,
+          share_code: shareCode,
+          file_id: files[0].file_id,
+          file_name: files[0].file_name,
+          file_size: files[0].file_size,
+          is_dir: false,
+        }
+      }
+      
+      // 如果是目录或多个文件
+      const folderName = shareInfoData.share_name || '未知文件夹'
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: 'root',
+        file_name: folderName,
+        file_size: files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0),
+        is_dir: true,
+        file_count: files.length,
+        files: files.map((f: { file_id: string; file_name: string; file_size: number; is_dir: boolean }) => ({
+          ...f,
+          share_id: shareId,
+          share_code: shareCode,
+        })),
+      }
+    } catch (error) {
+      console.error('阿里云盘分享链接访问失败:', error)
+      throw error
     }
   }
 }

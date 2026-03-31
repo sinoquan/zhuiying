@@ -3,7 +3,7 @@
  * API文档: https://www.123pan.com/developer
  */
 
-import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, SpaceInfo } from './types'
+import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, SharedFileInfo, SpaceInfo } from './types'
 
 export class Pan123Service implements ICloudDriveService {
   private token: string
@@ -170,5 +170,12 @@ export class Pan123Service implements ICloudDriveService {
     } catch {
       return false
     }
+  }
+
+  /**
+   * 访问分享链接，获取文件信息（暂不支持）
+   */
+  async getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
+    throw new Error('123云盘暂不支持访问分享链接')
   }
 }

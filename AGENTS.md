@@ -65,6 +65,7 @@
 │   │   ├── push/           # 推送服务
 │   │   ├── tmdb/           # TMDB服务
 │   │   ├── monitor/        # 监控服务
+│   │   ├── assistant/      # 智能助手服务
 │   │   └── auth/           # 认证服务
 │   ├── storage/            # 数据存储
 │   │   └── database/       # 数据库配置
@@ -79,15 +80,18 @@
 
 ### 1. 网盘服务 (src/lib/cloud-drive/)
 支持多种网盘的真实API调用：
-- 115网盘 - Pan115Service
-- 阿里云盘 - AliyunService
+- 115网盘 - Pan115Service（支持访问分享链接）
+- 阿里云盘 - AliyunService（支持访问分享链接）
 - 夸克网盘 - QuarkService
 - 天翼网盘 - TianyiService
 - 百度网盘 - BaiduService
+- 123云盘 - Pan123Service
+- 光鸭网盘 - GuangyaService
 
 ### 2. 推送服务 (src/lib/push/)
 - TelegramPushService - Telegram Bot推送
 - QQPushService - QQ消息推送
+- WechatPushService - 企业微信推送
 
 ### 3. TMDB服务 (src/lib/tmdb/)
 - TMDBService - 智能识别影视内容
@@ -100,10 +104,14 @@
 - 自动推送到配置的渠道
 
 ### 5. 智能助手服务 (src/lib/assistant/)
-- 链接解析器 - 支持 115/阿里/夸克/天翼/百度/123 等网盘
-- 自动识别网盘类型、提取码、文件名
-- 自动匹配 TMDB 影视信息
-- 推送预览和自定义编辑
+- **link-parser.ts** - 链接解析器，支持 115/阿里/夸克/天翼/百度/123 等网盘
+- **file-name-parser.ts** - 文件名解析器，从文件名提取影视信息
+  - 自动识别剧名、年份、季数、集数
+  - 支持多种格式：S01E643、第1季第643集、E01-E12
+  - 提取分辨率、编码、TMDB ID等
+- **share-link-accessor.ts** - 分享链接访问服务
+  - 访问分享链接获取真实文件信息
+  - 支持115网盘、阿里云盘
 - 分享记录来源标记（手动/监控/智能助手）
 
 ### 6. Telegram Bot 集成

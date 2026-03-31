@@ -7,6 +7,7 @@ import {
   ICloudDriveService,
   CloudFile,
   ShareInfo,
+  SharedFileInfo,
   ListResult,
   CloudDriveConfig,
   SpaceInfo,
@@ -185,5 +186,12 @@ export class TianyiService implements ICloudDriveService {
     } catch {
       return false
     }
+  }
+
+  /**
+   * 访问分享链接，获取文件信息（暂不支持）
+   */
+  async getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
+    throw new Error('天翼网盘暂不支持访问分享链接')
   }
 }
