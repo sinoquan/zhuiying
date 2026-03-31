@@ -133,6 +133,9 @@ export default function AssistantPage() {
         setEditedTitle(data.tmdb.title)
       } else if (data.file?.name) {
         setEditedTitle(data.file.name)
+      } else {
+        // 没有文件名时，使用网盘类型作为默认标题
+        setEditedTitle(`${data.link?.typeName || '网盘'}分享`)
       }
       
       // 智能选择渠道：根据链接类型匹配
@@ -340,7 +343,7 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                     </div>
 
                     {/* TMDB 信息 + 预览 */}
-                    {analyzeResult.tmdb && (
+                    {analyzeResult.tmdb ? (
                       <div className="grid gap-4 md:grid-cols-2">
                         {/* TMDB 信息 */}
                         <div className="space-y-4">
@@ -452,6 +455,77 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                                   value={editedTitle}
                                   onChange={(e) => setEditedTitle(e.target.value)}
                                   placeholder="修改标题"
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label className="text-xs">备注</Label>
+                                <Input
+                                  value={editedNote}
+                                  onChange={(e) => setEditedNote(e.target.value)}
+                                  placeholder="添加备注信息"
+                                  className="h-8"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      // 没有 TMDB 信息时的简化预览
+                      <div className="space-y-4">
+                        <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <Brain className="h-4 w-4 text-amber-600 mt-0.5" />
+                            <div className="text-sm">
+                              <p className="font-medium text-amber-800 dark:text-amber-200">
+                                无法识别影视信息
+                              </p>
+                              <p className="text-amber-700 dark:text-amber-300 mt-1">
+                                请在链接下方添加文件名，或手动编辑推送内容
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* 简化推送预览 */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">推送预览</span>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => setEditMode(!editMode)}
+                            >
+                              {editMode ? "完成编辑" : "编辑"}
+                            </Button>
+                          </div>
+                          <div className="p-4 bg-gradient-to-b from-slate-900 to-slate-800 text-slate-100 rounded-lg text-sm whitespace-pre-wrap font-mono leading-relaxed max-h-[300px] overflow-y-auto">
+                            <span className="text-slate-400">📁 {editedTitle || '分享链接'}</span>
+                            <br /><br />
+                            <span className="text-slate-400">🔗 链接: {analyzeResult.link?.shareUrl}</span>
+                            {analyzeResult.link?.shareCode && (
+                              <>
+                                <br />
+                                <span className="text-slate-400">🔑 提取码: {analyzeResult.link.shareCode}</span>
+                              </>
+                            )}
+                            {editedNote && (
+                              <>
+                                <br /><br />
+                                <span className="text-slate-400">📝 备注: {editedNote}</span>
+                              </>
+                            )}
+                          </div>
+                          
+                          {editMode && (
+                            <div className="space-y-3 p-3 bg-muted/50 rounded-lg">
+                              <div className="grid gap-2">
+                                <Label className="text-xs">标题</Label>
+                                <Input
+                                  value={editedTitle}
+                                  onChange={(e) => setEditedTitle(e.target.value)}
+                                  placeholder="输入文件名或标题"
                                   className="h-8"
                                 />
                               </div>
