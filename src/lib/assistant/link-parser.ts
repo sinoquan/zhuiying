@@ -66,8 +66,8 @@ const LINK_PATTERNS: Array<{
   },
   {
     type: '123',
-    // 匹配: https://www.123pan.com/s/xxx 或 https://www.123pan.cn/s/xxx
-    pattern: /(?:https?:\/\/)?www\.123pan\.(?:com|cn)\/s\/([a-zA-Z0-9_-]+)/i,
+    // 匹配: https://www.123pan.com/s/xxx 或 https://www.123pan.cn/s/xxx 或 https://www.123865.com/s/xxx
+    pattern: /(?:https?:\/\/)?(?:www\.)?123(?:pan|865)\.(?:com|cn)\/s\/([a-zA-Z0-9_-]+)/i,
     extractId: (match) => match[1]
   },
 ]
