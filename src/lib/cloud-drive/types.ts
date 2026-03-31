@@ -30,6 +30,14 @@ export interface ListResult {
   next_marker?: string
 }
 
+// 网盘空间信息
+export interface SpaceInfo {
+  total: number        // 总空间（字节）
+  used: number         // 已用空间（字节）
+  available: number    // 可用空间（字节）
+  used_percent: number // 已用百分比
+}
+
 // 网盘配置
 export interface CloudDriveConfig {
   cookie?: string
@@ -43,6 +51,9 @@ export interface CloudDriveConfig {
 export interface ICloudDriveService {
   // 获取用户信息
   getUserInfo(): Promise<{ name: string; avatar?: string; vip?: boolean }>
+  
+  // 获取空间信息
+  getSpaceInfo(): Promise<SpaceInfo>
   
   // 列出目录内容
   listFiles(path: string, page?: number, pageSize?: number): Promise<ListResult>

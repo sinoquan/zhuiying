@@ -3,7 +3,7 @@
  * 光鸭网盘是一个开源的网盘系统
  */
 
-import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo } from './types'
+import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, SpaceInfo } from './types'
 
 export class GuangyaService implements ICloudDriveService {
   private token: string
@@ -43,6 +43,27 @@ export class GuangyaService implements ICloudDriveService {
       }
     } catch {
       return { name: '未知用户' }
+    }
+  }
+
+  async getSpaceInfo(): Promise<SpaceInfo> {
+    try {
+      const data = await this.request('/user/space')
+      const total = data.total || 0
+      const used = data.used || 0
+      return {
+        total,
+        used,
+        available: total - used,
+        used_percent: total > 0 ? Math.round((used / total) * 100) : 0,
+      }
+    } catch {
+      return {
+        total: 0,
+        used: 0,
+        available: 0,
+        used_percent: 0,
+      }
     }
   }
 

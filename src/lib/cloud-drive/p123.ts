@@ -3,7 +3,7 @@
  * API文档: https://www.123pan.com/developer
  */
 
-import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo } from './types'
+import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, SpaceInfo } from './types'
 
 export class Pan123Service implements ICloudDriveService {
   private token: string
@@ -42,6 +42,27 @@ export class Pan123Service implements ICloudDriveService {
       }
     } catch {
       return { name: '未知用户' }
+    }
+  }
+
+  async getSpaceInfo(): Promise<SpaceInfo> {
+    try {
+      const data = await this.request('/api/user/info')
+      const total = data.spacePermanent || data.space || 0
+      const used = data.spaceUsed || 0
+      return {
+        total,
+        used,
+        available: total - used,
+        used_percent: total > 0 ? Math.round((used / total) * 100) : 0,
+      }
+    } catch {
+      return {
+        total: 0,
+        used: 0,
+        available: 0,
+        used_percent: 0,
+      }
     }
   }
 

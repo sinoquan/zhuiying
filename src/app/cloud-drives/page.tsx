@@ -40,7 +40,8 @@ import {
   RefreshCw,
   CheckCircle2,
   XCircle,
-  Loader2
+  Loader2,
+  Database
 } from "lucide-react"
 import { toast } from "sonner"
 import { Pan115LoginDialog } from "@/components/cloud-drive/pan115-login-dialog"
@@ -54,6 +55,13 @@ interface CloudDriveConfig {
   token?: string
   refresh_token?: string
   [key: string]: unknown
+}
+
+interface SpaceInfo {
+  total: number
+  used: number
+  available: number
+  used_percent: number
 }
 
 interface CloudDrive {
@@ -76,6 +84,7 @@ const DRIVE_TYPES = driveTypeOptions.map(opt => ({
 
 export default function CloudDrivesPage() {
   const [drives, setDrives] = useState<CloudDrive[]>([])
+  const [spaceInfo, setSpaceInfo] = useState<Record<number, SpaceInfo>>({})
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [pan115LoginOpen, setPan115LoginOpen] = useState(false)
@@ -97,6 +106,27 @@ export default function CloudDrivesPage() {
       const response = await fetch("/api/cloud-drives")
       const data = await response.json()
       setDrives(data)
+      
+      // 获取每个网盘的空间信息
+      const spacePromises = data.map(async (drive: CloudDrive) => {
+        if (drive.is_active && drive.config) {
+          try {
+            const res = await fetch(`/api/cloud-drives/${drive.id}/space`)
+            const space = await res.json()
+            return { id: drive.id, space }
+          } catch {
+            return { id: drive.id, space: { total: 0, used: 0, available: 0, used_percent: 0 } }
+          }
+        }
+        return { id: drive.id, space: { total: 0, used: 0, available: 0, used_percent: 0 } }
+      })
+      
+      const spaceResults = await Promise.all(spacePromises)
+      const spaceMap: Record<number, SpaceInfo> = {}
+      spaceResults.forEach((result) => {
+        spaceMap[result.id] = result.space
+      })
+      setSpaceInfo(spaceMap)
     } catch (error) {
       toast.error("获取网盘列表失败")
     } finally {
@@ -236,6 +266,14 @@ export default function CloudDrivesPage() {
     return DRIVE_TYPES.find(d => d.value === name)
   }
 
+  const formatSize = (bytes: number): string => {
+    if (bytes === 0) return "0 B"
+    const k = 1024
+    const sizes = ["B", "KB", "MB", "GB", "TB", "PB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
@@ -302,9 +340,9 @@ export default function CloudDrivesPage() {
                 <TableRow>
                   <TableHead>网盘类型</TableHead>
                   <TableHead>账号信息</TableHead>
+                  <TableHead>容量</TableHead>
                   <TableHead>别名</TableHead>
                   <TableHead>状态</TableHead>
-                  <TableHead>创建时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -347,6 +385,34 @@ export default function CloudDrivesPage() {
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {drive.is_active && spaceInfo[drive.id] ? (
+                          <div className="w-32">
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="text-muted-foreground">
+                                {formatSize(spaceInfo[drive.id].used)} / {formatSize(spaceInfo[drive.id].total)}
+                              </span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all ${
+                                  spaceInfo[drive.id].used_percent > 90 
+                                    ? 'bg-red-500' 
+                                    : spaceInfo[drive.id].used_percent > 70 
+                                    ? 'bg-yellow-500' 
+                                    : 'bg-primary'
+                                }`}
+                                style={{ width: `${spaceInfo[drive.id].used_percent}%` }}
+                              />
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {spaceInfo[drive.id].used_percent}% 已使用
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>{drive.alias || "-"}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -358,9 +424,6 @@ export default function CloudDrivesPage() {
                             {drive.is_active ? "在线" : "离线"}
                           </Badge>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(drive.created_at).toLocaleString("zh-CN")}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>

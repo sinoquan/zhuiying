@@ -9,6 +9,7 @@ import {
   ShareInfo,
   ListResult,
   CloudDriveConfig,
+  SpaceInfo,
 } from './types'
 
 export class TianyiService implements ICloudDriveService {
@@ -49,6 +50,27 @@ export class TianyiService implements ICloudDriveService {
       }
     } catch (error) {
       throw new Error('获取用户信息失败')
+    }
+  }
+
+  async getSpaceInfo(): Promise<SpaceInfo> {
+    try {
+      const data = await this.request('/api/user/getUserSpaceInfo.action')
+      const total = data.cloudCapacityInfo?.totalSize || 0
+      const used = data.cloudCapacityInfo?.usedSize || 0
+      return {
+        total,
+        used,
+        available: total - used,
+        used_percent: total > 0 ? Math.round((used / total) * 100) : 0,
+      }
+    } catch (error) {
+      return {
+        total: 0,
+        used: 0,
+        available: 0,
+        used_percent: 0,
+      }
     }
   }
 

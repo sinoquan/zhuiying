@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Hand, Loader2, FolderOpen, File, ChevronRight, ChevronLeft, RefreshCw, CheckSquare, Square, Share2 } from "lucide-react"
+import { Hand, Loader2, FolderOpen, File, ChevronRight, ChevronLeft, RefreshCw, CheckSquare, Square, Share2, Home } from "lucide-react"
 import { toast } from "sonner"
 
 interface CloudDrive {
@@ -104,13 +104,17 @@ export default function ManualSharePage() {
     setShareResult(null)
   }
 
-  const navigateToFolder = (folder: CloudFile) => {
-    const newPath = folder.is_dir ? folder.path : currentPath
-    setPathHistory([...pathHistory, newPath])
-    setSelectedFiles(new Set())
-    fetchFiles(newPath)
+  // 双击进入文件夹
+  const handleDoubleClick = (file: CloudFile) => {
+    if (file.is_dir) {
+      const newPath = file.path || file.id
+      setPathHistory([...pathHistory, newPath])
+      setSelectedFiles(new Set())
+      fetchFiles(newPath)
+    }
   }
 
+  // 返回上一级
   const navigateBack = () => {
     if (pathHistory.length > 1) {
       const newHistory = pathHistory.slice(0, -1)
@@ -120,6 +124,23 @@ export default function ManualSharePage() {
     }
   }
 
+  // 返回根目录
+  const navigateToRoot = () => {
+    setPathHistory(["/"])
+    setSelectedFiles(new Set())
+    fetchFiles("/")
+  }
+
+  // 点击路径跳转
+  const navigateToPath = (index: number) => {
+    if (index < pathHistory.length - 1) {
+      const newHistory = pathHistory.slice(0, index + 1)
+      setPathHistory(newHistory)
+      fetchFiles(newHistory[index])
+    }
+  }
+
+  // 切换文件选中状态
   const toggleFileSelection = (file: CloudFile) => {
     const newSelection = new Set(selectedFiles)
     if (newSelection.has(file.id)) {
@@ -130,6 +151,7 @@ export default function ManualSharePage() {
     setSelectedFiles(newSelection)
   }
 
+  // 全选/取消全选
   const selectAll = () => {
     if (selectedFiles.size === files.length) {
       setSelectedFiles(new Set())
@@ -189,6 +211,11 @@ export default function ManualSharePage() {
     return drive.alias || labels[drive.name] || drive.name
   }
 
+  // 获取选中文件的详情
+  const getSelectedFileDetails = () => {
+    return files.filter(f => selectedFiles.has(f.id))
+  }
+
   return (
     <div className="p-8">
       <div className="mb-8">
@@ -197,7 +224,7 @@ export default function ManualSharePage() {
           手动分享
         </h1>
         <p className="text-muted-foreground mt-2">
-          选择网盘，浏览文件，勾选需要分享的内容
+          选择网盘，浏览文件，勾选需要分享的内容（支持多选、文件夹穿透）
         </p>
       </div>
 
@@ -210,7 +237,7 @@ export default function ManualSharePage() {
                 <div>
                   <CardTitle>选择文件</CardTitle>
                   <CardDescription>
-                    选择网盘后浏览文件，勾选需要分享的文件或文件夹
+                    勾选文件/文件夹分享，双击文件夹进入子目录
                   </CardDescription>
                 </div>
                 <Button
@@ -249,23 +276,28 @@ export default function ManualSharePage() {
                     size="sm"
                     onClick={navigateBack}
                     disabled={pathHistory.length <= 1}
+                    title="返回上一级"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <div className="flex items-center gap-1 text-sm">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={navigateToRoot}
+                    disabled={pathHistory.length <= 1}
+                    title="返回根目录"
+                  >
+                    <Home className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-1 text-sm overflow-x-auto flex-1">
                     {pathHistory.map((p, i) => (
-                      <span key={i} className="flex items-center">
+                      <span key={i} className="flex items-center whitespace-nowrap">
                         {i > 0 && <ChevronRight className="h-3 w-3 mx-1 text-muted-foreground" />}
                         <span
                           className={`cursor-pointer hover:text-primary ${
                             i === pathHistory.length - 1 ? "font-medium text-primary" : ""
                           }`}
-                          onClick={() => {
-                            if (i < pathHistory.length - 1) {
-                              setPathHistory(pathHistory.slice(0, i + 1))
-                              fetchFiles(p)
-                            }
-                          }}
+                          onClick={() => navigateToPath(i)}
                         >
                           {p === "/" ? "根目录" : p.split("/").pop()}
                         </span>
@@ -287,6 +319,7 @@ export default function ManualSharePage() {
                     <span className="text-sm text-muted-foreground flex-1">文件名</span>
                     <span className="text-sm text-muted-foreground w-24 text-right">大小</span>
                     <span className="text-sm text-muted-foreground w-32 text-right">修改时间</span>
+                    <span className="text-sm text-muted-foreground w-20 text-center">操作</span>
                   </div>
 
                   {/* 文件列表 */}
@@ -304,17 +337,20 @@ export default function ManualSharePage() {
                       {files.map((file) => (
                         <div
                           key={file.id}
-                          className={`flex items-center gap-3 p-3 border-b last:border-b-0 hover:bg-muted/30 cursor-pointer ${
+                          className={`flex items-center gap-3 p-3 border-b last:border-b-0 hover:bg-muted/30 ${
                             selectedFiles.has(file.id) ? "bg-primary/10" : ""
                           }`}
-                          onClick={() => file.is_dir ? navigateToFolder(file) : toggleFileSelection(file)}
+                          onDoubleClick={() => handleDoubleClick(file)}
                         >
+                          {/* 复选框 */}
                           <div onClick={(e) => e.stopPropagation()}>
                             <Checkbox
                               checked={selectedFiles.has(file.id)}
                               onCheckedChange={() => toggleFileSelection(file)}
                             />
                           </div>
+                          
+                          {/* 文件名 */}
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             {file.is_dir ? (
                               <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
@@ -322,13 +358,39 @@ export default function ManualSharePage() {
                               <File className="h-5 w-5 text-blue-500 shrink-0" />
                             )}
                             <span className="truncate">{file.name}</span>
+                            {file.is_dir && (
+                              <Badge variant="outline" className="text-xs shrink-0">
+                                文件夹
+                              </Badge>
+                            )}
                           </div>
+                          
+                          {/* 大小 */}
                           <span className="text-sm text-muted-foreground w-24 text-right">
                             {file.is_dir ? "-" : formatFileSize(file.size)}
                           </span>
+                          
+                          {/* 修改时间 */}
                           <span className="text-sm text-muted-foreground w-32 text-right">
                             {new Date(file.modified_at).toLocaleDateString("zh-CN")}
                           </span>
+                          
+                          {/* 进入按钮 */}
+                          <div className="w-20 text-center">
+                            {file.is_dir && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDoubleClick(file)
+                                }}
+                              >
+                                <ChevronRight className="h-4 w-4" />
+                                进入
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -357,29 +419,27 @@ export default function ManualSharePage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {files
-                      .filter((f) => selectedFiles.has(f.id))
-                      .map((file) => (
-                        <div
-                          key={file.id}
-                          className="flex items-center gap-2 p-2 bg-muted rounded text-sm"
+                    {getSelectedFileDetails().map((file) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center gap-2 p-2 bg-muted rounded text-sm"
+                      >
+                        {file.is_dir ? (
+                          <FolderOpen className="h-4 w-4 text-amber-500 shrink-0" />
+                        ) : (
+                          <File className="h-4 w-4 text-blue-500 shrink-0" />
+                        )}
+                        <span className="truncate flex-1">{file.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => toggleFileSelection(file)}
                         >
-                          {file.is_dir ? (
-                            <FolderOpen className="h-4 w-4 text-amber-500 shrink-0" />
-                          ) : (
-                            <File className="h-4 w-4 text-blue-500 shrink-0" />
-                          )}
-                          <span className="truncate flex-1">{file.name}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => toggleFileSelection(file)}
-                          >
-                            <Square className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
+                          <Square className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

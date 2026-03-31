@@ -9,6 +9,7 @@ import {
   ShareInfo,
   ListResult,
   CloudDriveConfig,
+  SpaceInfo,
 } from './types'
 
 export class Pan115Service implements ICloudDriveService {
@@ -48,6 +49,29 @@ export class Pan115Service implements ICloudDriveService {
       }
     } catch (error) {
       throw new Error('获取用户信息失败')
+    }
+  }
+
+  async getSpaceInfo(): Promise<SpaceInfo> {
+    try {
+      const data = await this.request('/user/get_info')
+      const info = data.data || {}
+      const total = info.total_size || 0
+      const used = info.used_size || 0
+      return {
+        total,
+        used,
+        available: total - used,
+        used_percent: total > 0 ? Math.round((used / total) * 100) : 0,
+      }
+    } catch (error) {
+      // 如果获取失败，返回默认值
+      return {
+        total: 0,
+        used: 0,
+        available: 0,
+        used_percent: 0,
+      }
     }
   }
 
