@@ -460,14 +460,14 @@ export default function PushTemplatesPage() {
                 <div className="grid gap-2">
                   <Label>绑定网盘</Label>
                   <Select
-                    value={formData.cloud_drive_id}
-                    onValueChange={(value) => setFormData({ ...formData, cloud_drive_id: value })}
+                    value={formData.cloud_drive_id || "all"}
+                    onValueChange={(value) => setFormData({ ...formData, cloud_drive_id: value === "all" ? "" : value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="所有网盘" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">所有网盘</SelectItem>
+                      <SelectItem value="all">所有网盘</SelectItem>
                       {drives.map((drive) => (
                         <SelectItem key={drive.id} value={drive.id.toString()}>
                           {drive.alias || drive.name}
