@@ -12,12 +12,20 @@ import { toast } from "sonner"
 export default function LoginPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [password, setPassword] = useState("")
+  const [formData, setFormData] = useState({
+    username: "",
+    password: "",
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!password) {
+    if (!formData.username) {
+      toast.error("请输入账号")
+      return
+    }
+    
+    if (!formData.password) {
       toast.error("请输入密码")
       return
     }
@@ -27,7 +35,7 @@ export default function LoginPage() {
       const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify(formData),
       })
 
       const data = await response.json()
@@ -37,8 +45,12 @@ export default function LoginPage() {
       }
 
       toast.success("登录成功")
-      router.push("/")
-      router.refresh()
+      
+      // 使用 setTimeout 确保 cookie 设置完成后再跳转
+      setTimeout(() => {
+        router.push("/")
+        router.refresh()
+      }, 100)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "登录失败")
     } finally {
@@ -72,25 +84,46 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="username" className="text-slate-300">
+                账号
+              </Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <Input
+                  id="username"
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  placeholder="请输入账号"
+                  className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20"
+                  disabled={loading}
+                  autoComplete="username"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
               <Label htmlFor="password" className="text-slate-300">
-                系统密码
+                密码
               </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <Input
                   id="password"
                   type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="请输入系统密码"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="请输入密码"
                   className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20"
                   disabled={loading}
+                  autoComplete="current-password"
                 />
               </div>
-              <p className="text-xs text-slate-500">
-                默认密码: admin
-              </p>
             </div>
+            
+            <p className="text-xs text-slate-500">
+              默认账号: admin / 密码: admin
+            </p>
             
             <Button
               type="submit"
