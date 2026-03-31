@@ -319,7 +319,7 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                             <p className="font-medium text-amber-800 dark:text-amber-200">
                               提示
                             </p>
-                            <p className="text-amber-700 dark:text-amber-300 mt-1">
+                            <p className="text-amber-700 dark:text-amber-300 mt-1 whitespace-pre-wrap">
                               {analyzeResult.warning}
                             </p>
                           </div>

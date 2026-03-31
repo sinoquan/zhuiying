@@ -53,6 +53,434 @@ async function getCloudDriveConfig(type: LinkType): Promise<{ cookie?: string; t
 }
 
 /**
+ * 匿名访问夸克分享链接
+ */
+async function accessQuarkShareAnonymously(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  
+  try {
+    // 1. 获取分享 token
+    const tokenUrl = 'https://pan.quark.cn/share/sharepage/token'
+    const tokenRes = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'User-Agent': userAgent,
+        'Content-Type': 'application/json',
+        'Cookie': '__pus=qk_encryption_key', // 简单的 cookie 绕过
+      },
+      body: JSON.stringify({
+        share_id: shareId,
+        passcode: shareCode || '',
+      }),
+    })
+    const tokenData = await tokenRes.json()
+    
+    if (tokenData.status !== 200 && tokenData.status !== 0) {
+      // 可能需要提取码
+      if (tokenData.code === 40001 || tokenData.code === 50003) {
+        throw new Error('需要提取码，请提供正确的提取码')
+      }
+      throw new Error(tokenData.message || '获取分享信息失败')
+    }
+    
+    const shareToken = tokenData.data?.stoken || tokenData.data?.token
+    
+    // 2. 获取文件列表
+    const detailUrl = 'https://pan.quark.cn/share/sharepage/detail'
+    const detailRes = await fetch(detailUrl, {
+      method: 'POST',
+      headers: {
+        'User-Agent': userAgent,
+        'Content-Type': 'application/json',
+        'Cookie': shareToken ? `__pus=${shareToken}` : '',
+      },
+      body: JSON.stringify({
+        share_id: shareId,
+        pdir_fid: '0',
+        _page: 1,
+        _size: 50,
+      }),
+    })
+    const detailData = await detailRes.json()
+    
+    if (!detailData.data?.list) {
+      throw new Error(detailData.message || '获取文件列表失败')
+    }
+    
+    const files = detailData.data.list.map((item: any) => ({
+      file_id: item.fid,
+      file_name: item.file_name,
+      file_size: item.size || 0,
+      is_dir: item.file_type === 'folder',
+    }))
+    
+    // 如果是单个文件
+    if (files.length === 1 && !files[0].is_dir) {
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: files[0].file_id,
+        file_name: files[0].file_name,
+        file_size: files[0].file_size,
+        is_dir: false,
+      }
+    }
+    
+    // 如果是目录或多个文件
+    const folderName = detailData.data?.share_name || files[0]?.file_name || '未知文件夹'
+    return {
+      share_id: shareId,
+      share_code: shareCode,
+      file_id: '0',
+      file_name: folderName,
+      file_size: files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0),
+      is_dir: true,
+      file_count: files.length,
+      files: files.map((f: { file_id: string; file_name: string; file_size: number; is_dir: boolean }) => ({
+        ...f,
+        share_id: shareId,
+        share_code: shareCode,
+      })),
+    }
+  } catch (error) {
+    console.error('夸克分享链接匿名访问失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 匿名访问百度网盘分享链接
+ */
+async function accessBaiduShareAnonymously(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  
+  try {
+    // 百度网盘分享链接 API
+    const shareUrl = `https://pan.baidu.com/share/wxlist?channel=weixin&version=2.2.2&clienttype=25&web=1&shareid=${shareId}${shareCode ? `&pwd=${shareCode}` : ''}`
+    
+    const res = await fetch(shareUrl, {
+      headers: {
+        'User-Agent': userAgent,
+        'Referer': 'https://pan.baidu.com/',
+      },
+    })
+    
+    const data = await res.json()
+    
+    if (data.errno !== 0) {
+      if (data.errno === -12) {
+        throw new Error('需要提取码，请提供正确的提取码')
+      }
+      throw new Error(data.errmsg || '获取分享信息失败')
+    }
+    
+    const fileList = data.data?.list || []
+    const files = fileList.map((item: any) => ({
+      file_id: item.fs_id,
+      file_name: item.server_filename,
+      file_size: item.size || 0,
+      is_dir: item.isdir === 1,
+    }))
+    
+    // 如果是单个文件
+    if (files.length === 1 && !files[0].is_dir) {
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: files[0].file_id,
+        file_name: files[0].file_name,
+        file_size: files[0].file_size,
+        is_dir: false,
+      }
+    }
+    
+    // 如果是目录或多个文件
+    const folderName = data.data?.share_name || files[0]?.file_name || '未知文件夹'
+    return {
+      share_id: shareId,
+      share_code: shareCode,
+      file_id: '0',
+      file_name: folderName,
+      file_size: files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0),
+      is_dir: true,
+      file_count: files.length,
+      files: files.slice(0, 20).map((f: { file_id: string; file_name: string; file_size: number; is_dir: boolean }) => ({
+        ...f,
+        share_id: shareId,
+        share_code: shareCode,
+      })),
+    }
+  } catch (error) {
+    console.error('百度网盘分享链接匿名访问失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 匿名访问123云盘分享链接
+ */
+async function access123ShareAnonymously(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  
+  try {
+    // 123云盘分享链接 API
+    const apiUrl = 'https://www.123pan.com/api/share/get'
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'User-Agent': userAgent,
+        'Content-Type': 'application/json',
+        'Referer': 'https://www.123pan.com/',
+      },
+      body: JSON.stringify({
+        shareKey: shareId,
+        pwd: shareCode || '',
+      }),
+    })
+    
+    const data = await res.json()
+    
+    if (data.code !== 0) {
+      if (data.code === 4001) {
+        throw new Error('需要提取码，请提供正确的提取码')
+      }
+      throw new Error(data.message || '获取分享信息失败')
+    }
+    
+    const info = data.data?.Info || {}
+    const fileList = data.data?.Info?.FileList || data.data?.FileList || []
+    
+    const files = fileList.map((item: any) => ({
+      file_id: item.FileId || item.fileId,
+      file_name: item.FileName || item.fileName,
+      file_size: item.Size || item.size || 0,
+      is_dir: (item.Type || item.type) === 1,
+    }))
+    
+    // 如果是单个文件
+    if (files.length === 1 && !files[0].is_dir) {
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: files[0].file_id,
+        file_name: files[0].file_name,
+        file_size: files[0].file_size,
+        is_dir: false,
+      }
+    }
+    
+    // 如果是目录或多个文件
+    const folderName = info.Name || info.name || files[0]?.file_name || '未知文件夹'
+    return {
+      share_id: shareId,
+      share_code: shareCode,
+      file_id: '0',
+      file_name: folderName,
+      file_size: files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0),
+      is_dir: true,
+      file_count: files.length,
+      files: files.slice(0, 20).map((f: { file_id: string; file_name: string; file_size: number; is_dir: boolean }) => ({
+        ...f,
+        share_id: shareId,
+        share_code: shareCode,
+      })),
+    }
+  } catch (error) {
+    console.error('123云盘分享链接匿名访问失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 匿名访问天翼网盘分享链接
+ */
+async function accessTianyiShareAnonymously(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  
+  try {
+    // 天翼网盘分享链接 API
+    const apiUrl = `https://cloud.189.cn/api/open/share/getShareInfoByCodeV2?shareCode=${shareId}${shareCode ? `&accessCode=${shareCode}` : ''}`
+    
+    const res = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': userAgent,
+        'Referer': 'https://cloud.189.cn/',
+      },
+    })
+    
+    const data = await res.json()
+    
+    if (data.res_code !== 0 && data.res_code !== '0') {
+      if (data.res_code === 'ShareNotExistError' || data.res_code === 'ShareAuditError') {
+        throw new Error('分享链接不存在或已失效')
+      }
+      throw new Error(data.res_message || '获取分享信息失败')
+    }
+    
+    const shareInfo = data.data?.shareInfo || data.shareInfo || {}
+    const fileList = data.data?.fileList || data.fileList || []
+    
+    const files = fileList.map((item: any) => ({
+      file_id: item.id || item.fileId,
+      file_name: item.name || item.fileName,
+      file_size: item.size || item.fileSize || 0,
+      is_dir: (item.isFolder || item.isDir) === true || item.isFolder === 1,
+    }))
+    
+    // 如果是单个文件
+    if (files.length === 1 && !files[0].is_dir) {
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: files[0].file_id,
+        file_name: files[0].file_name,
+        file_size: files[0].file_size,
+        is_dir: false,
+      }
+    }
+    
+    // 如果是目录或多个文件
+    const folderName = shareInfo.shareName || files[0]?.file_name || '未知文件夹'
+    return {
+      share_id: shareId,
+      share_code: shareCode,
+      file_id: '0',
+      file_name: folderName,
+      file_size: files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0),
+      is_dir: true,
+      file_count: files.length,
+      files: files.slice(0, 20).map((f: { file_id: string; file_name: string; file_size: number; is_dir: boolean }) => ({
+        ...f,
+        share_id: shareId,
+        share_code: shareCode,
+      })),
+    }
+  } catch (error) {
+    console.error('天翼网盘分享链接匿名访问失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 匿名访问阿里云盘分享链接
+ */
+async function accessAliyunShareAnonymously(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  
+  try {
+    // 阿里云盘分享链接 API - 需要 x-share-token
+    const tokenUrl = 'https://api.alipan.com/v2/share_link/get_share_token'
+    const tokenRes = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'User-Agent': userAgent,
+        'Content-Type': 'application/json',
+        'Referer': 'https://www.alipan.com/',
+      },
+      body: JSON.stringify({
+        share_id: shareId,
+        share_pwd: shareCode || '',
+      }),
+    })
+    
+    const tokenData = await tokenRes.json()
+    
+    if (tokenData.code !== 'ShareLink.Cancelled' && tokenData.code !== 'ShareLink.Expired') {
+      if (tokenData.code === 'ShareLink.NotFound') {
+        throw new Error('分享链接不存在或已失效')
+      }
+      if (tokenData.code !== '0' && tokenData.code !== 0) {
+        if (tokenData.code === 'ShareLink.PasswordInvalid') {
+          throw new Error('提取码错误')
+        }
+        throw new Error(tokenData.message || '获取分享信息失败')
+      }
+    }
+    
+    const shareToken = tokenData.share_token
+    
+    if (!shareToken) {
+      throw new Error('获取分享token失败')
+    }
+    
+    // 获取文件列表
+    const listUrl = 'https://api.alipan.com/v2/file_list'
+    const listRes = await fetch(listUrl, {
+      method: 'POST',
+      headers: {
+        'User-Agent': userAgent,
+        'Content-Type': 'application/json',
+        'Referer': 'https://www.alipan.com/',
+        'x-share-token': shareToken,
+      },
+      body: JSON.stringify({
+        share_id: shareId,
+        parent_file_id: 'root',
+      }),
+    })
+    
+    const listData = await listRes.json()
+    const fileList = listData.items || []
+    
+    const files = fileList.map((item: any) => ({
+      file_id: item.file_id,
+      file_name: item.name,
+      file_size: item.size || 0,
+      is_dir: item.type === 'folder',
+    }))
+    
+    // 获取分享信息
+    const infoUrl = 'https://api.alipan.com/v2/share_link/get'
+    const infoRes = await fetch(infoUrl, {
+      method: 'POST',
+      headers: {
+        'User-Agent': userAgent,
+        'Content-Type': 'application/json',
+        'Referer': 'https://www.alipan.com/',
+        'x-share-token': shareToken,
+      },
+      body: JSON.stringify({
+        share_id: shareId,
+      }),
+    })
+    
+    const infoData = await infoRes.json()
+    
+    // 如果是单个文件
+    if (files.length === 1 && !files[0].is_dir) {
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: files[0].file_id,
+        file_name: files[0].file_name,
+        file_size: files[0].file_size,
+        is_dir: false,
+      }
+    }
+    
+    // 如果是目录或多个文件
+    const folderName = infoData.name || files[0]?.file_name || '未知文件夹'
+    return {
+      share_id: shareId,
+      share_code: shareCode,
+      file_id: '0',
+      file_name: folderName,
+      file_size: files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0),
+      is_dir: true,
+      file_count: files.length,
+      files: files.slice(0, 20).map((f: { file_id: string; file_name: string; file_size: number; is_dir: boolean }) => ({
+        ...f,
+        share_id: shareId,
+        share_code: shareCode,
+      })),
+    }
+  } catch (error) {
+    console.error('阿里云盘分享链接匿名访问失败:', error)
+    throw error
+  }
+}
+
+/**
  * 匿名访问115分享链接（不需要用户cookie）
  */
 async function access115ShareAnonymously(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
@@ -137,10 +565,20 @@ export async function accessShareLink(parseResult: LinkParseResult): Promise<Sha
   }
   
   try {
-    // 115网盘支持匿名访问
-    if (parseResult.type === '115') {
+    // 支持匿名访问的网盘
+    const anonymousAccessors: Record<string, (shareId: string, shareCode?: string) => Promise<SharedFileInfo>> = {
+      '115': access115ShareAnonymously,
+      'quark': accessQuarkShareAnonymously,
+      'baidu': accessBaiduShareAnonymously,
+      '123': access123ShareAnonymously,
+      'tianyi': accessTianyiShareAnonymously,
+      'aliyun': accessAliyunShareAnonymously,
+    }
+    
+    // 尝试匿名访问
+    if (anonymousAccessors[parseResult.type]) {
       try {
-        const shareInfo = await access115ShareAnonymously(parseResult.shareId, parseResult.shareCode)
+        const shareInfo = await anonymousAccessors[parseResult.type](parseResult.shareId, parseResult.shareCode)
         result.shareInfo = shareInfo
         result.success = true
         
@@ -159,7 +597,7 @@ export async function accessShareLink(parseResult: LinkParseResult): Promise<Sha
         return result
       } catch (error) {
         // 匿名访问失败，尝试使用用户配置
-        console.log('匿名访问失败，尝试使用用户配置...')
+        console.log(`${parseResult.type}匿名访问失败，尝试使用用户配置...`, error)
       }
     }
     
@@ -190,12 +628,11 @@ export async function accessShareLink(parseResult: LinkParseResult): Promise<Sha
         break
       }
       
-      // 其他网盘类型...
+      // 其他网盘类型 - 暂不支持使用用户配置访问
       case 'quark':
       case 'tianyi':
       case 'baidu':
       case '123': {
-        // 暂时不支持，返回错误
         result.error = `${parseResult.type}网盘暂不支持访问分享链接`
         return result
       }
