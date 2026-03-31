@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { execSync } from 'child_process';
 
 let envLoaded = false;
+let clientInstance: SupabaseClient | null = null;
 
 interface SupabaseCredentials {
   url: string;
@@ -89,32 +90,43 @@ function getSupabaseServiceRoleKey(): string | undefined {
 }
 
 function getSupabaseClient(token?: string): SupabaseClient {
-  const { url, anonKey } = getSupabaseCredentials();
+  // 如果已有实例且没有 token，复用
+  if (clientInstance && !token) {
+    return clientInstance;
+  }
+
+  // 延迟加载环境变量到实际使用时
+  // 避免构建时检查环境变量
+  const url = process.env.COZE_SUPABASE_URL;
+  const anonKey = process.env.COZE_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.COZE_SUPABASE_SERVICE_ROLE_KEY;
+
+  // 运行时才尝试加载环境变量
+  if (!url || !anonKey) {
+    loadEnv();
+  }
+
+  const credentials = getSupabaseCredentials();
 
   let key: string;
   if (token) {
-    key = anonKey;
+    key = credentials.anonKey;
   } else {
-    const serviceRoleKey = getSupabaseServiceRoleKey();
-    key = serviceRoleKey ?? anonKey;
+    key = serviceRoleKey ?? credentials.anonKey;
   }
 
-  if (token) {
-    return createClient(url, key, {
-      global: {
-        headers: { Authorization: `Bearer ${token}` },
-      },
-      db: {
-        timeout: 60000,
-      },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-  }
-
-  return createClient(url, key, {
+  const client = createClient(credentials.url, key, token ? {
+    global: {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+    db: {
+      timeout: 60000,
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  } : {
     db: {
       timeout: 60000,
     },
@@ -123,6 +135,13 @@ function getSupabaseClient(token?: string): SupabaseClient {
       persistSession: false,
     },
   });
+
+  // 缓存无 token 的实例
+  if (!token && !clientInstance) {
+    clientInstance = client;
+  }
+
+  return client;
 }
 
 export { loadEnv, getSupabaseCredentials, getSupabaseServiceRoleKey, getSupabaseClient };

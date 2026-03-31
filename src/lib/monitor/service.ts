@@ -36,7 +36,15 @@ interface ScanResult {
 
 // 文件监控服务类
 export class FileMonitorService {
-  private client = getSupabaseClient()
+  // 延迟初始化客户端，避免构建时报错
+  private _client: ReturnType<typeof getSupabaseClient> | null = null
+  
+  private get client() {
+    if (!this._client) {
+      this._client = getSupabaseClient()
+    }
+    return this._client
+  }
 
   // 执行监控扫描
   async runScan(): Promise<ScanResult[]> {
