@@ -102,7 +102,7 @@ export const pushTemplates = pgTable(
   "push_templates",
   {
     id: serial().primaryKey(),
-    cloud_drive_id: integer("cloud_drive_id").notNull().references(() => cloudDrives.id),
+    cloud_drive_id: integer("cloud_drive_id").references(() => cloudDrives.id), // null 表示所有网盘
     name: varchar("name", { length: 100 }).notNull(),
     channel_type: varchar("channel_type", { length: 20 }).notNull(), // telegram/qq/wechat
     content_type: varchar("content_type", { length: 20 }).notNull(), // tv_series/movie/completed

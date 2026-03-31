@@ -407,14 +407,26 @@ export default function PushTemplatesPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Switch
-                                checked={template.is_active}
-                                onCheckedChange={() => handleToggle(template)}
-                                disabled={template.isPreset}
-                              />
-                              <Badge variant={template.is_active ? "default" : "secondary"}>
-                                {template.is_active ? "启用" : "禁用"}
-                              </Badge>
+                              {template.isPreset ? (
+                                <>
+                                  <Badge variant="outline" className="text-xs">
+                                    预设模板
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    编辑后生效
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <Switch
+                                    checked={template.is_active}
+                                    onCheckedChange={() => handleToggle(template)}
+                                  />
+                                  <Badge variant={template.is_active ? "default" : "secondary"}>
+                                    {template.is_active ? "启用" : "禁用"}
+                                  </Badge>
+                                </>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
