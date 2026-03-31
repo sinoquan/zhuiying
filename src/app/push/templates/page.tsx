@@ -470,7 +470,7 @@ export default function PushTemplatesPage() {
 
       {/* 编辑弹窗 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col">
+        <DialogContent className="max-w-6xl w-[98vw] h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-xl">
               {editingTemplate?.isPreset ? "编辑预设模板" : editingTemplate ? "编辑推送模板" : "新建推送模板"}
@@ -550,12 +550,12 @@ export default function PushTemplatesPage() {
                   </div>
                 </div>
 
-                {/* 模板编辑 */}
-                <div className="grid grid-cols-2 gap-6">
+                {/* 模板编辑 - 改为上下布局，编辑区域更宽 */}
+                <div className="grid gap-4">
                   <div className="grid gap-2">
                     <Label className="text-sm font-medium">模板内容</Label>
                     <textarea
-                      className="flex min-h-[400px] w-full rounded-md border border-input bg-background px-4 py-3 text-sm font-mono leading-relaxed resize-y"
+                      className="flex min-h-[280px] w-full rounded-md border border-input bg-background px-4 py-3 text-sm font-mono leading-relaxed resize-y"
                       value={formData.template_content}
                       onChange={(e) => setFormData({ ...formData, template_content: e.target.value })}
                       placeholder="输入模板内容..."
@@ -563,7 +563,7 @@ export default function PushTemplatesPage() {
                   </div>
                   <div className="grid gap-2">
                     <Label className="text-sm font-medium">预览效果</Label>
-                    <div className={`min-h-[400px] p-4 rounded-lg text-sm whitespace-pre-wrap overflow-auto font-mono leading-relaxed shadow-inner ${
+                    <div className={`min-h-[280px] p-4 rounded-lg text-sm whitespace-pre-wrap overflow-auto font-mono leading-relaxed shadow-inner ${
                       activeChannel === 'telegram' 
                         ? 'bg-gradient-to-b from-slate-900 to-slate-800 text-slate-100' 
                         : activeChannel === 'wechat'
@@ -587,7 +587,7 @@ export default function PushTemplatesPage() {
                     <CardTitle className="text-sm font-medium">📋 可用变量</CardTitle>
                   </CardHeader>
                   <CardContent className="py-3 px-4">
-                    <div className="grid grid-cols-5 gap-2 text-xs">
+                    <div className="grid grid-cols-6 gap-2 text-xs">
                       {TEMPLATE_VARIABLES.map((v) => (
                         <div key={v.key} className="p-2 bg-muted/50 rounded border" title={v.description}>
                           <code className="text-primary font-mono">{v.key}</code>

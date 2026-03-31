@@ -97,17 +97,22 @@ export class Pan115Service implements ICloudDriveService {
         `/files?aid=1&cid=${encodeURIComponent(path)}&offset=${(page - 1) * pageSize}&limit=${pageSize}`
       )
       
-      const files: CloudFile[] = (data.data || []).map((item: any) => ({
-        id: item.cid || item.fid,
-        name: item.n || item.name,
-        path: item.pc || path,
-        is_dir: item.pc === undefined,
-        size: item.s || item.size || 0,
-        created_at: item.tp || new Date().toISOString(),
-        modified_at: item.t || new Date().toISOString(),
-        sha1: item.sha1,
-        md5: item.md5,
-      }))
+      const files: CloudFile[] = (data.data || []).map((item: any) => {
+        // 115网盘: 有cid的是文件夹，有fid的是文件
+        const isDir = item.cid !== undefined
+        return {
+          id: item.cid || item.fid,
+          name: item.n || item.name,
+          // 文件夹的path应该是它自己的cid，这样双击进入时可以正确导航
+          path: isDir ? item.cid : path,
+          is_dir: isDir,
+          size: item.s || item.size || 0,
+          created_at: item.tp || new Date().toISOString(),
+          modified_at: item.t || new Date().toISOString(),
+          sha1: item.sha1,
+          md5: item.md5,
+        }
+      })
       
       return {
         files,

@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -30,7 +31,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Plus, MoreHorizontal, Edit, Trash2, Send, RefreshCw, Loader2 } from "lucide-react"
+import { 
+  Plus, MoreHorizontal, Edit, Trash2, Send, RefreshCw, Loader2, 
+  Bot, CheckCircle2, ExternalLink, TestTube, Settings
+} from "lucide-react"
 import Image from "next/image"
 import {
   DropdownMenu,
@@ -55,6 +59,18 @@ interface TelegramChannel {
   chat_id: string
 }
 
+interface TelegramBotInfo {
+  id: number
+  username: string
+  first_name: string
+}
+
+interface WebhookInfo {
+  url: string
+  has_custom_certificate: boolean
+  pending_update_count: number
+}
+
 interface PushChannel {
   id: number
   cloud_drive_id: number
@@ -73,6 +89,10 @@ interface PushChannel {
   }
 }
 
+interface ChannelConfig {
+  telegram_bot_token: string
+}
+
 export default function PushChannelsPage() {
   const [channels, setChannels] = useState<PushChannel[]>([])
   const [cloudDrives, setCloudDrives] = useState<CloudDrive[]>([])
@@ -89,11 +109,136 @@ export default function PushChannelsPage() {
     chat_id: "",
     webhook_url: "",
   })
+  
+  // 渠道配置状态
+  const [configLoading, setConfigLoading] = useState(true)
+  const [configSaving, setConfigSaving] = useState(false)
+  const [configTesting, setConfigTesting] = useState<string | null>(null)
+  const [channelConfig, setChannelConfig] = useState<ChannelConfig>({
+    telegram_bot_token: "",
+  })
+  const [botInfo, setBotInfo] = useState<TelegramBotInfo | null>(null)
+  const [webhookInfo, setWebhookInfo] = useState<WebhookInfo | null>(null)
+  const [settingWebhook, setSettingWebhook] = useState(false)
 
   useEffect(() => {
     fetchChannels()
     fetchCloudDrives()
+    fetchChannelConfig()
   }, [])
+
+  // 获取渠道配置
+  const fetchChannelConfig = async () => {
+    try {
+      const response = await fetch("/api/settings")
+      const data = await response.json()
+      setChannelConfig({
+        telegram_bot_token: data.telegram_bot_token || "",
+      })
+      
+      // 如果有 bot token，获取机器人信息
+      if (data.telegram_bot_token) {
+        fetchBotInfo(data.telegram_bot_token)
+      }
+    } catch (error) {
+      console.error("获取配置失败:", error)
+    } finally {
+      setConfigLoading(false)
+    }
+  }
+
+  // 获取机器人信息
+  const fetchBotInfo = async (botToken?: string) => {
+    const token = botToken || channelConfig.telegram_bot_token
+    if (!token) return
+    
+    try {
+      const response = await fetch(`/api/telegram/bot-info?bot_token=${encodeURIComponent(token)}`)
+      const data = await response.json()
+      
+      if (data.bot) {
+        setBotInfo(data.bot)
+        // 获取 webhook 信息
+        getWebhookInfo()
+      }
+    } catch (error) {
+      console.error("获取机器人信息失败:", error)
+    }
+  }
+
+  // 获取 Webhook 信息
+  const getWebhookInfo = async () => {
+    try {
+      const response = await fetch("/api/telegram/webhook/set")
+      const data = await response.json()
+      
+      if (data.result) {
+        setWebhookInfo(data.result)
+      }
+    } catch (error) {
+      console.error("获取 Webhook 信息失败:", error)
+    }
+  }
+
+  // 设置 Webhook
+  const setWebhook = async () => {
+    setSettingWebhook(true)
+    try {
+      const response = await fetch("/api/telegram/webhook/set", { method: "POST" })
+      const data = await response.json()
+      
+      if (data.error) throw new Error(data.error)
+      
+      toast.success(data.message || "Webhook 设置成功")
+      setWebhookInfo({ url: data.webhook_url, has_custom_certificate: false, pending_update_count: 0 })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "设置失败")
+    } finally {
+      setSettingWebhook(false)
+    }
+  }
+
+  // 保存渠道配置
+  const saveChannelConfig = async (section: string) => {
+    setConfigSaving(true)
+    try {
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(channelConfig),
+      })
+      
+      if (!response.ok) throw new Error("保存失败")
+      toast.success("配置已保存")
+      
+      // 如果保存了 Telegram token，刷新机器人信息
+      if (section === "telegram" && channelConfig.telegram_bot_token) {
+        fetchBotInfo()
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败")
+    } finally {
+      setConfigSaving(false)
+    }
+  }
+
+  // 测试 Telegram 配置
+  const testTelegramConfig = async () => {
+    setConfigTesting("telegram")
+    try {
+      const response = await fetch(`/api/telegram/bot-info?bot_token=${encodeURIComponent(channelConfig.telegram_bot_token)}`)
+      const data = await response.json()
+      
+      if (data.error) throw new Error(data.error)
+      
+      toast.success(`验证成功: @${data.bot.username}`)
+      setBotInfo(data.bot)
+    } catch (error) {
+      toast.error("验证失败: " + (error instanceof Error ? error.message : "未知错误"))
+    } finally {
+      setConfigTesting(null)
+    }
+  }
 
   // 当对话框打开时，获取Telegram频道列表
   useEffect(() => {
@@ -299,44 +444,223 @@ export default function PushChannelsPage() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">推送渠道</h1>
-          <p className="text-muted-foreground mt-2">
-            为每个网盘配置推送目标，不同网盘可以推送到不同频道
-          </p>
-        </div>
-        <Button onClick={openAddDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          添加渠道
-        </Button>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">推送管理</h1>
+        <p className="text-muted-foreground mt-2">
+          配置推送渠道并为网盘绑定推送目标
+        </p>
       </div>
 
-      {/* 说明卡片 */}
-      <Card className="mb-6 border-dashed">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3 text-sm">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900">
-              <Send className="h-4 w-4 text-blue-600" />
-            </div>
-            <div>
-              <p className="font-medium mb-1">使用说明</p>
-              <ul className="text-muted-foreground space-y-1">
-                <li>• 每个网盘可以绑定一个推送目标（Telegram频道/群组、QQ、微信）</li>
-                <li>• Telegram 需要先在 <strong>系统设置</strong> 中配置 Bot Token</li>
-                <li>• 机器人必须已加入目标频道/群组，且有发送消息的权限</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* 渠道配置区域 */}
+      <Tabs defaultValue="telegram" className="mb-8">
+        <TabsList className="grid w-full grid-cols-3 h-12">
+          <TabsTrigger value="telegram" className="flex items-center gap-2">
+            <Image src={getPushChannelIcon('telegram')} alt="Telegram" width={20} height={20} unoptimized />
+            Telegram
+          </TabsTrigger>
+          <TabsTrigger value="qq" className="flex items-center gap-2">
+            <Image src={getPushChannelIcon('qq')} alt="QQ" width={20} height={20} unoptimized />
+            QQ
+          </TabsTrigger>
+          <TabsTrigger value="wechat" className="flex items-center gap-2">
+            <Image src={getPushChannelIcon('wechat')} alt="微信" width={20} height={20} unoptimized />
+            微信
+          </TabsTrigger>
+        </TabsList>
 
+        {/* Telegram 配置 */}
+        <TabsContent value="telegram">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Telegram Bot 配置
+              </CardTitle>
+              <CardDescription>
+                配置全局 Telegram Bot，用于所有 Telegram 推送
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 机器人信息 */}
+              {botInfo && (
+                <div className="p-4 bg-muted rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                      <Bot className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-lg">@{botInfo.username}</p>
+                      <p className="text-sm text-muted-foreground">{botInfo.first_name}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {webhookInfo?.url && (
+                      <Badge variant="outline" className="text-green-600 border-green-600">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Webhook 已配置
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              <div className="grid gap-2">
+                <Label htmlFor="bot_token">Bot Token *</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="bot_token"
+                    type="password"
+                    value={channelConfig.telegram_bot_token}
+                    onChange={(e) => setChannelConfig({ ...channelConfig, telegram_bot_token: e.target.value })}
+                    placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+                    className="flex-1"
+                  />
+                  <Button 
+                    variant="outline" 
+                    onClick={testTelegramConfig}
+                    disabled={configTesting === "telegram" || !channelConfig.telegram_bot_token}
+                  >
+                    {configTesting === "telegram" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <TestTube className="h-4 w-4" />
+                    )}
+                    验证
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  在 <a href="https://t.me/botfather" target="_blank" className="text-primary hover:underline inline-flex items-center gap-1">
+                    @BotFather <ExternalLink className="h-3 w-3" />
+                  </a> 创建机器人获取 Token
+                </p>
+              </div>
+
+              {/* Webhook 配置 */}
+              {botInfo && (
+                <div className="p-4 border rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Bot Webhook</p>
+                      <p className="text-xs text-muted-foreground">
+                        配置后用户发送链接给机器人可自动识别并推送
+                      </p>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={setWebhook} 
+                      disabled={settingWebhook}
+                    >
+                      {settingWebhook ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Settings className="h-4 w-4 mr-2" />
+                      )}
+                      设置 Webhook
+                    </Button>
+                  </div>
+                  {webhookInfo?.url && (
+                    <code className="text-xs bg-muted px-2 py-1 rounded block break-all">
+                      {webhookInfo.url}
+                    </code>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button onClick={() => saveChannelConfig("telegram")} disabled={configSaving}>
+                  {configSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  保存配置
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* QQ 配置 */}
+        <TabsContent value="qq">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Image src={getPushChannelIcon('qq')} alt="QQ" width={24} height={24} unoptimized />
+                QQ 推送配置
+              </CardTitle>
+              <CardDescription>
+                QQ 推送采用 Webhook 方式，每个推送绑定独立配置
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">使用说明</h4>
+                <ul className="text-sm text-muted-foreground space-y-2">
+                  <li>1. QQ 推送使用 Webhook 方式，每个推送绑定独立配置</li>
+                  <li>2. 在下方「网盘推送绑定」区域点击「添加绑定」</li>
+                  <li>3. 选择 QQ 渠道类型，输入 Webhook URL</li>
+                  <li>4. 一个网盘可以绑定一个 QQ 推送目标</li>
+                </ul>
+              </div>
+              
+              <div className="p-4 border rounded-lg">
+                <h4 className="font-medium mb-2">获取 Webhook URL</h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• QQ 群机器人：群设置 → 机器人 → 添加机器人 → 获取 Webhook</li>
+                  <li>• QQ 频道机器人：开发者平台创建应用获取</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 微信配置 */}
+        <TabsContent value="wechat">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Image src={getPushChannelIcon('wechat')} alt="微信" width={24} height={24} unoptimized />
+                微信推送配置
+              </CardTitle>
+              <CardDescription>
+                微信推送使用企业微信机器人 Webhook，每个推送绑定独立配置
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">使用说明</h4>
+                <ul className="text-sm text-muted-foreground space-y-2">
+                  <li>1. 微信推送使用企业微信机器人 Webhook</li>
+                  <li>2. 在下方「网盘推送绑定」区域点击「添加绑定」</li>
+                  <li>3. 选择微信渠道类型，输入企业微信机器人 Webhook URL</li>
+                  <li>4. 一个网盘可以绑定一个微信推送目标</li>
+                </ul>
+              </div>
+              
+              <div className="p-4 border rounded-lg">
+                <h4 className="font-medium mb-2">获取企业微信机器人 Webhook</h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• 企业微信群聊 → 群设置 → 群机器人 → 添加机器人</li>
+                  <li>• 复制 Webhook 地址用于推送配置</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* 渠道绑定区域 */}
       <Card>
         <CardHeader>
-          <CardTitle>渠道列表</CardTitle>
-          <CardDescription>
-            已配置 {channels.length} 个推送渠道
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>网盘推送绑定</CardTitle>
+              <CardDescription>
+                为每个网盘绑定推送目标，不同网盘可推送到不同频道
+              </CardDescription>
+            </div>
+            <Button onClick={openAddDialog}>
+              <Plus className="mr-2 h-4 w-4" />
+              添加绑定
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -353,12 +677,12 @@ export default function PushChannelsPage() {
                   unoptimized
                 />
               </div>
-              <p className="text-muted-foreground">暂无推送渠道</p>
+              <p className="text-muted-foreground">暂无推送绑定</p>
               <p className="text-sm text-muted-foreground mt-2 mb-4">
-                点击"添加渠道"为网盘配置推送目标
+                点击"添加绑定"为网盘配置推送目标
               </p>
               <Button onClick={openAddDialog}>
-                添加第一个渠道
+                添加第一个绑定
               </Button>
             </div>
           ) : (
@@ -471,10 +795,10 @@ export default function PushChannelsPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editingChannel ? "编辑推送渠道" : "添加推送渠道"}
+              {editingChannel ? "编辑推送绑定" : "添加推送绑定"}
             </DialogTitle>
             <DialogDescription>
-              为网盘配置推送目标，不同网盘可以推送到不同频道
+              为网盘绑定推送目标，不同网盘可推送到不同频道
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
@@ -586,7 +910,7 @@ export default function PushChannelsPage() {
                       </Select>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        未找到频道，请确保已在系统设置中配置 Bot Token，且机器人已加入频道
+                        未找到频道，请确保已在上方配置 Bot Token，且机器人已加入频道
                       </p>
                     )}
                   </div>

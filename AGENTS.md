@@ -211,4 +211,10 @@
 ### 禁用认证
 开发环境可设置 `DISABLE_AUTH=true` 禁用认证
 
+### 推送管理架构
+推送管理统一在「推送管理」页面（/push/channels）配置：
+- **Telegram**：全局配置 Bot Token（一个 Bot 可服务多个频道），每个网盘绑定独立的 Chat ID
+- **QQ/微信**：每个网盘推送绑定独立配置 Webhook URL
+- **系统设置页面**：保留 Telegram Bot 信息展示和 Webhook 配置功能
+
 
