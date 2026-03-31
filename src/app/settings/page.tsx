@@ -78,7 +78,7 @@ interface PushChannel {
   config: {
     bot_token?: string
     chat_id?: string
-  }
+  } | null
   is_active: boolean
 }
 
@@ -735,7 +735,7 @@ export default function SettingsPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <code className="text-xs bg-muted px-2 py-1 rounded">
-                            {channel.config.chat_id}
+                            {channel.config?.chat_id || '-'}
                           </code>
                           <Badge variant={channel.is_active ? "default" : "secondary"}>
                             {channel.is_active ? "启用" : "禁用"}
