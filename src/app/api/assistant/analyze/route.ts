@@ -6,6 +6,8 @@
  * 2. 访问分享链接，获取真实的文件/文件夹信息
  * 3. 从文件名解析影视信息（剧名、季数、集数等）
  * 4. 匹配 TMDB 影视信息
+ * 
+ * 如果无法访问分享链接，会尝试从用户粘贴的文本中提取文件名
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -13,6 +15,8 @@ import {
   parseShareLink, 
   buildShareUrl,
   getLinkTypeName,
+  extractFileName,
+  guessContentType,
 } from '@/lib/assistant/link-parser'
 import { accessShareLink } from '@/lib/assistant/share-link-accessor'
 import { parseFileName, extractMainInfo } from '@/lib/assistant/file-name-parser'
@@ -150,11 +154,63 @@ export async function POST(request: NextRequest) {
       } else {
         // 访问失败，但链接解析成功，记录警告
         result.warning = shareLinkResult.error || '无法访问分享链接'
+        
+        // 尝试从用户文本中提取文件名
+        const fileName = extractFileName(text, parseResult.originalUrl)
+        if (fileName) {
+          const parsed = parseFileName(fileName)
+          result.file = {
+            name: parsed.title,
+            type: parsed.content_type,
+            season: parsed.season,
+            episode: parsed.episode,
+            episode_end: parsed.episode_end,
+            is_completed: parsed.is_completed,
+          }
+          
+          // 尝试匹配 TMDB
+          if (parsed.title) {
+            try {
+              const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year)
+              if (tmdbResult) {
+                result.tmdb = tmdbResult
+              }
+            } catch (error) {
+              console.error('TMDB搜索失败:', error)
+            }
+          }
+        }
       }
     } catch (error) {
       // 访问失败不影响链接解析
       console.error('访问分享链接失败:', error)
       result.warning = error instanceof Error ? error.message : '访问分享链接失败'
+      
+      // 尝试从用户文本中提取文件名
+      const fileName = extractFileName(text, parseResult.originalUrl)
+      if (fileName) {
+        const parsed = parseFileName(fileName)
+        result.file = {
+          name: parsed.title,
+          type: parsed.content_type,
+          season: parsed.season,
+          episode: parsed.episode,
+          episode_end: parsed.episode_end,
+          is_completed: parsed.is_completed,
+        }
+        
+        // 尝试匹配 TMDB
+        if (parsed.title) {
+          try {
+            const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year)
+            if (tmdbResult) {
+              result.tmdb = tmdbResult
+            }
+          } catch (err) {
+            console.error('TMDB搜索失败:', err)
+          }
+        }
+      }
     }
     
     return NextResponse.json(result)

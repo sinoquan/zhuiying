@@ -171,9 +171,20 @@ export function parseFileName(fileName: string, fileSize?: number): ParsedFileIn
   
   // 处理中文和英文名称
   // 如果包含中文，提取中文部分作为主标题
-  const chineseMatch = cleanName.match(/([\u4e00-\u9fa5]+(?:\s*[\u4e00-\u9fa5]+)*)/)
+  // 但要排除"第X集"等中文数字格式
+  const chineseMatch = cleanName.match(/([\u4e00-\u9fa5]+)/)
   if (chineseMatch) {
-    result.title = chineseMatch[1].trim()
+    let title = chineseMatch[1].trim()
+    // 如果标题以"第"开头，说明匹配到了"第X集"的部分，需要重新提取
+    if (title.startsWith('第')) {
+      // 从开头提取到"第"之前的部分
+      const beforeDi = cleanName.substring(0, cleanName.indexOf('第')).trim()
+      const titleMatch2 = beforeDi.match(/([\u4e00-\u9fa5]+)/)
+      if (titleMatch2) {
+        title = titleMatch2[1].trim()
+      }
+    }
+    result.title = title
     // 如果有英文部分，保留为原始标题
     const englishPart = cleanName.replace(chineseMatch[1], '').trim()
     if (englishPart && englishPart !== result.title) {

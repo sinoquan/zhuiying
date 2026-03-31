@@ -266,7 +266,7 @@ export default function AssistantPage() {
                 粘贴分享链接
               </CardTitle>
               <CardDescription>
-                支持识别 115、阿里云、夸克、天翼、百度等网盘分享链接
+                支持识别 115、阿里云、夸克、天翼、百度等网盘分享链接，可在链接下方添加文件名辅助识别
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -274,10 +274,10 @@ export default function AssistantPage() {
                 <Textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder={`粘贴分享链接，支持多行内容，例如：
+                  placeholder={`粘贴分享链接，可在下方添加文件名：
 
 https://115cdn.com/s/swfp0113wkx?password=1234#
-第一次的亲密接触 (2000) - 195720
+武神主宰.2020 - S01E643 - 第643集 - 2160p.WEB-DL.HEVC.AAC.mp4
 访问码：1234`}
                   className="min-h-[150px] font-mono text-sm"
                 />
