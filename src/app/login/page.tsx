@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,7 +9,6 @@ import { Lock, User, Loader2, Cloud } from "lucide-react"
 import { toast } from "sonner"
 
 export default function LoginPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
@@ -23,18 +21,15 @@ export default function LoginPage() {
     // 验证输入
     if (!username.trim()) {
       setErrorMsg("请输入账号")
-      toast.error("请输入账号")
       return
     }
     
     if (!password.trim()) {
       setErrorMsg("请输入密码")
-      toast.error("请输入密码")
       return
     }
 
     setLoading(true)
-    console.log("开始登录...", { username: username.trim() })
     
     try {
       const response = await fetch("/api/auth", {
@@ -47,24 +42,22 @@ export default function LoginPage() {
       })
 
       const data = await response.json()
-      console.log("登录响应:", data)
       
       if (!response.ok) {
         throw new Error(data.error || "登录失败")
       }
 
-      toast.success("登录成功！")
+      toast.success("登录成功！正在跳转...")
       
-      // 使用 window.location 进行完整页面跳转
+      // 使用 replace 避免回退到登录页
+      // 延迟一下确保 cookie 生效
       setTimeout(() => {
-        window.location.href = "/"
-      }, 300)
+        window.location.replace("/")
+      }, 500)
     } catch (error) {
-      console.error("登录错误:", error)
       const msg = error instanceof Error ? error.message : "登录失败，请重试"
       setErrorMsg(msg)
       toast.error(msg)
-    } finally {
       setLoading(false)
     }
   }
@@ -72,7 +65,6 @@ export default function LoginPage() {
   // 处理表单提交
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("表单提交")
     handleLogin()
   }
 
