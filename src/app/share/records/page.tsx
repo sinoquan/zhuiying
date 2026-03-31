@@ -11,7 +11,29 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { FileText, ExternalLink } from "lucide-react"
+import { FileText, ExternalLink, Bot, Eye, Hand } from "lucide-react"
+
+// 获取来源图标和标签
+const getSourceInfo = (source?: string) => {
+  const sources: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
+    assistant: { 
+      icon: <Bot className="h-3 w-3" />, 
+      label: "智能助手", 
+      color: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" 
+    },
+    monitor: { 
+      icon: <Eye className="h-3 w-3" />, 
+      label: "监控", 
+      color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" 
+    },
+    manual: { 
+      icon: <Hand className="h-3 w-3" />, 
+      label: "手动", 
+      color: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" 
+    },
+  }
+  return sources[source || 'manual'] || sources.manual
+}
 
 interface ShareRecord {
   id: number
@@ -22,6 +44,7 @@ interface ShareRecord {
   share_url: string | null
   share_code: string | null
   share_status: string
+  source?: string
   created_at: string
   cloud_drives?: {
     name: string
@@ -97,6 +120,7 @@ export default function ShareRecordsPage() {
                   <TableHead>文件名</TableHead>
                   <TableHead>网盘</TableHead>
                   <TableHead>文件大小</TableHead>
+                  <TableHead>来源</TableHead>
                   <TableHead>状态</TableHead>
                   <TableHead>创建时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
@@ -115,6 +139,12 @@ export default function ShareRecordsPage() {
                       {record.cloud_drives?.alias || record.cloud_drives?.name || "未知"}
                     </TableCell>
                     <TableCell>{record.file_size || "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={getSourceInfo(record.source).color}>
+                        {getSourceInfo(record.source).icon}
+                        <span className="ml-1">{getSourceInfo(record.source).label}</span>
+                      </Badge>
+                    </TableCell>
                     <TableCell>{getStatusBadge(record.share_status)}</TableCell>
                     <TableCell>
                       {new Date(record.created_at).toLocaleString("zh-CN")}

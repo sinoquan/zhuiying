@@ -54,10 +54,12 @@ export class Pan115Service implements ICloudDriveService {
 
   async getSpaceInfo(): Promise<SpaceInfo> {
     try {
-      const data = await this.request('/user/get_info')
+      // 115网盘空间信息在 userinfo 接口返回
+      const data = await this.request('/user/userinfo')
       const info = data.data || {}
-      const total = info.total_size || 0
-      const used = info.used_size || 0
+      // 115返回的字段可能是 total 和 used（单位可能是字节）
+      const total = info.total || info.total_size || 0
+      const used = info.used || info.used_size || info.use_size || 0
       return {
         total,
         used,
@@ -65,12 +67,25 @@ export class Pan115Service implements ICloudDriveService {
         used_percent: total > 0 ? Math.round((used / total) * 100) : 0,
       }
     } catch (error) {
-      // 如果获取失败，返回默认值
-      return {
-        total: 0,
-        used: 0,
-        available: 0,
-        used_percent: 0,
+      // 尝试另一个接口
+      try {
+        const data = await this.request('/files/get_space')
+        const info = data.data || {}
+        const total = info.total || 0
+        const used = info.used || info.use_size || 0
+        return {
+          total,
+          used,
+          available: total - used,
+          used_percent: total > 0 ? Math.round((used / total) * 100) : 0,
+        }
+      } catch {
+        return {
+          total: 0,
+          used: 0,
+          available: 0,
+          used_percent: 0,
+        }
       }
     }
   }

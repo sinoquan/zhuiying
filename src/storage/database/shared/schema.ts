@@ -43,13 +43,14 @@ export const shareRecords = pgTable(
   "share_records",
   {
     id: serial().primaryKey(),
-    cloud_drive_id: integer("cloud_drive_id").notNull().references(() => cloudDrives.id),
+    cloud_drive_id: integer("cloud_drive_id").references(() => cloudDrives.id), // 智能助手推送时可能为null
     file_path: varchar("file_path", { length: 1000 }).notNull(),
     file_name: varchar("file_name", { length: 500 }).notNull(),
     file_size: varchar("file_size", { length: 50 }), // 文件大小
     share_url: varchar("share_url", { length: 1000 }),
     share_code: varchar("share_code", { length: 50 }), // 提取码
     share_status: varchar("share_status", { length: 20 }).default("pending").notNull(), // pending/success/failed
+    source: varchar("source", { length: 20 }).default("manual").notNull(), // manual/monitor/assistant
     error_message: text("error_message"), // 错误信息
     file_created_at: timestamp("file_created_at", { withTimezone: true }), // 文件创建时间
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -57,6 +58,7 @@ export const shareRecords = pgTable(
   (table) => [
     index("share_records_cloud_drive_id_idx").on(table.cloud_drive_id),
     index("share_records_status_idx").on(table.share_status),
+    index("share_records_source_idx").on(table.source),
     index("share_records_created_at_idx").on(table.created_at),
   ]
 );

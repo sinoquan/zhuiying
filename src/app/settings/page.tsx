@@ -54,6 +54,14 @@ interface TelegramBotInfo {
   can_read_all_group_messages: boolean
 }
 
+interface WebhookInfo {
+  url: string
+  has_custom_certificate: boolean
+  pending_update_count: number
+  last_error_date?: number
+  last_error_message?: string
+}
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -79,6 +87,8 @@ export default function SettingsPage() {
   const [channels, setChannels] = useState<TelegramChannel[]>([])
   const [groups, setGroups] = useState<TelegramChannel[]>([])
   const [loadingChannels, setLoadingChannels] = useState(false)
+  const [webhookInfo, setWebhookInfo] = useState<WebhookInfo | null>(null)
+  const [settingWebhook, setSettingWebhook] = useState(false)
 
   useEffect(() => {
     fetchSettings()
@@ -215,6 +225,45 @@ export default function SettingsPage() {
     }
   }
 
+  // 设置 Webhook
+  const setWebhook = async () => {
+    setSettingWebhook(true)
+    try {
+      const response = await fetch("/api/telegram/webhook/set", { method: "POST" })
+      const data = await response.json()
+      
+      if (data.error) throw new Error(data.error)
+      
+      toast.success(data.message || "Webhook 设置成功")
+      setWebhookInfo({ url: data.webhook_url, has_custom_certificate: false, pending_update_count: 0 })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "设置失败")
+    } finally {
+      setSettingWebhook(false)
+    }
+  }
+
+  // 获取 Webhook 信息
+  const getWebhookInfo = async () => {
+    try {
+      const response = await fetch("/api/telegram/webhook/set")
+      const data = await response.json()
+      
+      if (data.result) {
+        setWebhookInfo(data.result)
+      }
+    } catch (error) {
+      console.error("获取 Webhook 信息失败:", error)
+    }
+  }
+
+  // 当 bot info 获取成功后，也获取 webhook 信息
+  useEffect(() => {
+    if (botInfo) {
+      getWebhookInfo()
+    }
+  }, [botInfo])
+
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center">
@@ -334,6 +383,66 @@ export default function SettingsPage() {
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   保存设置
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Webhook 配置 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Send className="h-5 w-5" />
+                Bot Webhook 配置
+              </CardTitle>
+              <CardDescription>
+                配置机器人 Webhook 以接收用户消息，实现智能助手功能
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {webhookInfo && (
+                <div className="p-4 bg-muted rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Webhook URL</span>
+                    {webhookInfo.url ? (
+                      <Badge variant="outline" className="text-green-600 border-green-600">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        已配置
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                        未配置
+                      </Badge>
+                    )}
+                  </div>
+                  {webhookInfo.url && (
+                    <code className="text-xs bg-background px-2 py-1 rounded block break-all">
+                      {webhookInfo.url}
+                    </code>
+                  )}
+                  {webhookInfo.pending_update_count > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      待处理消息: {webhookInfo.pending_update_count} 条
+                    </p>
+                  )}
+                  {webhookInfo.last_error_message && (
+                    <p className="text-xs text-destructive">
+                      错误: {webhookInfo.last_error_message}
+                    </p>
+                  )}
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2">
+                <Button 
+                  onClick={setWebhook} 
+                  disabled={settingWebhook || !settings.telegram_bot_token}
+                >
+                  {settingWebhook && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  设置 Webhook
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  设置后，用户发送链接给机器人即可自动识别并推送
+                </p>
               </div>
             </CardContent>
           </Card>

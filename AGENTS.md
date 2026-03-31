@@ -99,6 +99,18 @@
 - 自动分享新文件
 - 自动推送到配置的渠道
 
+### 5. 智能助手服务 (src/lib/assistant/)
+- 链接解析器 - 支持 115/阿里/夸克/天翼/百度/123 等网盘
+- 自动识别网盘类型、提取码、文件名
+- 自动匹配 TMDB 影视信息
+- 推送预览和自定义编辑
+- 分享记录来源标记（手动/监控/智能助手）
+
+### 6. Telegram Bot 集成
+- Webhook 消息接收
+- 用户发送链接自动识别
+- 确认后推送机制
+
 ## 数据库表结构
 
 - **cloud_drives** - 网盘账号表
@@ -158,6 +170,15 @@
 - `GET /api/telegram/bot-info` - 获取机器人信息
 - `GET /api/telegram/channels` - 获取机器人所在的频道/群组列表
 - `POST /api/telegram/channels` - 发送测试消息到指定频道
+- `POST /api/telegram/webhook/set` - 设置 Bot Webhook
+- `GET /api/telegram/webhook/set` - 获取 Webhook 信息
+
+### 智能助手
+- `POST /api/assistant/analyze` - 分析分享链接（自动识别网盘、提取文件名、匹配TMDB）
+- `POST /api/assistant/push` - 推送消息到选中渠道
+
+### Telegram Bot Webhook
+- `POST /api/telegram/webhook` - 接收 Bot 消息（用户发送链接自动识别，确认后推送）
 
 ## 包管理规范
 
