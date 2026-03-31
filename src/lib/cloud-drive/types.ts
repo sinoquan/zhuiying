@@ -74,6 +74,7 @@ export type CloudDriveType =
   | 'xunlei'
   | 'weiyun'
   | 'guangya'
+  | 'pikpak'
 
 // 网盘服务工厂
 export interface CloudDriveServiceFactory {

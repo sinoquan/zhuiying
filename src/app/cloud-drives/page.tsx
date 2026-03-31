@@ -29,14 +29,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import Image from "next/image"
 import { 
   MoreHorizontal, 
   Plus, 
@@ -50,28 +44,35 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { Pan115LoginDialog } from "@/components/cloud-drive/pan115-login-dialog"
+import { driveTypeOptions, getDriveIcon, getDriveName } from "@/lib/icons"
+
+interface CloudDriveConfig {
+  user_name?: string
+  user_avatar?: string
+  is_vip?: boolean
+  cookie?: string
+  token?: string
+  refresh_token?: string
+  [key: string]: unknown
+}
 
 interface CloudDrive {
   id: number
   name: string
   alias: string | null
-  config: Record<string, any> | null
+  config: CloudDriveConfig | null
   is_active: boolean
   created_at: string
   updated_at: string | null
 }
 
-const DRIVE_TYPES = [
-  { value: "115", label: "115网盘", icon: "💿", hasCustomLogin: true },
-  { value: "aliyun", label: "阿里云盘", icon: "☁️" },
-  { value: "quark", label: "夸克网盘", icon: "🔷" },
-  { value: "tianyi", label: "天翼网盘", icon: "☁️" },
-  { value: "baidu", label: "百度网盘", icon: "💾" },
-  { value: "123", label: "123云盘", icon: "📁" },
-  { value: "xunlei", label: "迅雷网盘", icon: "⚡" },
-  { value: "weiyun", label: "腾讯微云", icon: "☁️" },
-  { value: "guangya", label: "光鸭网盘", icon: "🦆" },
-]
+// 从图标配置中获取网盘类型列表
+const DRIVE_TYPES = driveTypeOptions.map(opt => ({
+  value: opt.value,
+  label: opt.label,
+  icon: opt.icon,
+  hasCustomLogin: opt.value === '115',
+}))
 
 export default function CloudDrivesPage() {
   const [drives, setDrives] = useState<CloudDrive[]>([])
@@ -255,7 +256,16 @@ export default function CloudDrivesPage() {
             onClick={() => handleAddDrive(type.value)}
           >
             <CardContent className="p-4 flex flex-col items-center gap-2">
-              <span className="text-3xl">{type.icon}</span>
+              <div className="w-12 h-12 flex items-center justify-center">
+                <Image 
+                  src={type.icon} 
+                  alt={type.label}
+                  width={48}
+                  height={48}
+                  className="w-12 h-12 object-contain"
+                  unoptimized
+                />
+              </div>
               <span className="font-medium text-sm">{type.label}</span>
               {type.hasCustomLogin && (
                 <Badge variant="secondary" className="text-xs">
@@ -305,8 +315,17 @@ export default function CloudDrivesPage() {
                     <TableRow key={drive.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <span className="text-xl">{driveType?.icon}</span>
-                          <span className="font-medium">{driveType?.label || drive.name}</span>
+                          <div className="w-8 h-8 flex items-center justify-center">
+                            <Image 
+                              src={getDriveIcon(drive.name)} 
+                              alt={drive.name}
+                              width={32}
+                              height={32}
+                              className="w-8 h-8 object-contain"
+                              unoptimized
+                            />
+                          </div>
+                          <span className="font-medium">{driveType?.label || getDriveName(drive.name)}</span>
                         </div>
                       </TableCell>
                       <TableCell>

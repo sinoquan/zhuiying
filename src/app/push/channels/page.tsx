@@ -30,7 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Radio, Plus, MoreHorizontal, Edit, Trash2, MessageCircle } from "lucide-react"
+import { Plus, MoreHorizontal, Edit, Trash2 } from "lucide-react"
+import Image from "next/image"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,13 +39,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
+import { pushChannelTypeOptions, getPushChannelIcon, getPushChannelName, driveTypeOptions, getDriveIcon } from "@/lib/icons"
+
+interface CloudDrive {
+  id: number
+  name: string
+  alias: string | null
+}
 
 interface PushChannel {
   id: number
   cloud_drive_id: number
   channel_type: string
   channel_name: string
-  config: Record<string, any> | null
+  config: Record<string, unknown> | null
   is_active: boolean
   created_at: string
   cloud_drives?: {
@@ -55,6 +63,7 @@ interface PushChannel {
 
 export default function PushChannelsPage() {
   const [channels, setChannels] = useState<PushChannel[]>([])
+  const [cloudDrives, setCloudDrives] = useState<CloudDrive[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingChannel, setEditingChannel] = useState<PushChannel | null>(null)
@@ -67,6 +76,7 @@ export default function PushChannelsPage() {
 
   useEffect(() => {
     fetchChannels()
+    fetchCloudDrives()
   }, [])
 
   const fetchChannels = async () => {
@@ -78,6 +88,16 @@ export default function PushChannelsPage() {
       toast.error("获取推送渠道失败")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchCloudDrives = async () => {
+    try {
+      const response = await fetch("/api/cloud-drives")
+      const data = await response.json()
+      setCloudDrives(data)
+    } catch (error) {
+      console.error("获取网盘列表失败:", error)
     }
   }
 
@@ -169,20 +189,9 @@ export default function PushChannelsPage() {
     setDialogOpen(true)
   }
 
-  const getChannelIcon = (type: string) => {
-    return type === "telegram" ? (
-      <MessageCircle className="h-4 w-4" />
-    ) : (
-      <Radio className="h-4 w-4" />
-    )
-  }
-
-  const getChannelLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      telegram: "Telegram",
-      qq: "QQ",
-    }
-    return labels[type] || type
+  const getDriveDisplayName = (drive: { name: string; alias: string | null } | undefined) => {
+    if (!drive) return "未知"
+    return drive.alias || drive.name
   }
 
   return (
@@ -200,6 +209,34 @@ export default function PushChannelsPage() {
         </Button>
       </div>
 
+      {/* 渠道类型选择卡片 */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        {pushChannelTypeOptions.map((type) => (
+          <Card 
+            key={type.value}
+            className="cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
+            onClick={() => {
+              setFormData({ ...formData, channel_type: type.value })
+              setDialogOpen(true)
+            }}
+          >
+            <CardContent className="p-4 flex flex-col items-center gap-2">
+              <div className="w-12 h-12 flex items-center justify-center">
+                <Image 
+                  src={type.icon} 
+                  alt={type.label}
+                  width={48}
+                  height={48}
+                  className="w-12 h-12 object-contain"
+                  unoptimized
+                />
+              </div>
+              <span className="font-medium">{type.label}</span>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>渠道列表</CardTitle>
@@ -212,7 +249,16 @@ export default function PushChannelsPage() {
             <div className="text-center py-8 text-muted-foreground">加载中...</div>
           ) : channels.length === 0 ? (
             <div className="text-center py-8">
-              <Radio className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                <Image 
+                  src={getPushChannelIcon('telegram')} 
+                  alt="推送渠道"
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 object-contain opacity-50"
+                  unoptimized
+                />
+              </div>
               <p className="text-muted-foreground">暂无推送渠道</p>
               <Button className="mt-4" onClick={() => { resetForm(); setDialogOpen(true) }}>
                 添加第一个渠道
@@ -234,15 +280,36 @@ export default function PushChannelsPage() {
                   <TableRow key={channel.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {getChannelIcon(channel.channel_type)}
+                        <div className="w-6 h-6 flex items-center justify-center">
+                          <Image 
+                            src={getPushChannelIcon(channel.channel_type)} 
+                            alt={channel.channel_type}
+                            width={24}
+                            height={24}
+                            className="w-6 h-6 object-contain"
+                            unoptimized
+                          />
+                        </div>
                         <span className="font-medium">{channel.channel_name}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{getChannelLabel(channel.channel_type)}</Badge>
+                      <Badge variant="outline">{getPushChannelName(channel.channel_type)}</Badge>
                     </TableCell>
                     <TableCell>
-                      {channel.cloud_drives?.alias || channel.cloud_drives?.name || "未知"}
+                      <div className="flex items-center gap-2">
+                        {channel.cloud_drives && (
+                          <Image 
+                            src={getDriveIcon(channel.cloud_drives.name)} 
+                            alt=""
+                            width={20}
+                            height={20}
+                            className="w-5 h-5 object-contain"
+                            unoptimized
+                          />
+                        )}
+                        {getDriveDisplayName(channel.cloud_drives)}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -304,8 +371,21 @@ export default function PushChannelsPage() {
                     <SelectValue placeholder="选择渠道类型" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="telegram">Telegram</SelectItem>
-                    <SelectItem value="qq">QQ</SelectItem>
+                    {pushChannelTypeOptions.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        <div className="flex items-center gap-2">
+                          <Image 
+                            src={type.icon} 
+                            alt={type.label}
+                            width={20}
+                            height={20}
+                            className="w-5 h-5 object-contain"
+                            unoptimized
+                          />
+                          {type.label}
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -328,9 +408,21 @@ export default function PushChannelsPage() {
                     <SelectValue placeholder="选择网盘" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">115网盘</SelectItem>
-                    <SelectItem value="2">阿里云盘</SelectItem>
-                    <SelectItem value="3">夸克网盘</SelectItem>
+                    {cloudDrives.map((drive) => (
+                      <SelectItem key={drive.id} value={drive.id.toString()}>
+                        <div className="flex items-center gap-2">
+                          <Image 
+                            src={getDriveIcon(drive.name)} 
+                            alt=""
+                            width={20}
+                            height={20}
+                            className="w-5 h-5 object-contain"
+                            unoptimized
+                          />
+                          {drive.alias || drive.name}
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

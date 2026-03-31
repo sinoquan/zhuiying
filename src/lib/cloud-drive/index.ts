@@ -9,6 +9,8 @@ import { AliyunService } from './aliyun'
 import { QuarkService } from './quark'
 import { TianyiService } from './tianyi'
 import { BaiduService } from './baidu'
+import { Pan123Service } from './p123'
+import { GuangyaService } from './guangya'
 
 // 网盘服务映射
 const serviceMap: Partial<Record<CloudDriveType, new (config: CloudDriveConfig) => ICloudDriveService>> = {
@@ -17,6 +19,8 @@ const serviceMap: Partial<Record<CloudDriveType, new (config: CloudDriveConfig) 
   'quark': QuarkService,
   'tianyi': TianyiService,
   'baidu': BaiduService,
+  '123': Pan123Service,
+  'guangya': GuangyaService,
 }
 
 // 网盘名称映射
@@ -30,6 +34,7 @@ export const driveNames: Record<CloudDriveType, string> = {
   'xunlei': '迅雷网盘',
   'weiyun': '腾讯微云',
   'guangya': '光鸭网盘',
+  'pikpak': 'PikPak',
 }
 
 // 网盘配置字段说明
@@ -60,6 +65,10 @@ export const driveConfigFields: Record<CloudDriveType, { key: string; label: str
     { key: 'cookie', label: 'Cookie', required: true },
   ],
   'guangya': [
+    { key: 'token', label: 'Token', required: true },
+    { key: 'base_url', label: '服务地址', required: false },
+  ],
+  'pikpak': [
     { key: 'token', label: 'Token', required: true },
   ],
 }
@@ -102,3 +111,5 @@ export { AliyunService } from './aliyun'
 export { QuarkService } from './quark'
 export { TianyiService } from './tianyi'
 export { BaiduService } from './baidu'
+export { Pan123Service } from './p123'
+export { GuangyaService } from './guangya'

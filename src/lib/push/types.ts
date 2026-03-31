@@ -73,7 +73,7 @@ export interface IPushService {
 }
 
 // 推送渠道类型
-export type PushChannelType = 'telegram' | 'qq'
+export type PushChannelType = 'telegram' | 'qq' | 'wechat'
 
 // 模板内容类型
 export type TemplateContentType = 'movie' | 'tv_series' | 'completed'

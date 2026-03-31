@@ -4,11 +4,13 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import Image from "next/image"
 import { 
   HardDrive, Share2, Send, Activity, TrendingUp, AlertCircle, 
   Clock, XCircle, FileText, Zap, ChevronRight, CheckCircle2
 } from "lucide-react"
 import Link from "next/link"
+import { driveIcons, getDriveIcon } from "@/lib/icons"
 
 interface DashboardStats {
   // 基础统计
@@ -148,15 +150,6 @@ export default function DashboardPage() {
     },
   ]
 
-  // 网盘类型图标映射
-  const driveIcons: Record<string, string> = {
-    "115": "💾",
-    "aliyun": "☁️",
-    "quark": "🔷",
-    "tianyi": "📶",
-    "baidu": "🔵",
-  }
-
   // 格式化文件大小
   const formatFileSize = (size: string | null) => {
     if (!size) return "-"
@@ -244,7 +237,13 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <HardDrive className="h-5 w-5" />
+              <Image 
+                src="/file.svg" 
+                alt="网盘" 
+                width={20} 
+                height={20}
+                className="dark:invert"
+              />
               网盘活动统计
             </CardTitle>
             <CardDescription>今日各网盘分享和推送数据</CardDescription>
@@ -262,8 +261,15 @@ export default function DashboardPage() {
                   
                   return (
                     <div key={drive.id} className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-lg">
-                        {driveIcons[drive.name] || "💾"}
+                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+                        <Image 
+                          src={getDriveIcon(drive.name)} 
+                          alt={drive.alias}
+                          width={32}
+                          height={32}
+                          className="w-8 h-8 object-contain"
+                          unoptimized
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">

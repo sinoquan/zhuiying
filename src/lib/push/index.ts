@@ -5,17 +5,20 @@
 import { PushChannelType, PushChannelConfig, IPushService } from './types'
 import { TelegramPushService } from './telegram'
 import { QQPushService } from './qq'
+import { WechatPushService } from './wechat'
 
 // 推送服务映射
 const serviceMap: Record<PushChannelType, new (config: PushChannelConfig) => IPushService> = {
   telegram: TelegramPushService,
   qq: QQPushService,
+  wechat: WechatPushService,
 }
 
 // 推送渠道名称
 export const channelNames: Record<PushChannelType, string> = {
   telegram: 'Telegram',
   qq: 'QQ',
+  wechat: '微信',
 }
 
 // 推送渠道配置字段
@@ -28,6 +31,10 @@ export const channelConfigFields: Record<PushChannelType, { key: string; label: 
     { key: 'webhook_url', label: 'Webhook URL', required: true },
     { key: 'chat_id', label: 'QQ号', required: false },
     { key: 'group_id', label: '群号', required: false },
+  ],
+  wechat: [
+    { key: 'webhook_url', label: '企业微信 Webhook URL', required: true },
+    { key: 'mentioned_list', label: '提醒成员(@成员ID，逗号分隔)', required: false },
   ],
 }
 
@@ -86,3 +93,4 @@ export async function sendPushMessage(
 export * from './types'
 export { TelegramPushService } from './telegram'
 export { QQPushService } from './qq'
+export { WechatPushService } from './wechat'
