@@ -58,16 +58,16 @@ interface PushTemplate {
   id: number
   cloud_drive_id: number | null
   name: string
-  content_type: 'movie' | 'tv_series' | 'completed'
-  telegram_template: string
-  qq_template: string
-  include_image: boolean
+  content_type: 'movie' | 'tv_series' | 'completed' | string
+  telegram_template: string | null
+  qq_template: string | null
+  include_image: boolean | null
   is_active: boolean
   created_at: string
   cloud_drives?: {
     name: string
     alias: string | null
-  }
+  } | null
 }
 
 interface CloudDrive {
@@ -119,7 +119,7 @@ export default function PushTemplatesPage() {
       setFormData({
         ...formData,
         name: preset.name,
-        content_type: preset.content_type,
+        content_type: preset.content_type as 'movie' | 'tv_series' | 'completed',
         telegram_template: preset.telegram_template,
         qq_template: preset.qq_template,
         include_image: preset.include_image,
@@ -215,18 +215,24 @@ export default function PushTemplatesPage() {
     setEditingTemplate(template)
     setFormData({
       cloud_drive_id: template.cloud_drive_id?.toString() || "",
-      name: template.name,
-      content_type: template.content_type,
-      telegram_template: template.telegram_template,
-      qq_template: template.qq_template,
-      include_image: template.include_image,
+      name: template.name || "",
+      content_type: (template.content_type || "movie") as 'movie' | 'tv_series' | 'completed',
+      telegram_template: template.telegram_template || "",
+      qq_template: template.qq_template || "",
+      include_image: template.include_image ?? true,
     })
     setDialogOpen(true)
   }
 
-  const getPreviewContent = (template: string, format: 'telegram' | 'qq') => {
-    const previewData = getPreviewData(formData.content_type)
-    return renderTemplate(template, previewData, format)
+  const getPreviewContent = (template: string | null | undefined, format: 'telegram' | 'qq') => {
+    if (!template) return "模板内容为空，请输入模板内容..."
+    try {
+      const previewData = getPreviewData(formData.content_type as 'movie' | 'tv_series' | 'completed')
+      return renderTemplate(template, previewData, format)
+    } catch (error) {
+      console.error('Preview error:', error)
+      return "模板渲染出错，请检查模板格式"
+    }
   }
 
   const copyTemplate = (content: string) => {
@@ -357,7 +363,7 @@ export default function PushTemplatesPage() {
                           {template.cloud_drives?.alias || template.cloud_drives?.name || "所有网盘"}
                         </TableCell>
                         <TableCell>
-                          {template.include_image ? (
+                          {template.include_image === true ? (
                             <Badge variant="secondary">
                               <ImageIcon className="h-3 w-3 mr-1" />
                               包含
@@ -389,7 +395,7 @@ export default function PushTemplatesPage() {
                                 <Edit className="mr-2 h-4 w-4" />
                                 编辑
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => copyTemplate(template.telegram_template)}>
+                              <DropdownMenuItem onClick={() => copyTemplate(template.telegram_template || "")}>
                                 <Copy className="mr-2 h-4 w-4" />
                                 复制TG模板
                               </DropdownMenuItem>
