@@ -97,9 +97,7 @@ export type CloudDriveType =
   | 'tianyi'
   | 'baidu'
   | '123'
-  | 'xunlei'
   | 'guangya'
-  | 'pikpak'
 
 // 网盘服务工厂
 export interface CloudDriveServiceFactory {

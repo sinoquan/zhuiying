@@ -31,9 +31,7 @@ export const driveNames: Record<CloudDriveType, string> = {
   'tianyi': '天翼网盘',
   'baidu': '百度网盘',
   '123': '123云盘',
-  'xunlei': '迅雷网盘',
   'guangya': '光鸭网盘',
-  'pikpak': 'PikPak',
 }
 
 // 网盘配置字段说明
@@ -57,15 +55,9 @@ export const driveConfigFields: Record<CloudDriveType, { key: string; label: str
   '123': [
     { key: 'token', label: 'Token', required: true },
   ],
-  'xunlei': [
-    { key: 'token', label: 'Token', required: true },
-  ],
   'guangya': [
     { key: 'token', label: 'Token', required: true },
     { key: 'base_url', label: '服务地址', required: false },
-  ],
-  'pikpak': [
-    { key: 'token', label: 'Token', required: true },
   ],
 }
 

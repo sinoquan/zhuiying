@@ -35,10 +35,6 @@ export const driveIcons: Record<string, {
     name: '百度网盘',
     icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/baidu-drive-2.png',
   },
-  'xunlei': {
-    name: '迅雷网盘',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/xunlei-1.png',
-  },
 }
 
 // 推送渠道图标
