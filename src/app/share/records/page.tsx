@@ -147,7 +147,6 @@ export default function ShareRecordsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   
   // 对话框
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [pushDialogOpen, setPushDialogOpen] = useState(false)
   const [selectedRecord, setSelectedRecord] = useState<ShareRecord | null>(null)
@@ -228,36 +227,6 @@ export default function ShareRecordsPage() {
       navigator.clipboard.writeText(shareUrl)
     }
     toast.success("已复制到剪贴板")
-  }
-
-  // 打开取消分享对话框
-  const openCancelDialog = (record: ShareRecord) => {
-    setSelectedRecord(record)
-    setCancelDialogOpen(true)
-  }
-
-  // 取消分享
-  const cancelShare = async () => {
-    if (!selectedRecord) return
-    
-    setSaving(true)
-    try {
-      const response = await fetch("/api/share/records/cancel", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: selectedRecord.id }),
-      })
-      
-      if (!response.ok) throw new Error('取消分享失败')
-      
-      toast.success("分享已取消")
-      setCancelDialogOpen(false)
-      fetchRecords()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "取消分享失败")
-    } finally {
-      setSaving(false)
-    }
   }
 
   // 打开删除对话框
@@ -682,16 +651,6 @@ export default function ShareRecordsPage() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-7 w-7"
-                            onClick={() => openCancelDialog(record)}
-                            title="取消分享"
-                            disabled={record.share_status === 'cancelled' || record.share_status === 'expired'}
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
                             className="h-7 w-7 text-destructive hover:text-destructive"
                             onClick={() => openDeleteDialog(record)}
                             title="删除"
@@ -741,32 +700,6 @@ export default function ShareRecordsPage() {
         </div>
       )}
 
-      {/* 取消分享对话框 */}
-      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>取消分享</DialogTitle>
-            <DialogDescription>
-              确定要取消这个分享链接吗？取消后链接将失效。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              文件: {selectedRecord?.file_name}
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>
-              取消
-            </Button>
-            <Button variant="destructive" onClick={cancelShare} disabled={saving}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              确认取消分享
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* 删除对话框 */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
@@ -786,19 +719,12 @@ export default function ShareRecordsPage() {
               取消
             </Button>
             <Button 
-              variant="secondary" 
+              variant="destructive" 
               onClick={() => deleteRecord(false)}
               disabled={saving}
             >
-              仅删除记录
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={() => deleteRecord(true)}
-              disabled={saving}
-            >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              删除并取消分享
+              确认删除
             </Button>
           </DialogFooter>
         </DialogContent>

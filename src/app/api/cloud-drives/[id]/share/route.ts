@@ -53,6 +53,13 @@ export async function POST(
     const totalSize = shareInfo.total_size || 0
     const fileCount = shareInfo.file_count || file_ids.length
     
+    console.log('[分享API] 文件大小信息:', { 
+      totalSize, 
+      fileCount, 
+      file_sizes, 
+      shareInfo_total_size: shareInfo.total_size 
+    })
+    
     const shareRecords = file_ids.map((fileId: string, index: number) => {
       // 计算单个文件的大小：如果只有一个文件，使用total_size；否则平均分配
       let fileSize = file_sizes?.[index]?.toString() || '0'
@@ -61,6 +68,8 @@ export async function POST(
           ? totalSize.toString() 
           : Math.floor(totalSize / fileCount).toString()
       }
+      
+      console.log(`[分享API] 文件 ${index}: fileId=${fileId}, fileSize=${fileSize}`)
       
       return {
         cloud_drive_id: parseInt(id),

@@ -163,6 +163,8 @@ export default function ManualSharePage() {
     if (!selectedDrive) return
     
     setLoading(true)
+    // 清空选择，避免切换目录时保留旧选择
+    setSelectedFiles(new Set())
     try {
       const response = await fetch(
         `/api/cloud-drives/${selectedDrive}/files?path=${encodeURIComponent(path)}`

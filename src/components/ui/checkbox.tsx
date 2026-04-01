@@ -10,12 +10,16 @@ function Checkbox({
   className,
   indeterminate,
   checked,
+  onCheckedChange,
   ...props
 }: React.ComponentProps<typeof CheckboxPrimitive.Root> & { indeterminate?: boolean }) {
   // 计算实际的 checked 状态
   // indeterminate 可以通过 prop 传递，也可以通过 checked="indeterminate" 传递
   const isIndeterminate = indeterminate || checked === "indeterminate"
-  const actualChecked = checked === "indeterminate" ? false : checked
+  
+  // Radix UI 原生支持 checked="indeterminate"，直接传递即可
+  // 但需要将 indeterminate prop 转换为 checked="indeterminate"
+  const actualChecked = indeterminate ? "indeterminate" : checked
   
   return (
     <CheckboxPrimitive.Root
@@ -26,6 +30,7 @@ function Checkbox({
         className
       )}
       checked={actualChecked}
+      onCheckedChange={onCheckedChange}
       {...props}
     >
       <CheckboxPrimitive.Indicator
