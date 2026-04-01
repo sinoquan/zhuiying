@@ -556,16 +556,16 @@ export default function ShareRecordsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-32">分享时间</TableHead>
-                  <TableHead className="w-36">网盘</TableHead>
-                  <TableHead className="w-48">文件名</TableHead>
-                  <TableHead className="w-48">分享链接</TableHead>
-                  <TableHead className="w-14">类型</TableHead>
-                  <TableHead className="w-14">大小</TableHead>
-                  <TableHead className="w-14">有效期</TableHead>
+                  <TableHead className="w-28">分享时间</TableHead>
+                  <TableHead className="w-32">网盘</TableHead>
+                  <TableHead className="w-44">文件名</TableHead>
+                  <TableHead className="w-56">分享链接</TableHead>
+                  <TableHead className="w-12">类型</TableHead>
+                  <TableHead className="w-12">大小</TableHead>
+                  <TableHead className="w-12">有效期</TableHead>
                   <TableHead className="w-16">链接状态</TableHead>
                   <TableHead className="w-16">推送状态</TableHead>
-                  <TableHead className="w-16">来源</TableHead>
+                  <TableHead className="w-14">来源</TableHead>
                   <TableHead className="w-24">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -589,11 +589,11 @@ export default function ShareRecordsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-medium text-sm truncate" title={record.file_name}>
+                        <span className="font-medium text-sm truncate max-w-[150px]" title={record.file_name}>
                           {record.tmdb_title || record.file_name}
                         </span>
                         {record.tmdb_title && record.tmdb_title !== record.file_name && (
-                          <span className="text-xs text-muted-foreground truncate" title={record.file_name}>
+                          <span className="text-xs text-muted-foreground truncate max-w-[150px]" title={record.file_name}>
                             {record.file_name}
                           </span>
                         )}
@@ -607,7 +607,7 @@ export default function ShareRecordsPage() {
                               href={record.share_url} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="text-primary hover:underline text-xs truncate max-w-[160px]"
+                              className="text-primary hover:underline text-xs truncate max-w-[200px]"
                               title={record.share_url}
                             >
                               {record.share_url.replace('https://', '').replace('115cdn.com/s/', '115.com/s/')}
