@@ -4,7 +4,8 @@
  */
 
 export interface DoubanConfig {
-  // 豆瓣搜索不需要API Key，直接抓取
+  // 豆瓣搜索需要Cookie才能正常访问
+  cookie?: string
   timeout?: number
 }
 
@@ -32,12 +33,32 @@ export interface DoubanDetail extends DoubanSearchResult {
 }
 
 export class DoubanService {
+  private cookie: string
   private timeout: number
   private baseUrl = 'https://movie.douban.com'
   private searchUrl = 'https://search.douban.com/movie/subject_search'
 
   constructor(config?: DoubanConfig) {
+    this.cookie = config?.cookie || ''
     this.timeout = config?.timeout || 10000
+  }
+
+  /**
+   * 获取请求头
+   */
+  private getHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Referer': 'https://movie.douban.com/',
+    }
+    
+    if (this.cookie) {
+      headers['Cookie'] = this.cookie
+    }
+    
+    return headers
   }
 
   /**
@@ -49,12 +70,7 @@ export class DoubanService {
       const url = `${this.searchUrl}?search_text=${encodeURIComponent(query)}&cat=1002` // 1002=电影, 1003=电视剧
       
       const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          'Referer': 'https://movie.douban.com/',
-        },
+        headers: this.getHeaders(),
         signal: AbortSignal.timeout(this.timeout),
       })
 
@@ -113,10 +129,17 @@ export class DoubanService {
       // 注意：豆瓣官方API已不对外，这里尝试一些公开代理
       const proxyUrl = `https://douban-api-proxy.deno.dev/search?q=${encodeURIComponent(query)}`
       
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      }
+      
+      // 如果有cookie，可以尝试直接访问豆瓣API
+      if (this.cookie) {
+        headers['Cookie'] = this.cookie
+      }
+      
       const response = await fetch(proxyUrl, {
-        headers: {
-          'Accept': 'application/json',
-        },
+        headers,
         signal: AbortSignal.timeout(this.timeout),
       })
 
@@ -296,9 +319,10 @@ export class DoubanService {
 // 单例实例
 let defaultService: DoubanService | null = null
 
-export function getDoubanService(): DoubanService {
-  if (!defaultService) {
-    defaultService = new DoubanService()
+export function getDoubanService(cookie?: string): DoubanService {
+  // 如果提供了cookie或还没有创建实例，创建新实例
+  if (cookie || !defaultService) {
+    defaultService = new DoubanService({ cookie })
   }
   return defaultService
 }

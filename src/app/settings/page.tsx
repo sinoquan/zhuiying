@@ -25,6 +25,7 @@ import {
 interface SystemSettings {
   tmdb_api_key: string
   tmdb_language: string
+  douban_cookie: string
   telegram_bot_token: string
   telegram_chat_id: string
   proxy_enabled: boolean
@@ -69,6 +70,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<SystemSettings>({
     tmdb_api_key: "",
     tmdb_language: "zh-CN",
+    douban_cookie: "",
     telegram_bot_token: "",
     telegram_chat_id: "",
     proxy_enabled: false,
@@ -305,9 +307,9 @@ export default function SettingsPage() {
             <Globe className="h-4 w-4 mr-2" />
             常规
           </TabsTrigger>
-          <TabsTrigger value="tmdb">
+          <TabsTrigger value="media">
             <Bot className="h-4 w-4 mr-2" />
-            TMDB
+            媒体识别
           </TabsTrigger>
           <TabsTrigger value="network">
             <Globe className="h-4 w-4 mr-2" />
@@ -695,18 +697,22 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* TMDB 设置 */}
-        <TabsContent value="tmdb">
+        {/* 媒体识别设置 */}
+        <TabsContent value="media" className="space-y-4">
+          {/* TMDB 配置 */}
           <Card>
             <CardHeader>
-              <CardTitle>TMDB API 设置</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <img src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg" alt="TMDB" className="h-5 w-5" />
+                TMDB API 配置
+              </CardTitle>
               <CardDescription>
-                配置TMDB API用于智能识别影视内容
+                TMDB 是全球最大的影视数据库，支持中英文识别
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-2">
-                <Label htmlFor="tmdb_key">API Key *</Label>
+                <Label htmlFor="tmdb_key">API Key</Label>
                 <div className="flex gap-2">
                   <Input
                     id="tmdb_key"
@@ -731,28 +737,80 @@ export default function SettingsPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  在 <a href="https://www.themoviedb.org/settings/api" target="_blank" className="text-primary hover:underline">TMDB官网</a> 申请API Key
+                  在 <a href="https://www.themoviedb.org/settings/api" target="_blank" className="text-primary hover:underline inline-flex items-center gap-1">
+                    TMDB官网 <ExternalLink className="h-3 w-3" />
+                  </a> 免费申请 API Key
                 </p>
               </div>
               
               <div className="grid gap-2">
                 <Label htmlFor="tmdb_language">语言</Label>
-                <Input
-                  id="tmdb_language"
-                  value={settings.tmdb_language}
-                  onChange={(e) => 
-                    setSettings({ ...settings, tmdb_language: e.target.value })
-                  }
-                  placeholder="zh-CN"
-                />
+                <Select 
+                  value={settings.tmdb_language} 
+                  onValueChange={(v) => setSettings({ ...settings, tmdb_language: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择语言" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="zh-CN">中文 (简体)</SelectItem>
+                    <SelectItem value="zh-TW">中文 (繁體)</SelectItem>
+                    <SelectItem value="en-US">English</SelectItem>
+                    <SelectItem value="ja-JP">日本語</SelectItem>
+                    <SelectItem value="ko-KR">한국어</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-
-              <Button onClick={() => handleSave("tmdb")} disabled={saving}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                保存设置
-              </Button>
             </CardContent>
           </Card>
+
+          {/* 豆瓣配置 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded bg-green-600 flex items-center justify-center text-white text-xs font-bold">豆</div>
+                豆瓣影视配置
+              </CardTitle>
+              <CardDescription>
+                豆瓣是国内最全的影视评分网站，对中文内容识别更准确（可选）
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="douban_cookie">Cookie（可选）</Label>
+                <Input
+                  id="douban_cookie"
+                  type="password"
+                  value={settings.douban_cookie}
+                  onChange={(e) => 
+                    setSettings({ ...settings, douban_cookie: e.target.value })
+                  }
+                  placeholder="登录豆瓣后复制Cookie，提高搜索成功率"
+                />
+                <p className="text-xs text-muted-foreground">
+                  不填写Cookie也可以使用，但可能受访问限制。获取方法：
+                  <a href="https://www.douban.com" target="_blank" className="text-primary hover:underline ml-1 inline-flex items-center gap-1">
+                    登录豆瓣 <ExternalLink className="h-3 w-3" />
+                  </a>
+                  → F12开发者工具 → Network → 刷新页面 → 点击任意请求 → 复制Cookie值
+                </p>
+              </div>
+
+              <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                <p className="text-muted-foreground">
+                  💡 <span className="font-medium">提示：</span>系统会优先使用 TMDB 识别，TMDB 无结果时自动回退到豆瓣。两个服务都配置可以获得最佳识别效果。
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 保存按钮 */}
+          <div className="flex justify-end">
+            <Button onClick={() => handleSave("media")} disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              保存设置
+            </Button>
+          </div>
         </TabsContent>
 
         {/* 网络设置 */}

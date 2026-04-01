@@ -272,15 +272,16 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
   try {
     const client = getSupabaseClient()
     
-    // 获取TMDB配置 - 支持两种格式
+    // 获取TMDB和豆瓣配置
     const { data: settings } = await client
       .from('system_settings')
       .select('setting_key, setting_value')
-      .in('setting_key', ['tmdb', 'tmdb_api_key', 'tmdb_language'])
+      .in('setting_key', ['tmdb', 'tmdb_api_key', 'tmdb_language', 'douban_cookie'])
     
     // 解析配置
     let apiKey: string | undefined
     let language = 'zh-CN'
+    let doubanCookie: string | undefined
     
     settings?.forEach((item) => {
       if (item.setting_key === 'tmdb') {
@@ -293,6 +294,8 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
         apiKey = item.setting_value as string
       } else if (item.setting_key === 'tmdb_language') {
         language = (item.setting_value as string) || language
+      } else if (item.setting_key === 'douban_cookie') {
+        doubanCookie = item.setting_value as string
       }
     })
     
@@ -332,7 +335,7 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
     
     // TMDB 没有结果，尝试豆瓣
     try {
-      const doubanService = new DoubanService()
+      const doubanService = new DoubanService({ cookie: doubanCookie })
       const doubanResult = await doubanService.identifyFromFileName(
         title,
         contentType === 'tv_series' ? 'tv' : contentType === 'movie' ? 'movie' : 'unknown'
