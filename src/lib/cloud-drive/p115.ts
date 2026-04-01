@@ -240,10 +240,16 @@ export class Pan115Service implements ICloudDriveService {
       let data = await response.json()
       console.log('[115] /share/send (file_ids) 响应:', JSON.stringify(data))
       
+      // 分享创建成功的标志
+      let shareCreated = false
+      
       if (data.state === true || data.errno === 0) {
+        shareCreated = true
         const responseData = data.data || data
-        shareCode = responseData.share_code || responseData.scode || responseData.code
-        receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
+        // 尝试获取分享码
+        shareCode = responseData.share_code || responseData.scode || responseData.code || responseData.sn || responseData.sharecode
+        receiveCode = responseData.receive_code || responseData.rcode || responseData.password || responseData.code || ''
+        console.log('[115] 分享创建成功，尝试从响应获取分享码:', { shareCode, availableFields: Object.keys(responseData) })
       }
       
       // 尝试方式2: /share/send 使用 cid 参数（文件夹）
@@ -298,55 +304,37 @@ export class Pan115Service implements ICloudDriveService {
         }
       }
       
-      // 尝试方式4: /share/sendapi (新版API)
-      if (!shareCode) {
-        console.log('[115] 尝试 /share/sendapi API...')
-        response = await fetch('https://proapi.115.com/share/send', {
-          method: 'POST',
-          headers: {
-            'Cookie': this.cookie,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            file_ids: fileIds.join(','),
-            expire: expireParam.toString(),
-          }).toString(),
-        })
-        
-        data = await response.json()
-        console.log('[115] /share/sendapi 响应:', JSON.stringify(data))
-        
-        if (data.state === true || data.errno === 0) {
-          const responseData = data.data || data
-          shareCode = responseData.share_code || responseData.scode || responseData.code
-          receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
-        }
-      }
-      
-      // 尝试方式5: 从分享列表获取
-      if (!shareCode) {
-        console.log('[115] 尝试从分享列表获取最新分享...')
-        const listEndpoints = ['/share/mysend', '/share/list', '/share/getlist']
+      // 尝试方式4: 从分享列表获取（如果分享已创建）
+      if (shareCreated && !shareCode) {
+        console.log('[115] 分享已创建但无分享码，尝试从分享列表获取...')
+        const listEndpoints = [
+          '/share/mysend?offset=0&limit=5&aid=1',
+          '/share/list?offset=0&limit=5&aid=1',
+          '/share/getlist?offset=0&limit=5&aid=1',
+        ]
         
         for (const endpoint of listEndpoints) {
           try {
-            const listRes = await fetch(`${this.baseUrl}${endpoint}?offset=0&limit=5`, {
+            const listRes = await fetch(`${this.baseUrl}${endpoint}`, {
               headers: {
                 'Cookie': this.cookie,
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
               },
             })
             const listData = await listRes.json()
-            console.log(`[115] ${endpoint} 响应:`, JSON.stringify(listData).substring(0, 300))
+            console.log(`[115] ${endpoint.split('?')[0]} 响应: state=${listData.state}, data存在=${!!listData.data}`)
             
             if (listData.state === true || listData.errno === 0) {
               const list = listData.data?.list || listData.data || listData.list || []
-              if (list.length > 0) {
+              console.log(`[115] 分享列表长度: ${Array.isArray(list) ? list.length : 0}`)
+              
+              if (Array.isArray(list) && list.length > 0) {
+                // 找到最新创建的分享（通常是第一个）
                 const item = list[0]
-                console.log('[115] 分享项字段:', Object.keys(item).join(', '))
-                shareCode = item.share_code || item.scode || item.code
-                receiveCode = item.receive_code || item.rcode || item.password || ''
+                console.log('[115] 最新分享项字段:', Object.keys(item).join(', '))
+                console.log('[115] 最新分享项内容:', JSON.stringify(item).substring(0, 500))
+                shareCode = item.share_code || item.scode || item.code || item.sn
+                receiveCode = item.receive_code || item.rcode || item.password || item.code || ''
                 if (shareCode) {
                   console.log('[115] 从分享列表获取到分享码:', shareCode)
                   break
