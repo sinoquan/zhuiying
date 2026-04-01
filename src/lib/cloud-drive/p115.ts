@@ -351,6 +351,40 @@ export class Pan115Service implements ICloudDriveService {
         throw new Error('创建分享失败：无法获取分享码。可能是115网盘API限制，请稍后重试')
       }
       
+      // 如果还没有获取到文件大小，尝试从分享列表获取
+      if (totalSize === 0) {
+        console.log('[115] 尝试从分享列表获取文件大小...')
+        const proapiEndpoints = [
+          'https://proapi.115.com/android/2.0/share/slist?limit=5&offset=0',
+        ]
+        
+        for (const endpoint of proapiEndpoints) {
+          try {
+            const listRes = await fetch(endpoint, {
+              headers: {
+                'Cookie': this.cookie,
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/114.0.0.0 Mobile Safari/537.36',
+              },
+            })
+            const listData = await listRes.json()
+            console.log(`[115] 分享列表响应:`, JSON.stringify(listData.data || {}).substring(0, 500))
+            
+            if (listData.state === true || listData.errno === 0) {
+              const list = listData.data?.list || listData.data || listData.list || []
+              if (Array.isArray(list) && list.length > 0) {
+                const item = list[0]
+                totalSize = item.total_size || item.size || listData.data?.total_size || 0
+                fileCount = item.file_count || item.count || listData.data?.count || 1
+                console.log(`[115] 从分享列表获取: total_size=${totalSize}, file_count=${fileCount}`)
+                if (totalSize > 0) break
+              }
+            }
+          } catch (e) {
+            console.log(`[115] 获取分享列表失败:`, e)
+          }
+        }
+      }
+      
       console.log('[115] 分享创建成功:', { shareCode, receiveCode, totalSize, fileCount })
       
       // 如果需要修改为长期有效

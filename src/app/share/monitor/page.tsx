@@ -31,9 +31,10 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Textarea } from "@/components/ui/textarea"
 import { 
   FolderOpen, Plus, MoreHorizontal, Edit, Trash2, Activity, 
-  Loader2, ChevronRight, ChevronLeft, RefreshCw, Home, File
+  Loader2, ChevronRight, ChevronLeft, RefreshCw, Home, File, X, Clock
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -48,7 +49,9 @@ interface FileMonitor {
   id: number
   cloud_drive_id: number
   path: string
+  path_name?: string
   enabled: boolean
+  cron_expression?: string
   created_at: string
   cloud_drives?: {
     name: string
@@ -76,6 +79,18 @@ interface ListResult {
   has_more: boolean
 }
 
+// 预设的cron表达式
+const CRON_PRESETS = [
+  { label: '每5分钟', value: '*/5 * * * *' },
+  { label: '每10分钟', value: '*/10 * * * *' },
+  { label: '每30分钟', value: '*/30 * * * *' },
+  { label: '每小时', value: '0 * * * *' },
+  { label: '每天08:00', value: '0 8 * * *' },
+  { label: '工作时间(7-23点)每10分钟', value: '*/10 7-23 * * *' },
+  { label: '工作时间(7-23点)每30分钟', value: '*/30 7-23 * * *' },
+  { label: '自定义', value: 'custom' },
+]
+
 export default function FileMonitorPage() {
   const [monitors, setMonitors] = useState<FileMonitor[]>([])
   const [drives, setDrives] = useState<CloudDrive[]>([])
@@ -84,15 +99,21 @@ export default function FileMonitorPage() {
   const [editingMonitor, setEditingMonitor] = useState<FileMonitor | null>(null)
   const [formData, setFormData] = useState({
     cloud_drive_id: "",
-    path: "",
+    cron_expression: "*/10 7-23 * * *",
   })
+  
+  // 多选目录
+  const [selectedFolders, setSelectedFolders] = useState<{ path: string; name: string }[]>([])
   
   // 文件浏览状态
   const [browsingFiles, setBrowsingFiles] = useState<CloudFile[]>([])
   const [browsingPath, setBrowsingPath] = useState("/")
-  const [pathHistory, setPathHistory] = useState<string[]>(["/"])
+  const [pathHistory, setPathHistory] = useState<{ path: string; name: string }[]>([{ path: "/", name: "根目录" }])
   const [loadingFiles, setLoadingFiles] = useState(false)
-  const [selectedPath, setSelectedPath] = useState("")
+  
+  // cron预设选择
+  const [cronPreset, setCronPreset] = useState("*/10 7-23 * * *")
+  const [customCron, setCustomCron] = useState("")
 
   useEffect(() => {
     fetchData()
@@ -149,28 +170,30 @@ export default function FileMonitorPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // 使用选中的路径或手动输入的路径
-    const pathToUse = selectedPath || formData.path
+    if (selectedFolders.length === 0) {
+      toast.error("请至少选择一个监控目录")
+      return
+    }
+
+    const cronExpr = cronPreset === 'custom' ? customCron : cronPreset
 
     try {
-      if (editingMonitor) {
-        const response = await fetch(`/api/share/monitor/${editingMonitor.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...formData, path: pathToUse }),
-        })
-        if (!response.ok) throw new Error("更新失败")
-        toast.success("更新成功")
-      } else {
+      // 为每个选中的目录创建监控任务
+      for (const folder of selectedFolders) {
         const response = await fetch("/api/share/monitor", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...formData, path: pathToUse }),
+          body: JSON.stringify({ 
+            cloud_drive_id: formData.cloud_drive_id,
+            path: folder.path,
+            path_name: folder.name,
+            cron_expression: cronExpr,
+          }),
         })
         if (!response.ok) throw new Error("创建失败")
-        toast.success("创建成功")
       }
 
+      toast.success(`成功创建 ${selectedFolders.length} 个监控任务`)
       setDialogOpen(false)
       resetForm()
       fetchData()
@@ -210,21 +233,24 @@ export default function FileMonitorPage() {
   }
 
   const resetForm = () => {
-    setFormData({ cloud_drive_id: "", path: "" })
+    setFormData({ cloud_drive_id: "", cron_expression: "*/10 7-23 * * *" })
     setEditingMonitor(null)
     setBrowsingFiles([])
     setBrowsingPath("/")
-    setPathHistory(["/"])
-    setSelectedPath("")
+    setPathHistory([{ path: "/", name: "根目录" }])
+    setSelectedFolders([])
+    setCronPreset("*/10 7-23 * * *")
+    setCustomCron("")
   }
 
   const openEditDialog = (monitor: FileMonitor) => {
     setEditingMonitor(monitor)
     setFormData({
       cloud_drive_id: monitor.cloud_drive_id.toString(),
-      path: monitor.path,
+      cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
     })
-    setSelectedPath(monitor.path)
+    setSelectedFolders([{ path: monitor.path, name: monitor.path_name || monitor.path.split('/').pop() || monitor.path }])
+    setCronPreset(monitor.cron_expression || "*/10 7-23 * * *")
     setDialogOpen(true)
   }
 
@@ -237,16 +263,23 @@ export default function FileMonitorPage() {
   const handleDoubleClick = (file: CloudFile) => {
     if (file.is_dir) {
       const newPath = file.path || file.id
-      setPathHistory([...pathHistory, newPath])
+      setPathHistory([...pathHistory, { path: newPath, name: file.name }])
       fetchFiles(newPath)
     }
   }
 
-  // 选择文件夹作为监控路径
-  const handleSelectFolder = (file: CloudFile) => {
-    if (file.is_dir) {
-      setSelectedPath(file.path || file.id)
+  // 切换文件夹选择
+  const toggleFolderSelection = (file: CloudFile, checked: boolean | string) => {
+    if (checked === true) {
+      setSelectedFolders(prev => [...prev, { path: file.path || file.id, name: file.name }])
+    } else {
+      setSelectedFolders(prev => prev.filter(f => f.path !== (file.path || file.id)))
     }
+  }
+
+  // 移除选中的文件夹
+  const removeSelectedFolder = (path: string) => {
+    setSelectedFolders(prev => prev.filter(f => f.path !== path))
   }
 
   // 返回上一级
@@ -254,13 +287,13 @@ export default function FileMonitorPage() {
     if (pathHistory.length > 1) {
       const newHistory = pathHistory.slice(0, -1)
       setPathHistory(newHistory)
-      fetchFiles(newHistory[newHistory.length - 1])
+      fetchFiles(newHistory[newHistory.length - 1].path)
     }
   }
 
   // 返回根目录
   const navigateToRoot = () => {
-    setPathHistory(["/"])
+    setPathHistory([{ path: "/", name: "根目录" }])
     fetchFiles("/")
   }
 
@@ -269,7 +302,7 @@ export default function FileMonitorPage() {
     if (index < pathHistory.length - 1) {
       const newHistory = pathHistory.slice(0, index + 1)
       setPathHistory(newHistory)
-      fetchFiles(newHistory[index])
+      fetchFiles(newHistory[index].path)
     }
   }
 
@@ -288,6 +321,14 @@ export default function FileMonitorPage() {
       guangya: "光鸭网盘",
     }
     return drive.alias || labels[drive.name] || drive.name
+  }
+
+  // 解析cron表达式显示人类可读的描述
+  const getCronDescription = (cron?: string) => {
+    if (!cron) return '默认(工作时间每10分钟)'
+    const preset = CRON_PRESETS.find(p => p.value === cron)
+    if (preset) return preset.label
+    return cron
   }
 
   return (
@@ -328,7 +369,8 @@ export default function FileMonitorPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>网盘</TableHead>
-                  <TableHead>监控路径</TableHead>
+                  <TableHead>监控目录</TableHead>
+                  <TableHead>检测频率</TableHead>
                   <TableHead>状态</TableHead>
                   <TableHead>创建时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
@@ -350,9 +392,20 @@ export default function FileMonitorPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <code className="text-sm bg-muted px-2 py-1 rounded">
-                        {monitor.path}
-                      </code>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium text-sm">
+                          {monitor.path_name || monitor.path.split('/').pop() || monitor.path}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {monitor.path}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 text-sm">
+                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                        {getCronDescription(monitor.cron_expression)}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -397,13 +450,13 @@ export default function FileMonitorPage() {
 
       {/* 创建/编辑对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>
               {editingMonitor ? "编辑监控任务" : "新建监控任务"}
             </DialogTitle>
             <DialogDescription>
-              选择网盘和要监控的目录，系统会自动分享新文件
+              选择网盘和要监控的目录，系统会自动分享新文件。支持多选目录。
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
@@ -415,8 +468,8 @@ export default function FileMonitorPage() {
                   value={formData.cloud_drive_id}
                   onValueChange={(value) => {
                     setFormData({ ...formData, cloud_drive_id: value })
-                    setSelectedPath("")
-                    setPathHistory(["/"])
+                    setSelectedFolders([])
+                    setPathHistory([{ path: "/", name: "根目录" }])
                   }}
                   disabled={!!editingMonitor}
                 >
@@ -442,10 +495,73 @@ export default function FileMonitorPage() {
                 </Select>
               </div>
               
+              {/* 检测频率 */}
+              <div className="grid gap-2">
+                <Label>检测频率</Label>
+                <Select
+                  value={cronPreset}
+                  onValueChange={(value) => {
+                    setCronPreset(value)
+                    if (value !== 'custom') {
+                      setFormData({ ...formData, cron_expression: value })
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择检测频率" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CRON_PRESETS.map((preset) => (
+                      <SelectItem key={preset.value} value={preset.value}>
+                        {preset.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {cronPreset === 'custom' && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Input
+                      value={customCron}
+                      onChange={(e) => setCustomCron(e.target.value)}
+                      placeholder="输入cron表达式，如: */10 7-23 * * *"
+                      className="flex-1"
+                    />
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      格式: 分 时 日 月 周
+                    </span>
+                  </div>
+                )}
+              </div>
+              
               {/* 文件浏览器 */}
               {formData.cloud_drive_id && (
                 <div className="grid gap-2">
-                  <Label>选择监控目录</Label>
+                  <Label>选择监控目录（可多选）</Label>
+                  
+                  {/* 已选择的文件夹列表 */}
+                  {selectedFolders.length > 0 && (
+                    <div className="flex flex-wrap gap-2 p-2 bg-green-50 dark:bg-green-950 rounded-lg">
+                      {selectedFolders.map((folder) => (
+                        <Badge 
+                          key={folder.path} 
+                          variant="outline" 
+                          className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 pr-1"
+                        >
+                          <FolderOpen className="h-3 w-3 mr-1" />
+                          {folder.name}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-4 w-4 p-0 ml-1 hover:bg-transparent"
+                            onClick={() => removeSelectedFolder(folder.path)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                   
                   {/* 路径导航 */}
                   <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
@@ -489,7 +605,7 @@ export default function FileMonitorPage() {
                             }`}
                             onClick={() => navigateToPath(i)}
                           >
-                            {p === "/" ? "根目录" : p.split("/").pop()}
+                            {p.name}
                           </span>
                         </span>
                       ))}
@@ -497,7 +613,7 @@ export default function FileMonitorPage() {
                   </div>
                   
                   {/* 文件列表 */}
-                  <div className="border rounded-lg max-h-[250px] overflow-y-auto">
+                  <div className="border rounded-lg max-h-[300px] overflow-y-auto">
                     {loadingFiles ? (
                       <div className="p-8 text-center text-muted-foreground">
                         <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
@@ -508,59 +624,40 @@ export default function FileMonitorPage() {
                         此目录为空或没有子文件夹
                       </div>
                     ) : (
-                      browsingFiles.filter(f => f.is_dir).map((file) => (
-                        <div
-                          key={file.id}
-                          className={`flex items-center gap-3 p-3 border-b last:border-b-0 cursor-pointer hover:bg-muted/30 ${
-                            selectedPath === (file.path || file.id) ? "bg-primary/10" : ""
-                          }`}
-                          onDoubleClick={() => handleDoubleClick(file)}
-                          onClick={() => handleSelectFolder(file)}
-                        >
-                          <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
-                          <span className="flex-1 truncate">{file.name}</span>
-                          {selectedPath === (file.path || file.id) && (
-                            <Badge variant="default" className="text-xs">已选择</Badge>
-                          )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDoubleClick(file)
-                            }}
+                      browsingFiles.filter(f => f.is_dir).map((file) => {
+                        const isSelected = selectedFolders.some(f => f.path === (file.path || file.id))
+                        return (
+                          <div
+                            key={file.id}
+                            className={`flex items-center gap-3 p-3 border-b last:border-b-0 cursor-pointer hover:bg-muted/30 ${
+                              isSelected ? "bg-primary/10" : ""
+                            }`}
+                            onDoubleClick={() => handleDoubleClick(file)}
                           >
-                            <ChevronRight className="h-4 w-4" />
-                            进入
-                          </Button>
-                        </div>
-                      ))
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={(checked) => toggleFolderSelection(file, checked)}
+                              />
+                            </div>
+                            <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
+                            <span className="flex-1 truncate">{file.name}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDoubleClick(file)
+                              }}
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                              进入
+                            </Button>
+                          </div>
+                        )
+                      })
                     )}
-                  </div>
-                  
-                  {/* 已选择的路径 */}
-                  {selectedPath && (
-                    <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-950 rounded-lg">
-                      <Badge variant="outline" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                        已选择
-                      </Badge>
-                      <code className="text-sm">{selectedPath}</code>
-                    </div>
-                  )}
-                  
-                  {/* 手动输入 */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">或手动输入路径:</span>
-                    <Input
-                      value={formData.path}
-                      onChange={(e) => {
-                        setFormData({ ...formData, path: e.target.value })
-                        setSelectedPath("")
-                      }}
-                      placeholder="/path/to/monitor"
-                      className="h-8"
-                    />
                   </div>
                 </div>
               )}
@@ -569,8 +666,11 @@ export default function FileMonitorPage() {
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 取消
               </Button>
-              <Button type="submit" disabled={!formData.cloud_drive_id || (!selectedPath && !formData.path)}>
-                {editingMonitor ? "保存" : "创建"}
+              <Button 
+                type="submit" 
+                disabled={!formData.cloud_drive_id || selectedFolders.length === 0}
+              >
+                {editingMonitor ? "保存" : `创建 ${selectedFolders.length > 0 ? `(${selectedFolders.length}个目录)` : ''}`}
               </Button>
             </DialogFooter>
           </form>

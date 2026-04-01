@@ -319,15 +319,17 @@ export default function ShareRecordsPage() {
   }
 
   // 格式化文件大小
-  const formatFileSize = (size: string | null) => {
+  const formatFileSize = (size: string | null | undefined) => {
     if (!size) return '-'
     const bytes = parseInt(size)
-    if (isNaN(bytes)) return size
+    if (isNaN(bytes) || bytes <= 0) return '-'
     
     const units = ['B', 'KB', 'MB', 'GB', 'TB']
     const k = 1024
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + units[i]
+    // 确保 i 不越界
+    const safeI = Math.min(i, units.length - 1)
+    return parseFloat((bytes / Math.pow(k, safeI)).toFixed(2)) + ' ' + units[safeI]
   }
 
   // 格式化日期时间

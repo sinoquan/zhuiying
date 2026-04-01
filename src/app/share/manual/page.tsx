@@ -214,6 +214,7 @@ export default function ManualSharePage() {
     if (pathHistory.length > 1) {
       const newHistory = pathHistory.slice(0, -1)
       setPathHistory(newHistory)
+      setSelectedFiles(new Set())  // 清空选择
       const previousPath = newHistory[newHistory.length - 1]
       fetchFiles(previousPath.path)
     }
@@ -231,21 +232,27 @@ export default function ManualSharePage() {
     if (index < pathHistory.length - 1) {
       const newHistory = pathHistory.slice(0, index + 1)
       setPathHistory(newHistory)
+      setSelectedFiles(new Set())  // 清空选择
       fetchFiles(newHistory[index].path)
     }
   }
 
   // 切换文件选中状态
-  const toggleFileSelection = (file: CloudFile) => {
-    setSelectedFiles(prev => {
-      const newSelection = new Set(prev)
-      if (newSelection.has(file.id)) {
-        newSelection.delete(file.id)
-      } else {
+  const toggleFileSelection = (file: CloudFile, checked: boolean | string) => {
+    // 只有明确是 true 时才选中，否则取消选中
+    if (checked === true) {
+      setSelectedFiles(prev => {
+        const newSelection = new Set(prev)
         newSelection.add(file.id)
-      }
-      return newSelection
-    })
+        return newSelection
+      })
+    } else {
+      setSelectedFiles(prev => {
+        const newSelection = new Set(prev)
+        newSelection.delete(file.id)
+        return newSelection
+      })
+    }
   }
 
   // 全选/取消全选
@@ -477,7 +484,7 @@ export default function ManualSharePage() {
                           <div onClick={(e) => e.stopPropagation()}>
                             <Checkbox
                               checked={selectedFiles.has(file.id)}
-                              onCheckedChange={() => toggleFileSelection(file)}
+                              onCheckedChange={(checked) => toggleFileSelection(file, checked)}
                             />
                           </div>
                           
@@ -552,7 +559,7 @@ export default function ManualSharePage() {
                           variant="ghost"
                           size="sm"
                           className="h-6 w-6 p-0"
-                          onClick={() => toggleFileSelection(file)}
+                          onClick={() => toggleFileSelection(file, false)}
                         >
                           <Square className="h-3 w-3" />
                         </Button>

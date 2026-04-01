@@ -14,7 +14,9 @@ export async function PUT(
     const updateData: Record<string, any> = {}
     
     if (body.path !== undefined) updateData.path = body.path
+    if (body.path_name !== undefined) updateData.path_name = body.path_name
     if (body.enabled !== undefined) updateData.enabled = body.enabled
+    if (body.cron_expression !== undefined) updateData.cron_expression = body.cron_expression
     
     const { data, error } = await client
       .from('file_monitors')
