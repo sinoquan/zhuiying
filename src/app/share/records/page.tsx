@@ -389,8 +389,8 @@ export default function ShareRecordsPage() {
     const config = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.pending
     const Icon = config.icon
     return (
-      <Badge variant="outline" className={`${config.color} border`}>
-        <Icon className="h-3 w-3 mr-1" />
+      <Badge variant="outline" className={`${config.color} border text-xs px-1.5 py-0`}>
+        <Icon className="h-2.5 w-2.5 mr-0.5" />
         {config.label}
       </Badge>
     )
@@ -401,8 +401,8 @@ export default function ShareRecordsPage() {
     const config = SOURCE_CONFIG[source as keyof typeof SOURCE_CONFIG] || SOURCE_CONFIG.manual
     const Icon = config.icon
     return (
-      <Badge variant="outline" className={`${config.color} border`}>
-        <Icon className="h-3 w-3 mr-1" />
+      <Badge variant="outline" className={`${config.color} border text-xs px-1.5 py-0`}>
+        <Icon className="h-2.5 w-2.5 mr-0.5" />
         {config.label}
       </Badge>
     )
@@ -413,8 +413,8 @@ export default function ShareRecordsPage() {
     const config = CONTENT_TYPE_CONFIG[contentType as keyof typeof CONTENT_TYPE_CONFIG] || CONTENT_TYPE_CONFIG.unknown
     const Icon = config.icon
     return (
-      <Badge variant="outline" className="text-xs">
-        <Icon className="h-3 w-3 mr-1" />
+      <Badge variant="outline" className="text-xs px-1.5 py-0">
+        <Icon className="h-2.5 w-2.5 mr-0.5" />
         {config.label}
       </Badge>
     )
@@ -424,7 +424,7 @@ export default function ShareRecordsPage() {
   const getPushStatusBadge = (pushInfo?: PushInfo[]) => {
     if (!pushInfo || pushInfo.length === 0) {
       return (
-        <Badge variant="outline" className="text-xs bg-gray-50 text-gray-500 border-gray-200">
+        <Badge variant="outline" className="text-xs bg-gray-50 text-gray-500 border-gray-200 px-1.5 py-0">
           未推送
         </Badge>
       )
@@ -435,26 +435,26 @@ export default function ShareRecordsPage() {
     
     if (successCount === pushInfo.length) {
       return (
-        <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200">
-          <CheckCircle2 className="h-3 w-3 mr-1" />
-          已推送 {successCount}
+        <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200 px-1.5 py-0">
+          <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />
+          {successCount}
         </Badge>
       )
     }
     
     if (failedCount === pushInfo.length) {
       return (
-        <Badge variant="outline" className="text-xs bg-red-50 text-red-600 border-red-200">
-          <XCircle className="h-3 w-3 mr-1" />
-          推送失败
+        <Badge variant="outline" className="text-xs bg-red-50 text-red-600 border-red-200 px-1.5 py-0">
+          <XCircle className="h-2.5 w-2.5 mr-0.5" />
+          失败
         </Badge>
       )
     }
     
     return (
-      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
-        <AlertCircle className="h-3 w-3 mr-1" />
-        部分 {successCount}/{pushInfo.length}
+      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200 px-1.5 py-0">
+        <AlertCircle className="h-2.5 w-2.5 mr-0.5" />
+        {successCount}/{pushInfo.length}
       </Badge>
     )
   }
@@ -553,130 +553,128 @@ export default function ShareRecordsPage() {
               <p>暂无分享记录</p>
             </div>
           ) : (
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-28">分享时间</TableHead>
-                  <TableHead className="w-32">网盘</TableHead>
-                  <TableHead className="w-44">文件名</TableHead>
-                  <TableHead className="w-56">分享链接</TableHead>
-                  <TableHead className="w-12">类型</TableHead>
-                  <TableHead className="w-12">大小</TableHead>
-                  <TableHead className="w-12">有效期</TableHead>
-                  <TableHead className="w-16">链接状态</TableHead>
-                  <TableHead className="w-16">推送状态</TableHead>
-                  <TableHead className="w-14">来源</TableHead>
-                  <TableHead className="w-24">操作</TableHead>
+                  <TableHead className="w-24 px-2">时间</TableHead>
+                  <TableHead className="w-28 px-2">网盘</TableHead>
+                  <TableHead className="px-2">文件名</TableHead>
+                  <TableHead className="w-52 px-2">分享链接</TableHead>
+                  <TableHead className="w-12 px-2">类型</TableHead>
+                  <TableHead className="w-14 px-2">大小</TableHead>
+                  <TableHead className="w-12 px-2">有效期</TableHead>
+                  <TableHead className="w-16 px-2">链接</TableHead>
+                  <TableHead className="w-16 px-2">推送</TableHead>
+                  <TableHead className="w-14 px-2">来源</TableHead>
+                  <TableHead className="w-20 px-2">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {records.map((record) => (
                   <TableRow key={record.id}>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="text-xs text-muted-foreground px-2 py-2">
                       {formatDateTime(record.created_at)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-2 py-2">
                       <div className="flex items-center gap-1">
                         <img 
                           src={getCloudDriveIcon(record.cloud_drives?.name || '')} 
                           alt={record.cloud_drives?.name || ''}
                           className="w-4 h-4 rounded flex-shrink-0"
                         />
-                        <span className="text-xs truncate">
+                        <span className="text-xs">
                           {record.cloud_drives?.alias || CLOUD_DRIVE_NAMES[record.cloud_drives?.name || ''] || record.cloud_drives?.name || '-'}
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-2 py-2">
                       <div className="flex flex-col">
-                        <span className="font-medium text-sm truncate max-w-[150px]" title={record.file_name}>
+                        <span className="font-medium text-sm" title={record.file_name}>
                           {record.tmdb_title || record.file_name}
                         </span>
                         {record.tmdb_title && record.tmdb_title !== record.file_name && (
-                          <span className="text-xs text-muted-foreground truncate max-w-[150px]" title={record.file_name}>
+                          <span className="text-xs text-muted-foreground truncate" title={record.file_name}>
                             {record.file_name}
                           </span>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-2 py-2">
                       {record.share_url ? (
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1">
-                            <a 
-                              href={record.share_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline text-xs truncate max-w-[200px]"
-                              title={record.share_url}
-                            >
-                              {record.share_url.replace('https://', '').replace('115cdn.com/s/', '115.com/s/')}
-                            </a>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-5 w-5 flex-shrink-0"
-                              onClick={() => copyLink(record)}
-                            >
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                          </div>
+                        <div className="flex items-center gap-1">
+                          <a 
+                            href={record.share_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline text-xs whitespace-nowrap"
+                            title={record.share_url}
+                          >
+                            {record.share_url.replace('https://', '').replace('115cdn.com/s/', '115.com/s/')}
+                          </a>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-4 w-4 flex-shrink-0"
+                            onClick={() => copyLink(record)}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
                           {record.share_code && (
-                            <span className="text-xs text-muted-foreground">
-                              提取码: {record.share_code}
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              码:{record.share_code}
                             </span>
                           )}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground text-sm">-</span>
+                        <span className="text-muted-foreground text-xs">-</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-2 py-2">
                       {getContentTypeBadge(record.content_type)}
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="text-xs px-2 py-2">
                       {formatFileSize(record.file_size)}
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="text-xs px-2 py-2">
                       {formatExpireAt(record.expire_at)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-2 py-2">
                       {getStatusBadge(record.share_status)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-2 py-2">
                       {getPushStatusBadge(record.push_info)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-2 py-2">
                       {getSourceBadge(record.source)}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
+                    <TableCell className="px-2 py-2">
+                      <div className="flex items-center gap-0.5">
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-7 w-7"
+                          className="h-6 w-6"
                           onClick={() => openPushDialog(record)}
                           title="推送"
                         >
-                          <Send className="h-3.5 w-3.5" />
+                          <Send className="h-3 w-3" />
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-7 w-7"
+                          className="h-6 w-6"
                           onClick={() => openEditDialog(record)}
                           title="编辑"
                         >
-                          <Edit className="h-3.5 w-3.5" />
+                          <Edit className="h-3 w-3" />
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          className="h-6 w-6 text-destructive hover:text-destructive"
                           onClick={() => openDeleteDialog(record)}
                           title="删除"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     </TableCell>
