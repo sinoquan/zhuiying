@@ -558,13 +558,13 @@ export default function ShareRecordsPage() {
                 <TableRow>
                   <TableHead className="w-24 px-2">时间</TableHead>
                   <TableHead className="w-28 px-2">网盘</TableHead>
-                  <TableHead className="px-2">文件名</TableHead>
-                  <TableHead className="w-52 px-2">分享链接</TableHead>
+                  <TableHead className="w-60 px-2">文件名</TableHead>
+                  <TableHead className="w-60 px-2">分享链接</TableHead>
                   <TableHead className="w-12 px-2">类型</TableHead>
                   <TableHead className="w-14 px-2">大小</TableHead>
                   <TableHead className="w-12 px-2">有效期</TableHead>
-                  <TableHead className="w-16 px-2">链接</TableHead>
-                  <TableHead className="w-16 px-2">推送</TableHead>
+                  <TableHead className="w-14 px-2">链接</TableHead>
+                  <TableHead className="w-14 px-2">推送</TableHead>
                   <TableHead className="w-14 px-2">来源</TableHead>
                   <TableHead className="w-20 px-2">操作</TableHead>
                 </TableRow>
@@ -589,7 +589,7 @@ export default function ShareRecordsPage() {
                     </TableCell>
                     <TableCell className="px-2 py-2">
                       <div className="flex flex-col">
-                        <span className="font-medium text-sm" title={record.file_name}>
+                        <span className="font-medium text-sm truncate" title={record.file_name}>
                           {record.tmdb_title || record.file_name}
                         </span>
                         {record.tmdb_title && record.tmdb_title !== record.file_name && (
