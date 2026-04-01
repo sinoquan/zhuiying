@@ -46,12 +46,47 @@ export class Pan115Service implements ICloudDriveService {
 
   async getUserInfo(): Promise<{ name: string; avatar?: string; vip?: boolean }> {
     try {
-      const data = await this.request('/user/userinfo')
-      return {
-        name: data.data?.user_name || '未知用户',
-        avatar: data.data?.user_face,
-        vip: data.data?.is_vip === 1,
+      // 尝试多个API获取用户信息
+      const endpoints = [
+        '/user/userinfo',  // 主接口
+        '/user/info',      // 备用接口（返回手机号）
+      ]
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${this.baseUrl}${endpoint}`, {
+            headers: {
+              'Cookie': this.cookie,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          })
+          
+          const data = await response.json()
+          
+          if (data.state === true) {
+            // /user/info 返回手机号
+            if (endpoint === '/user/info' && data.data) {
+              return {
+                name: data.data,  // 手机号
+                avatar: undefined,
+                vip: undefined,
+              }
+            }
+            // /user/userinfo 返回详细信息
+            if (data.data?.user_name) {
+              return {
+                name: data.data.user_name,
+                avatar: data.data.user_face,
+                vip: data.data.is_vip === 1,
+              }
+            }
+          }
+        } catch (e) {
+          console.log(`[115] API ${endpoint} failed:`, e)
+        }
       }
+      
+      throw new Error('获取用户信息失败')
     } catch (error) {
       throw new Error('获取用户信息失败')
     }
@@ -233,9 +268,25 @@ export class Pan115Service implements ICloudDriveService {
   }
 
   async validateConfig(): Promise<boolean> {
+    // 尝试多种方式验证配置
     try {
       await this.getUserInfo()
       return true
+    } catch {
+      // getUserInfo 失败，尝试其他方式
+    }
+    
+    // 备用方式：尝试获取文件列表
+    try {
+      const response = await fetch(`${this.baseUrl}/files?aid=1&cid=0&offset=0&limit=1`, {
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      })
+      
+      const data = await response.json()
+      return data.state === true || data.data !== undefined
     } catch {
       return false
     }

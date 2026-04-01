@@ -31,7 +31,6 @@ import {
   Power
 } from "lucide-react"
 import { toast } from "sonner"
-import { Pan115LoginDialog } from "@/components/cloud-drive/pan115-login-dialog"
 import { driveTypeOptions, getDriveIcon, getDriveName } from "@/lib/icons"
 import {
   DropdownMenu,
@@ -73,7 +72,6 @@ const DRIVE_TYPES = driveTypeOptions.map(opt => ({
   value: opt.value,
   label: opt.label,
   icon: opt.icon,
-  hasCustomLogin: opt.value === '115',
 }))
 
 export default function CloudDrivesPage() {
@@ -81,7 +79,6 @@ export default function CloudDrivesPage() {
   const [spaceInfo, setSpaceInfo] = useState<Record<number, SpaceInfo>>({})
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [pan115LoginOpen, setPan115LoginOpen] = useState(false)
   const [editingDrive, setEditingDrive] = useState<CloudDrive | null>(null)
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState<{ valid: boolean; message: string } | null>(null)
@@ -129,13 +126,7 @@ export default function CloudDrivesPage() {
   }
 
   const handleAddDrive = (driveType: string) => {
-    // 115网盘使用专用登录对话框
-    if (driveType === '115') {
-      setPan115LoginOpen(true)
-      return
-    }
-    
-    // 其他网盘使用通用配置对话框
+    // 所有网盘使用通用配置对话框
     setFormData({ name: driveType, alias: "", config: "" })
     setEditingDrive(null)
     setValidationResult(null)
@@ -146,10 +137,19 @@ export default function CloudDrivesPage() {
     e.preventDefault()
     
     try {
+      let config = null
+      
+      // 115网盘使用cookie字段，其他网盘使用JSON格式
+      if (formData.name === '115') {
+        config = { cookie: formData.config }
+      } else if (formData.config) {
+        config = JSON.parse(formData.config)
+      }
+
       const payload = {
         name: formData.name,
         alias: formData.alias || null,
-        config: formData.config ? JSON.parse(formData.config) : null,
+        config,
       }
 
       if (editingDrive) {
@@ -247,10 +247,21 @@ export default function CloudDrivesPage() {
 
   const openEditDialog = (drive: CloudDrive) => {
     setEditingDrive(drive)
+    
+    // 115网盘直接显示cookie值
+    let configValue = ""
+    if (drive.config) {
+      if (drive.name === '115' && drive.config.cookie) {
+        configValue = drive.config.cookie
+      } else {
+        configValue = JSON.stringify(drive.config, null, 2)
+      }
+    }
+    
     setFormData({
       name: drive.name,
       alias: drive.alias || "",
-      config: drive.config ? JSON.stringify(drive.config, null, 2) : "",
+      config: configValue,
     })
     setValidationResult(null)
     setDialogOpen(true)
@@ -452,13 +463,6 @@ export default function CloudDrivesPage() {
         </div>
       )}
 
-      {/* 115网盘专用登录对话框 */}
-      <Pan115LoginDialog 
-        open={pan115LoginOpen} 
-        onOpenChange={setPan115LoginOpen}
-        onSuccess={fetchDrives}
-      />
-
       {/* 通用网盘配置对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl">
@@ -481,19 +485,37 @@ export default function CloudDrivesPage() {
                   placeholder="为网盘起一个易于识别的名字"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="config">配置信息 (JSON格式)</Label>
-                <textarea
-                  id="config"
-                  className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={formData.config}
-                  onChange={(e) => setFormData({ ...formData, config: e.target.value })}
-                  placeholder={`{\n  "cookie": "your_cookie",\n  "token": "your_token"\n}`}
-                />
-                <p className="text-xs text-muted-foreground">
-                  填写网盘API所需的认证信息，如Cookie、Token等
-                </p>
-              </div>
+              
+              {/* 115网盘专用Cookie输入 */}
+              {formData.name === '115' ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="cookie">Cookie</Label>
+                  <textarea
+                    id="cookie"
+                    className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                    value={formData.config}
+                    onChange={(e) => setFormData({ ...formData, config: e.target.value })}
+                    placeholder="粘贴完整的Cookie字符串，例如：UID=xxx; CID=xxx; SEID=xxx; KID=xxx"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    从浏览器中登录115网盘后，按F12打开开发者工具，在 Network 标签页找到任意请求，复制请求头中的 Cookie 值
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  <Label htmlFor="config">配置信息 (JSON格式)</Label>
+                  <textarea
+                    id="config"
+                    className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                    value={formData.config}
+                    onChange={(e) => setFormData({ ...formData, config: e.target.value })}
+                    placeholder={`{\n  "cookie": "your_cookie",\n  "token": "your_token"\n}`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    填写网盘API所需的认证信息，如Cookie、Token等
+                  </p>
+                </div>
+              )}
 
               {/* 验证结果 */}
               {validationResult && (
