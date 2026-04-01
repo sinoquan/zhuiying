@@ -29,7 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { 
-  FileText, Copy, Edit, Trash2, 
+  FileText, Copy, Trash2, 
   Send, RefreshCw, Search, ChevronLeft, ChevronRight, Bot, Eye, 
   Hand, Clock, CheckCircle2, XCircle, AlertCircle, Loader2,
   Film, Tv, File, Check
@@ -140,15 +140,11 @@ export default function ShareRecordsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   
   // 对话框
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [pushDialogOpen, setPushDialogOpen] = useState(false)
   const [selectedRecord, setSelectedRecord] = useState<ShareRecord | null>(null)
   const [selectedChannels, setSelectedChannels] = useState<Set<number>>(new Set())
-  
-  // 编辑表单
-  const [editRemark, setEditRemark] = useState('')
-  const [editTags, setEditTags] = useState('')
   
   // 操作状态
   const [saving, setSaving] = useState(false)
@@ -227,39 +223,31 @@ export default function ShareRecordsPage() {
     toast.success("已复制到剪贴板")
   }
 
-  // 打开编辑对话框
-  const openEditDialog = (record: ShareRecord) => {
+  // 打开取消分享对话框
+  const openCancelDialog = (record: ShareRecord) => {
     setSelectedRecord(record)
-    setEditRemark(record.remark || '')
-    setEditTags(record.tags?.join(', ') || '')
-    setEditDialogOpen(true)
+    setCancelDialogOpen(true)
   }
 
-  // 保存编辑
-  const saveEdit = async () => {
+  // 取消分享
+  const cancelShare = async () => {
     if (!selectedRecord) return
     
     setSaving(true)
     try {
-      const tags = editTags.split(',').map(t => t.trim()).filter(t => t)
-      
-      const response = await fetch("/api/share/records", {
-        method: 'PATCH',
+      const response = await fetch("/api/share/records/cancel", {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedRecord.id,
-          remark: editRemark,
-          tags,
-        }),
+        body: JSON.stringify({ id: selectedRecord.id }),
       })
       
-      if (!response.ok) throw new Error('保存失败')
+      if (!response.ok) throw new Error('取消分享失败')
       
-      toast.success("保存成功")
-      setEditDialogOpen(false)
+      toast.success("分享已取消")
+      setCancelDialogOpen(false)
       fetchRecords()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "保存失败")
+      toast.error(error instanceof Error ? error.message : "取消分享失败")
     } finally {
       setSaving(false)
     }
@@ -688,10 +676,11 @@ export default function ShareRecordsPage() {
                             variant="ghost" 
                             size="icon" 
                             className="h-7 w-7"
-                            onClick={() => openEditDialog(record)}
-                            title="编辑"
+                            onClick={() => openCancelDialog(record)}
+                            title="取消分享"
+                            disabled={record.share_status === 'cancelled' || record.share_status === 'expired'}
                           >
-                            <Edit className="h-4 w-4" />
+                            <XCircle className="h-4 w-4" />
                           </Button>
                           <Button 
                             variant="ghost" 
@@ -745,40 +734,27 @@ export default function ShareRecordsPage() {
         </div>
       )}
 
-      {/* 编辑对话框 */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+      {/* 取消分享对话框 */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>编辑分享记录</DialogTitle>
+            <DialogTitle>取消分享</DialogTitle>
             <DialogDescription>
-              修改备注和标签信息
+              确定要取消这个分享链接吗？取消后链接将失效。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">备注</label>
-              <Input
-                value={editRemark}
-                onChange={(e) => setEditRemark(e.target.value)}
-                placeholder="添加备注..."
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">标签</label>
-              <Input
-                value={editTags}
-                onChange={(e) => setEditTags(e.target.value)}
-                placeholder="多个标签用逗号分隔"
-              />
-            </div>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              文件: {selectedRecord?.file_name}
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>
               取消
             </Button>
-            <Button onClick={saveEdit} disabled={saving}>
+            <Button variant="destructive" onClick={cancelShare} disabled={saving}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              保存
+              确认取消分享
             </Button>
           </DialogFooter>
         </DialogContent>

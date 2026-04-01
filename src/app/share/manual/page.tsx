@@ -273,6 +273,7 @@ export default function ManualSharePage() {
       const selectedFilesList = files.filter(f => selectedFiles.has(f.id))
       const fileNames = selectedFilesList.map(f => f.name)
       const filePaths = selectedFilesList.map(f => f.path || currentPath)
+      const fileSizes = selectedFilesList.map(f => f.size || 0)
 
       const response = await fetch(`/api/cloud-drives/${selectedDrive}/share`, {
         method: "POST",
@@ -281,6 +282,7 @@ export default function ManualSharePage() {
           file_ids: Array.from(selectedFiles),
           file_names: fileNames,
           file_paths: filePaths,
+          file_sizes: fileSizes,
           expire_days: expireDays,
         }),
       })
