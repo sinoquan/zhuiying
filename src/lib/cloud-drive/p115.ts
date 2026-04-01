@@ -246,15 +246,36 @@ export class Pan115Service implements ICloudDriveService {
       }
       
       // 尝试多种可能的字段名获取分享码
-      // 115网盘的响应格式可能是：
-      // { state: true, data: { share_code: "xxx", receive_code: "xxx" } }
-      // 或 { state: true, share_code: "xxx", receive_code: "xxx" }
-      // 或 { state: true, code: "xxx" }
       const responseData = data.data || data
-      const shareCode = responseData.share_code || responseData.code || responseData.scode || data.share_code || data.code
-      const receiveCode = responseData.receive_code || responseData.rcode || data.receive_code || data.rcode || ''
+      let shareCode = responseData.share_code || responseData.code || responseData.scode || data.share_code || data.code
+      let receiveCode = responseData.receive_code || responseData.rcode || data.receive_code || data.rcode || ''
       
-      console.log('[115] 解析的分享码:', { shareCode, receiveCode, responseDataKeys: Object.keys(responseData) })
+      // 如果响应中没有分享码，需要从分享列表获取
+      if (!shareCode) {
+        console.log('[115] 响应中无分享码，尝试从分享列表获取...')
+        try {
+          // 获取分享列表，最新的分享在最前面
+          const listResponse = await fetch(`${this.baseUrl}/share/list?offset=0&limit=1`, {
+            headers: {
+              'Cookie': this.cookie,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          })
+          const listData = await listResponse.json()
+          console.log('[115] 分享列表响应:', JSON.stringify(listData, null, 2))
+          
+          if (listData.state === true && listData.data?.length > 0) {
+            const latestShare = listData.data[0]
+            shareCode = latestShare.share_code || latestShare.code || latestShare.scode
+            receiveCode = latestShare.receive_code || latestShare.rcode || latestShare.code || ''
+            console.log('[115] 从分享列表获取到分享码:', { shareCode, receiveCode })
+          }
+        } catch (listError) {
+          console.error('[115] 获取分享列表失败:', listError)
+        }
+      }
+      
+      console.log('[115] 解析的分享码:', { shareCode, receiveCode })
       
       if (!shareCode) {
         console.error('[115] 未获取到分享码，响应数据:', JSON.stringify(data))
