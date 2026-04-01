@@ -553,13 +553,13 @@ export default function ShareRecordsPage() {
               <p>暂无分享记录</p>
             </div>
           ) : (
-            <Table className="table-fixed">
+            <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[88px] px-2">时间</TableHead>
                   <TableHead className="w-[88px] px-2">网盘</TableHead>
-                  <TableHead className="w-[280px] px-2">文件名</TableHead>
-                  <TableHead className="w-[280px] px-2">分享链接</TableHead>
+                  <TableHead className="min-w-[280px] px-2">文件名</TableHead>
+                  <TableHead className="min-w-[280px] px-2">分享链接</TableHead>
                   <TableHead className="w-12 px-2">类型</TableHead>
                   <TableHead className="w-14 px-2">大小</TableHead>
                   <TableHead className="w-12 px-2">有效期</TableHead>
