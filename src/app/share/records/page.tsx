@@ -415,6 +415,45 @@ export default function ShareRecordsPage() {
     )
   }
 
+  // 获取推送状态Badge
+  const getPushStatusBadge = (pushInfo?: PushInfo[]) => {
+    if (!pushInfo || pushInfo.length === 0) {
+      return (
+        <Badge variant="outline" className="text-xs bg-gray-50 text-gray-500 border-gray-200">
+          未推送
+        </Badge>
+      )
+    }
+    
+    const successCount = pushInfo.filter(p => p.push_status === 'success').length
+    const failedCount = pushInfo.filter(p => p.push_status === 'failed').length
+    
+    if (successCount === pushInfo.length) {
+      return (
+        <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          已推送 {successCount}
+        </Badge>
+      )
+    }
+    
+    if (failedCount === pushInfo.length) {
+      return (
+        <Badge variant="outline" className="text-xs bg-red-50 text-red-600 border-red-200">
+          <XCircle className="h-3 w-3 mr-1" />
+          推送失败
+        </Badge>
+      )
+    }
+    
+    return (
+      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
+        <AlertCircle className="h-3 w-3 mr-1" />
+        部分 {successCount}/{pushInfo.length}
+      </Badge>
+    )
+  }
+
   return (
     <div className="p-8">
       <div className="mb-8">
@@ -505,17 +544,17 @@ export default function ShareRecordsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-40">分享时间</TableHead>
-                  <TableHead className="w-24">网盘</TableHead>
-                  <TableHead>文件名</TableHead>
-                  <TableHead className="w-48">分享链接</TableHead>
-                  <TableHead className="w-20">类型</TableHead>
-                  <TableHead className="w-20">大小</TableHead>
-                  <TableHead className="w-20">有效期</TableHead>
-                  <TableHead className="w-24">状态</TableHead>
-                  <TableHead className="w-16">接收</TableHead>
-                  <TableHead className="w-24">来源</TableHead>
-                  <TableHead className="w-20">操作</TableHead>
+                  <TableHead className="w-36">分享时间</TableHead>
+                  <TableHead className="w-20">网盘</TableHead>
+                  <TableHead className="w-48">文件名</TableHead>
+                  <TableHead className="w-36">分享链接</TableHead>
+                  <TableHead className="w-16">类型</TableHead>
+                  <TableHead className="w-16">大小</TableHead>
+                  <TableHead className="w-16">有效期</TableHead>
+                  <TableHead className="w-20">状态</TableHead>
+                  <TableHead className="w-20">推送状态</TableHead>
+                  <TableHead className="w-20">来源</TableHead>
+                  <TableHead className="w-28">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -525,59 +564,52 @@ export default function ShareRecordsPage() {
                       {formatDateTime(record.created_at)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">
+                      <Badge variant="outline" className="text-xs">
                         {record.cloud_drives?.alias || record.cloud_drives?.name || '-'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium truncate max-w-xs" title={record.file_name}>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm truncate" title={record.file_name}>
                           {record.tmdb_title || record.file_name}
                         </span>
                         {record.tmdb_title && record.tmdb_title !== record.file_name && (
-                          <span className="text-xs text-muted-foreground truncate max-w-xs" title={record.file_name}>
+                          <span className="text-xs text-muted-foreground truncate" title={record.file_name}>
                             {record.file_name}
                           </span>
-                        )}
-                        {record.tags && record.tags.length > 0 && (
-                          <div className="flex gap-1 flex-wrap">
-                            {record.tags.slice(0, 3).map((tag, i) => (
-                              <Badge key={i} variant="secondary" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
                       {record.share_url ? (
-                        <div className="flex items-center gap-2">
-                          <a 
-                            href={record.share_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline text-sm truncate max-w-[120px]"
-                            title={record.share_url}
-                          >
-                            {record.share_url.replace('https://', '')}
-                          </a>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-6 w-6"
-                            onClick={() => copyLink(record)}
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1">
+                            <a 
+                              href={record.share_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline text-xs truncate max-w-[100px]"
+                              title={record.share_url}
+                            >
+                              {record.share_url.replace('https://', '').replace('115cdn.com/s/', '115.com/s/')}
+                            </a>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-5 w-5"
+                              onClick={() => copyLink(record)}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          {record.share_code && (
+                            <span className="text-xs text-muted-foreground">
+                              提取码: {record.share_code}
+                            </span>
+                          )}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                      {record.share_code && (
-                        <div className="text-xs text-muted-foreground">
-                          提取码: {record.share_code}
-                        </div>
+                        <span className="text-muted-foreground text-sm">-</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -592,37 +624,42 @@ export default function ShareRecordsPage() {
                     <TableCell>
                       {getStatusBadge(record.share_status)}
                     </TableCell>
-                    <TableCell className="text-center">
-                      <span className="text-sm">{record.access_count || 0}</span>
+                    <TableCell>
+                      {getPushStatusBadge(record.push_info)}
                     </TableCell>
                     <TableCell>
                       {getSourceBadge(record.source)}
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openPushDialog(record)}>
-                            <Send className="h-4 w-4 mr-2" />
-                            推送
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openEditDialog(record)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            编辑
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => openDeleteDialog(record)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7"
+                          onClick={() => openPushDialog(record)}
+                          title="推送"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7"
+                          onClick={() => openEditDialog(record)}
+                          title="编辑"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => openDeleteDialog(record)}
+                          title="删除"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
