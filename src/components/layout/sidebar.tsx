@@ -48,7 +48,6 @@ const menuItems = [
     children: [
       { title: "文件监控", href: "/share/monitor", icon: FolderOpen },
       { title: "手动分享", href: "/share/manual", icon: Hand },
-      { title: "智能分享", href: "/share/smart", icon: Sparkles },
       { title: "分享记录", href: "/share/records", icon: FileText },
     ],
   },

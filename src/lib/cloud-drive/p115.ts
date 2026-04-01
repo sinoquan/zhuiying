@@ -451,7 +451,10 @@ export class Pan115Service implements ICloudDriveService {
     console.log('[115] 开始取消分享, shareCode:', shareCode)
     
     try {
-      // 方法1：使用 webapi
+      // 尝试多种API取消分享
+      
+      // 方法1：使用 webapi share/delete
+      console.log('[115] 方法1: webapi share/delete')
       const deleteUrl = 'https://webapi.115.com/share/delete'
       const response = await fetch(deleteUrl, {
         method: 'POST',
@@ -468,13 +471,14 @@ export class Pan115Service implements ICloudDriveService {
       const data = await response.json()
       console.log('[115] share/delete 响应:', JSON.stringify(data))
       
-      if (data.state === true || data.errno === 0) {
-        console.log('[115] 分享取消成功')
+      // 必须同时满足 state=true 才算成功
+      if (data.state === true) {
+        console.log('[115] 方法1成功：分享取消成功')
         return true
       }
       
-      // 方法2：尝试 proapi
-      console.log('[115] 方法1失败，尝试 proapi...')
+      // 方法2：尝试 proapi share/delete
+      console.log('[115] 方法1失败，尝试方法2: proapi share/delete')
       const proapiUrl = 'https://proapi.115.com/android/2.0/share/delete'
       const proapiRes = await fetch(proapiUrl, {
         method: 'POST',
@@ -491,12 +495,61 @@ export class Pan115Service implements ICloudDriveService {
       const proapiData = await proapiRes.json()
       console.log('[115] proapi share/delete 响应:', JSON.stringify(proapiData))
       
-      if (proapiData.state === true || proapiData.errno === 0) {
-        console.log('[115] proapi 分享取消成功')
+      if (proapiData.state === true) {
+        console.log('[115] 方法2成功：分享取消成功')
         return true
       }
       
-      throw new Error(data.error || proapiData.error || '取消分享失败')
+      // 方法3：尝试 share/remove API
+      console.log('[115] 方法2失败，尝试方法3: share/remove')
+      const removeUrl = 'https://webapi.115.com/share/remove'
+      const removeRes = await fetch(removeUrl, {
+        method: 'POST',
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          share_code: shareCode,
+        }).toString(),
+      })
+      
+      const removeData = await removeRes.json()
+      console.log('[115] share/remove 响应:', JSON.stringify(removeData))
+      
+      if (removeData.state === true) {
+        console.log('[115] 方法3成功：分享取消成功')
+        return true
+      }
+      
+      // 方法4：尝试 share/cancel API
+      console.log('[115] 方法3失败，尝试方法4: share/cancel')
+      const cancelUrl = 'https://webapi.115.com/share/cancel'
+      const cancelRes = await fetch(cancelUrl, {
+        method: 'POST',
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          share_code: shareCode,
+        }).toString(),
+      })
+      
+      const cancelData = await cancelRes.json()
+      console.log('[115] share/cancel 响应:', JSON.stringify(cancelData))
+      
+      if (cancelData.state === true) {
+        console.log('[115] 方法4成功：分享取消成功')
+        return true
+      }
+      
+      // 所有方法都失败了
+      const errorMsg = data.error || proapiData.error || removeData.error || cancelData.error || '取消分享失败'
+      console.error('[115] 所有取消分享方法都失败:', errorMsg)
+      throw new Error(errorMsg)
     } catch (error) {
       console.error('[115] 取消分享失败:', error)
       throw error

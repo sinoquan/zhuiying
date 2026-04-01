@@ -235,21 +235,24 @@ export default function ManualSharePage() {
 
   // 切换文件选中状态
   const toggleFileSelection = (file: CloudFile) => {
-    const newSelection = new Set(selectedFiles)
-    if (newSelection.has(file.id)) {
-      newSelection.delete(file.id)
-    } else {
-      newSelection.add(file.id)
-    }
-    setSelectedFiles(newSelection)
+    setSelectedFiles(prev => {
+      const newSelection = new Set(prev)
+      if (newSelection.has(file.id)) {
+        newSelection.delete(file.id)
+      } else {
+        newSelection.add(file.id)
+      }
+      return newSelection
+    })
   }
 
   // 全选/取消全选
-  const selectAll = () => {
-    if (selectedFiles.size === files.length) {
-      setSelectedFiles(new Set())
-    } else {
+  const selectAll = (checked: boolean | string) => {
+    // 只有明确是 true 时才全选，否则清空
+    if (checked === true) {
       setSelectedFiles(new Set(files.map(f => f.id)))
+    } else {
+      setSelectedFiles(new Set())
     }
   }
 
@@ -433,7 +436,8 @@ export default function ManualSharePage() {
                   {/* 表头 */}
                   <div className="flex items-center gap-3 p-3 border-b bg-muted/50">
                     <Checkbox
-                      checked={files.length > 0 && selectedFiles.size === files.length}
+                      checked={selectedFiles.size === files.length && files.length > 0}
+                      indeterminate={selectedFiles.size > 0 && selectedFiles.size < files.length}
                       onCheckedChange={selectAll}
                     />
                     <span className="text-sm text-muted-foreground flex-1">文件名</span>
