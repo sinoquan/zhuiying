@@ -208,8 +208,6 @@ export class Pan115Service implements ICloudDriveService {
 
   async createShare(fileIds: string[], expireDays = 0): Promise<ShareInfo> {
     try {
-      // 115网盘有效期选项：1=1天，7=7天，15=15天，30=30天
-      // 永久分享需要先创建再修改
       let expireParam: string | number
       let needUpdateToLongTerm = false
       
@@ -222,11 +220,11 @@ export class Pan115Service implements ICloudDriveService {
       
       console.log('[115] 创建分享参数:', { fileIds, expireDays, expireParam })
       
-      // 方式1: 使用 /share/send API
       let shareCode: string | undefined
       let receiveCode = ''
       
-      const response = await fetch(`${this.baseUrl}/share/send`, {
+      // 尝试方式1: /share/send 使用 file_ids 参数
+      let response = await fetch(`${this.baseUrl}/share/send`, {
         method: 'POST',
         headers: {
           'Cookie': this.cookie,
@@ -239,20 +237,45 @@ export class Pan115Service implements ICloudDriveService {
         }).toString(),
       })
       
-      const data = await response.json()
-      console.log('[115] /share/send 响应:', JSON.stringify(data, null, 2))
+      let data = await response.json()
+      console.log('[115] /share/send (file_ids) 响应:', JSON.stringify(data))
       
       if (data.state === true || data.errno === 0) {
-        // 尝试从响应中获取分享码
         const responseData = data.data || data
         shareCode = responseData.share_code || responseData.scode || responseData.code
         receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
       }
       
-      // 方式2: 如果没有分享码，尝试 /share/add API
+      // 尝试方式2: /share/send 使用 cid 参数（文件夹）
+      if (!shareCode) {
+        console.log('[115] 尝试使用 cid 参数...')
+        response = await fetch(`${this.baseUrl}/share/send`, {
+          method: 'POST',
+          headers: {
+            'Cookie': this.cookie,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            cid: fileIds[0],
+            expire: expireParam.toString(),
+          }).toString(),
+        })
+        
+        data = await response.json()
+        console.log('[115] /share/send (cid) 响应:', JSON.stringify(data))
+        
+        if (data.state === true || data.errno === 0) {
+          const responseData = data.data || data
+          shareCode = responseData.share_code || responseData.scode || responseData.code
+          receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
+        }
+      }
+      
+      // 尝试方式3: /share/add
       if (!shareCode) {
         console.log('[115] 尝试 /share/add API...')
-        const addResponse = await fetch(`${this.baseUrl}/share/add`, {
+        response = await fetch(`${this.baseUrl}/share/add`, {
           method: 'POST',
           headers: {
             'Cookie': this.cookie,
@@ -264,19 +287,46 @@ export class Pan115Service implements ICloudDriveService {
             expire: expireParam.toString(),
           }).toString(),
         })
-        const addData = await addResponse.json()
-        console.log('[115] /share/add 响应:', JSON.stringify(addData, null, 2))
         
-        if (addData.state === true || addData.errno === 0) {
-          const responseData = addData.data || addData
-          shareCode = responseData.share_code || responseData.scode || responseData.code || responseData.sharecode
-          receiveCode = responseData.receive_code || responseData.rcode || responseData.password || responseData.code || ''
+        data = await response.json()
+        console.log('[115] /share/add 响应:', JSON.stringify(data))
+        
+        if (data.state === true || data.errno === 0) {
+          const responseData = data.data || data
+          shareCode = responseData.share_code || responseData.scode || responseData.code
+          receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
         }
       }
       
-      // 方式3: 从分享列表获取
+      // 尝试方式4: /share/sendapi (新版API)
       if (!shareCode) {
-        console.log('[115] 尝试从分享列表获取...')
+        console.log('[115] 尝试 /share/sendapi API...')
+        response = await fetch('https://proapi.115.com/share/send', {
+          method: 'POST',
+          headers: {
+            'Cookie': this.cookie,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            file_ids: fileIds.join(','),
+            expire: expireParam.toString(),
+          }).toString(),
+        })
+        
+        data = await response.json()
+        console.log('[115] /share/sendapi 响应:', JSON.stringify(data))
+        
+        if (data.state === true || data.errno === 0) {
+          const responseData = data.data || data
+          shareCode = responseData.share_code || responseData.scode || responseData.code
+          receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
+        }
+      }
+      
+      // 尝试方式5: 从分享列表获取
+      if (!shareCode) {
+        console.log('[115] 尝试从分享列表获取最新分享...')
         const listEndpoints = ['/share/mysend', '/share/list', '/share/getlist']
         
         for (const endpoint of listEndpoints) {
@@ -288,16 +338,19 @@ export class Pan115Service implements ICloudDriveService {
               },
             })
             const listData = await listRes.json()
-            console.log(`[115] ${endpoint} 响应: state=${listData.state}`)
+            console.log(`[115] ${endpoint} 响应:`, JSON.stringify(listData).substring(0, 300))
             
-            if (listData.state === true) {
+            if (listData.state === true || listData.errno === 0) {
               const list = listData.data?.list || listData.data || listData.list || []
               if (list.length > 0) {
                 const item = list[0]
                 console.log('[115] 分享项字段:', Object.keys(item).join(', '))
                 shareCode = item.share_code || item.scode || item.code
                 receiveCode = item.receive_code || item.rcode || item.password || ''
-                if (shareCode) break
+                if (shareCode) {
+                  console.log('[115] 从分享列表获取到分享码:', shareCode)
+                  break
+                }
               }
             }
           } catch (e) {
@@ -306,10 +359,9 @@ export class Pan115Service implements ICloudDriveService {
         }
       }
       
-      // 如果仍然没有分享码
       if (!shareCode) {
         console.error('[115] 所有方式都无法获取分享码')
-        throw new Error('创建分享失败：无法获取分享码，请检查Cookie是否有效')
+        throw new Error('创建分享失败：无法获取分享码。可能是115网盘API限制，请稍后重试')
       }
       
       console.log('[115] 分享创建成功:', { shareCode, receiveCode })
@@ -321,7 +373,6 @@ export class Pan115Service implements ICloudDriveService {
           console.log('[115] 分享已修改为长期有效')
         } catch (updateError) {
           console.warn('[115] 修改为长期有效失败，保持15天有效期:', updateError)
-          // 即使修改失败，分享仍然有效（15天）
         }
       }
       
