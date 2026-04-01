@@ -556,27 +556,27 @@ export default function ShareRecordsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[88px] px-2">时间</TableHead>
-                  <TableHead className="w-[88px] px-2">网盘</TableHead>
-                  <TableHead className="min-w-[280px] px-2">文件名</TableHead>
-                  <TableHead className="min-w-[280px] px-2">分享链接</TableHead>
-                  <TableHead className="w-12 px-2">类型</TableHead>
-                  <TableHead className="w-14 px-2">大小</TableHead>
-                  <TableHead className="w-12 px-2">有效期</TableHead>
-                  <TableHead className="w-14 px-2">链接</TableHead>
-                  <TableHead className="w-14 px-2">推送</TableHead>
-                  <TableHead className="w-14 px-2">来源</TableHead>
-                  <TableHead className="w-20 px-2">操作</TableHead>
+                  <TableHead className="w-[92px] px-3 py-2">时间</TableHead>
+                  <TableHead className="w-[92px] px-3 py-2">网盘</TableHead>
+                  <TableHead className="min-w-[280px] px-3 py-2">文件名</TableHead>
+                  <TableHead className="min-w-[280px] px-3 py-2">分享链接</TableHead>
+                  <TableHead className="w-12 px-2 py-2">类型</TableHead>
+                  <TableHead className="w-14 px-2 py-2">大小</TableHead>
+                  <TableHead className="w-12 px-2 py-2">有效期</TableHead>
+                  <TableHead className="w-14 px-2 py-2">链接</TableHead>
+                  <TableHead className="w-14 px-2 py-2">推送</TableHead>
+                  <TableHead className="w-14 px-2 py-2">来源</TableHead>
+                  <TableHead className="w-20 px-2 py-2">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {records.map((record) => (
                   <TableRow key={record.id}>
-                    <TableCell className="text-xs text-muted-foreground px-2 py-2">
+                    <TableCell className="text-xs text-muted-foreground px-3 py-2">
                       {formatDateTime(record.created_at)}
                     </TableCell>
-                    <TableCell className="px-2 py-2">
-                      <div className="flex items-center gap-1">
+                    <TableCell className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
                         <img 
                           src={getCloudDriveIcon(record.cloud_drives?.name || '')} 
                           alt={record.cloud_drives?.name || ''}
@@ -587,7 +587,7 @@ export default function ShareRecordsPage() {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="px-2 py-2">
+                    <TableCell className="px-3 py-2">
                       <div className="flex flex-col">
                         <span className="font-medium text-sm truncate" title={record.file_name}>
                           {record.tmdb_title || record.file_name}
@@ -599,7 +599,7 @@ export default function ShareRecordsPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="px-2 py-2">
+                    <TableCell className="px-3 py-2">
                       {record.share_url ? (
                         <div className="flex items-center gap-1">
                           <a 
