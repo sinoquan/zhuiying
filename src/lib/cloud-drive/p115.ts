@@ -208,28 +208,63 @@ export class Pan115Service implements ICloudDriveService {
 
   async createShare(fileIds: string[], expireDays = 0): Promise<ShareInfo> {
     try {
-      // 115网盘不支持直接创建永久分享
-      // 解决方案：先创建15天分享，然后修改为长期有效
-      let actualExpireDays = expireDays
+      // 115网盘有效期选项：1=1天，7=7天，15=15天，30=30天，long=长期
+      // 注意：115不支持直接创建永久分享，需要先创建再修改
+      let expireParam: string | number
+      let needUpdateToLongTerm = false
       
-      // 如果是永久(0)，先创建15天分享
       if (expireDays === 0) {
-        actualExpireDays = 15
+        // 永久：先创建15天分享，再修改为长期
+        expireParam = 15
+        needUpdateToLongTerm = true
+      } else {
+        expireParam = expireDays
       }
       
-      const data = await this.request('/share/send', {
+      console.log('[115] 创建分享参数:', { fileIds, expireDays, expireParam })
+      
+      // 调用分享API
+      const response = await fetch(`${this.baseUrl}/share/send`, {
         method: 'POST',
         headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: `file_ids=${fileIds.join(',')}&expire=${actualExpireDays}`,
+        body: new URLSearchParams({
+          file_ids: fileIds.join(','),
+          expire: expireParam.toString(),
+        }).toString(),
       })
       
-      const shareCode = data.data.share_code
-      const receiveCode = data.data.receive_code || ''
+      const data = await response.json()
+      console.log('[115] 分享API完整响应:', JSON.stringify(data, null, 2))
       
-      // 如果原本要求永久，修改为长期有效
-      if (expireDays === 0 && shareCode) {
+      // 检查响应
+      if (!data.state && data.errno !== 0) {
+        throw new Error(data.error || '创建分享失败')
+      }
+      
+      // 尝试多种可能的字段名获取分享码
+      // 115网盘的响应格式可能是：
+      // { state: true, data: { share_code: "xxx", receive_code: "xxx" } }
+      // 或 { state: true, share_code: "xxx", receive_code: "xxx" }
+      // 或 { state: true, code: "xxx" }
+      const responseData = data.data || data
+      const shareCode = responseData.share_code || responseData.code || responseData.scode || data.share_code || data.code
+      const receiveCode = responseData.receive_code || responseData.rcode || data.receive_code || data.rcode || ''
+      
+      console.log('[115] 解析的分享码:', { shareCode, receiveCode, responseDataKeys: Object.keys(responseData) })
+      
+      if (!shareCode) {
+        console.error('[115] 未获取到分享码，响应数据:', JSON.stringify(data))
+        throw new Error('未获取到分享码，请检查网盘配置')
+      }
+      
+      console.log('[115] 分享创建成功:', { shareCode, receiveCode })
+      
+      // 如果需要修改为长期有效
+      if (needUpdateToLongTerm) {
         try {
           await this.updateShareToLongTerm(shareCode)
           console.log('[115] 分享已修改为长期有效')
@@ -245,7 +280,8 @@ export class Pan115Service implements ICloudDriveService {
         expire_time: expireDays === 0 ? undefined : new Date(Date.now() + expireDays * 24 * 60 * 60 * 1000).toISOString(),
       }
     } catch (error) {
-      throw new Error('创建分享失败')
+      console.error('[115] 创建分享失败:', error)
+      throw error
     }
   }
 
@@ -254,40 +290,72 @@ export class Pan115Service implements ICloudDriveService {
    * 115网盘的"永久"分享需要先创建15天，然后调用此方法修改
    */
   private async updateShareToLongTerm(shareCode: string): Promise<void> {
-    // 获取分享详情，获取share_id
-    const infoUrl = `https://webapi.115.com/share/getinfo?share_code=${shareCode}`
-    const infoRes = await fetch(infoUrl, {
-      headers: {
-        'Cookie': this.cookie,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    })
-    const infoData = await infoRes.json()
+    console.log('[115] 开始修改分享为长期有效, shareCode:', shareCode)
     
-    if (!infoData.state && infoData.errno !== 0) {
-      throw new Error(infoData.error || '获取分享信息失败')
-    }
-    
-    const shareId = infoData.data?.share_id || infoData.data?.id
-    if (!shareId) {
-      throw new Error('无法获取分享ID')
-    }
-    
-    // 修改分享为长期有效 (is_long=1)
-    const updateUrl = 'https://webapi.115.com/share/update'
-    const updateRes = await fetch(updateUrl, {
-      method: 'POST',
-      headers: {
-        'Cookie': this.cookie,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `share_id=${shareId}&is_long=1`,
-    })
-    const updateData = await updateRes.json()
-    
-    if (!updateData.state && updateData.errno !== 0) {
-      throw new Error(updateData.error || '修改分享失败')
+    try {
+      // 方法1：通过share_code直接更新
+      const updateUrl = 'https://webapi.115.com/share/update'
+      const updateRes = await fetch(updateUrl, {
+        method: 'POST',
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          share_code: shareCode,
+          is_long: '1',
+        }).toString(),
+      })
+      
+      const updateData = await updateRes.json()
+      console.log('[115] 更新分享响应:', updateData)
+      
+      if (updateData.state === true || updateData.errno === 0) {
+        return
+      }
+      
+      // 如果方法1失败，尝试方法2：先获取share_id再更新
+      console.log('[115] 方法1失败，尝试方法2')
+      
+      const infoUrl = `https://webapi.115.com/share/getinfo?share_code=${shareCode}`
+      const infoRes = await fetch(infoUrl, {
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      })
+      const infoData = await infoRes.json()
+      console.log('[115] 分享信息响应:', infoData)
+      
+      const shareId = infoData.data?.share_id || infoData.data?.id
+      if (!shareId) {
+        throw new Error('无法获取分享ID')
+      }
+      
+      // 使用share_id更新
+      const updateRes2 = await fetch(updateUrl, {
+        method: 'POST',
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          share_id: shareId.toString(),
+          is_long: '1',
+        }).toString(),
+      })
+      
+      const updateData2 = await updateRes2.json()
+      console.log('[115] 方法2更新分享响应:', updateData2)
+      
+      if (!updateData2.state && updateData2.errno !== 0) {
+        throw new Error(updateData2.error || '修改分享失败')
+      }
+    } catch (error) {
+      console.error('[115] 修改长期有效失败:', error)
+      throw error
     }
   }
 

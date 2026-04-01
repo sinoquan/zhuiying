@@ -269,11 +269,18 @@ export default function ManualSharePage() {
 
     setSharing(true)
     try {
+      // 获取选中文件的详细信息
+      const selectedFilesList = files.filter(f => selectedFiles.has(f.id))
+      const fileNames = selectedFilesList.map(f => f.name)
+      const filePaths = selectedFilesList.map(f => f.path || currentPath)
+
       const response = await fetch(`/api/cloud-drives/${selectedDrive}/share`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_ids: Array.from(selectedFiles),
+          file_names: fileNames,
+          file_paths: filePaths,
           expire_days: expireDays,
         }),
       })
