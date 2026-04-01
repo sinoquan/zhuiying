@@ -12,8 +12,57 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Hand, Loader2, FolderOpen, File, ChevronRight, ChevronLeft, RefreshCw, CheckSquare, Square, Share2, Home } from "lucide-react"
+import { 
+  Hand, Loader2, FolderOpen, File, ChevronRight, ChevronLeft, 
+  RefreshCw, CheckSquare, Square, Share2, Home, Film, Music, 
+  Image, FileText, FileArchive, FileVideo
+} from "lucide-react"
 import { toast } from "sonner"
+import { getCloudDriveIcon } from "@/lib/icons"
+
+// 网盘名称映射
+const CLOUD_DRIVE_NAMES: Record<string, string> = {
+  '115': '115网盘',
+  'aliyun': '阿里云盘',
+  'quark': '夸克网盘',
+  'tianyi': '天翼网盘',
+  'baidu': '百度网盘',
+  '123': '123云盘',
+  'guangya': '光鸭网盘',
+}
+
+// 各网盘支持的有效期选项
+const EXPIRE_OPTIONS: Record<string, { value: number; label: string }[]> = {
+  '115': [
+    { value: 7, label: '7天' },
+    { value: 15, label: '15天' },
+    { value: 30, label: '30天' },
+    { value: 0, label: '永久' },
+  ],
+  'aliyun': [
+    { value: 0, label: '永久' },
+    { value: 1, label: '1天' },
+    { value: 7, label: '7天' },
+    { value: 30, label: '30天' },
+  ],
+  'quark': [
+    { value: 0, label: '永久' },
+    { value: 7, label: '7天' },
+    { value: 30, label: '30天' },
+  ],
+  'tianyi': [
+    { value: 0, label: '永久' },
+    { value: 7, label: '7天' },
+    { value: 30, label: '30天' },
+  ],
+  'baidu': [
+    { value: 0, label: '永久' },
+    { value: 7, label: '7天' },
+  ],
+  'default': [
+    { value: 0, label: '永久' },
+  ],
+}
 
 interface CloudDrive {
   id: number
@@ -38,19 +87,57 @@ interface ListResult {
   next_marker?: string
 }
 
+// 获取文件类型图标
+const getFileIcon = (file: CloudFile) => {
+  if (file.is_dir) {
+    return <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
+  }
+  
+  const ext = file.name.split('.').pop()?.toLowerCase() || ''
+  
+  // 视频文件
+  if (['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm2ts', 'ts'].includes(ext)) {
+    return <FileVideo className="h-5 w-5 text-purple-500 shrink-0" />
+  }
+  // 音频文件
+  if (['mp3', 'flac', 'wav', 'aac', 'm4a', 'ogg'].includes(ext)) {
+    return <Music className="h-5 w-5 text-green-500 shrink-0" />
+  }
+  // 图片文件
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].includes(ext)) {
+    return <Image className="h-5 w-5 text-pink-500 shrink-0" />
+  }
+  // 字幕文件
+  if (['srt', 'ass', 'ssa', 'vtt', 'sub'].includes(ext)) {
+    return <FileText className="h-5 w-5 text-cyan-500 shrink-0" />
+  }
+  // 压缩文件
+  if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext)) {
+    return <FileArchive className="h-5 w-5 text-orange-500 shrink-0" />
+  }
+  // 文档文件
+  if (['doc', 'docx', 'pdf', 'txt', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+    return <FileText className="h-5 w-5 text-blue-500 shrink-0" />
+  }
+  
+  return <File className="h-5 w-5 text-gray-500 shrink-0" />
+}
+
 export default function ManualSharePage() {
   const [drives, setDrives] = useState<CloudDrive[]>([])
   const [selectedDrive, setSelectedDrive] = useState<string>("")
+  const [selectedDriveName, setSelectedDriveName] = useState<string>("")
   const [currentPath, setCurrentPath] = useState("/")
   const [files, setFiles] = useState<CloudFile[]>([])
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [sharing, setSharing] = useState(false)
-  const [pathHistory, setPathHistory] = useState<string[]>(["/"])
+  const [pathHistory, setPathHistory] = useState<{ path: string; name: string }[]>([{ path: "/", name: "根目录" }])
   const [shareResult, setShareResult] = useState<{
     share_url: string
     share_code: string
   } | null>(null)
+  const [expireDays, setExpireDays] = useState<number>(0) // 默认永久
 
   useEffect(() => {
     fetchDrives()
@@ -98,17 +185,23 @@ export default function ManualSharePage() {
   }
 
   const handleDriveChange = (driveId: string) => {
+    const drive = drives.find(d => d.id.toString() === driveId)
     setSelectedDrive(driveId)
+    setSelectedDriveName(drive?.name || "")
     setSelectedFiles(new Set())
-    setPathHistory(["/"])
+    setPathHistory([{ path: "/", name: "根目录" }])
     setShareResult(null)
+    // 设置默认有效期
+    const driveType = drive?.name || 'default'
+    const options = EXPIRE_OPTIONS[driveType] || EXPIRE_OPTIONS['default']
+    setExpireDays(options[0].value)
   }
 
   // 双击进入文件夹
   const handleDoubleClick = (file: CloudFile) => {
     if (file.is_dir) {
       const newPath = file.path || file.id
-      setPathHistory([...pathHistory, newPath])
+      setPathHistory([...pathHistory, { path: newPath, name: file.name }])
       setSelectedFiles(new Set())
       fetchFiles(newPath)
     }
@@ -120,13 +213,13 @@ export default function ManualSharePage() {
       const newHistory = pathHistory.slice(0, -1)
       setPathHistory(newHistory)
       const previousPath = newHistory[newHistory.length - 1]
-      fetchFiles(previousPath)
+      fetchFiles(previousPath.path)
     }
   }
 
   // 返回根目录
   const navigateToRoot = () => {
-    setPathHistory(["/"])
+    setPathHistory([{ path: "/", name: "根目录" }])
     setSelectedFiles(new Set())
     fetchFiles("/")
   }
@@ -136,7 +229,7 @@ export default function ManualSharePage() {
     if (index < pathHistory.length - 1) {
       const newHistory = pathHistory.slice(0, index + 1)
       setPathHistory(newHistory)
-      fetchFiles(newHistory[index])
+      fetchFiles(newHistory[index].path)
     }
   }
 
@@ -181,7 +274,7 @@ export default function ManualSharePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_ids: Array.from(selectedFiles),
-          expire_days: 7,
+          expire_days: expireDays,
         }),
       })
 
@@ -200,20 +293,14 @@ export default function ManualSharePage() {
     }
   }
 
-  const getDriveLabel = (drive: CloudDrive) => {
-    const labels: Record<string, string> = {
-      "115": "115网盘",
-      aliyun: "阿里云盘",
-      quark: "夸克网盘",
-      tianyi: "天翼网盘",
-      baidu: "百度网盘",
-    }
-    return drive.alias || labels[drive.name] || drive.name
-  }
-
   // 获取选中文件的详情
   const getSelectedFileDetails = () => {
     return files.filter(f => selectedFiles.has(f.id))
+  }
+
+  // 获取当前网盘的有效期选项
+  const getExpireOptions = () => {
+    return EXPIRE_OPTIONS[selectedDriveName] || EXPIRE_OPTIONS['default']
   }
 
   return (
@@ -256,12 +343,19 @@ export default function ManualSharePage() {
               <div className="mb-4">
                 <Select value={selectedDrive} onValueChange={handleDriveChange}>
                   <SelectTrigger>
-                    <SelectValue placeholder="请选择网盘" />
+                    <SelectValue placeholder="请选择网盘账号" />
                   </SelectTrigger>
                   <SelectContent>
                     {drives.map((drive) => (
                       <SelectItem key={drive.id} value={drive.id.toString()}>
-                        {getDriveLabel(drive)}
+                        <div className="flex items-center gap-2">
+                          <img 
+                            src={getCloudDriveIcon(drive.name)} 
+                            alt={drive.name}
+                            className="w-4 h-4 rounded"
+                          />
+                          <span>{CLOUD_DRIVE_NAMES[drive.name] || drive.name}：{drive.alias || drive.name}</span>
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -299,7 +393,7 @@ export default function ManualSharePage() {
                           }`}
                           onClick={() => navigateToPath(i)}
                         >
-                          {p === "/" ? "根目录" : p.split("/").pop()}
+                          {p.name}
                         </span>
                       </span>
                     ))}
@@ -352,17 +446,8 @@ export default function ManualSharePage() {
                           
                           {/* 文件名 */}
                           <div className="flex items-center gap-2 flex-1 min-w-0">
-                            {file.is_dir ? (
-                              <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
-                            ) : (
-                              <File className="h-5 w-5 text-blue-500 shrink-0" />
-                            )}
+                            {getFileIcon(file)}
                             <span className="truncate">{file.name}</span>
-                            {file.is_dir && (
-                              <Badge variant="outline" className="text-xs shrink-0">
-                                文件夹
-                              </Badge>
-                            )}
                           </div>
                           
                           {/* 大小 */}
@@ -412,7 +497,7 @@ export default function ManualSharePage() {
             </CardHeader>
             <CardContent>
               {/* 选中的文件列表 */}
-              <div className="mb-4 max-h-[300px] overflow-y-auto">
+              <div className="mb-4 max-h-[200px] overflow-y-auto">
                 {selectedFiles.size === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-4">
                     点击文件左侧的复选框选择
@@ -424,11 +509,7 @@ export default function ManualSharePage() {
                         key={file.id}
                         className="flex items-center gap-2 p-2 bg-muted rounded text-sm"
                       >
-                        {file.is_dir ? (
-                          <FolderOpen className="h-4 w-4 text-amber-500 shrink-0" />
-                        ) : (
-                          <File className="h-4 w-4 text-blue-500 shrink-0" />
-                        )}
+                        {getFileIcon(file)}
                         <span className="truncate flex-1">{file.name}</span>
                         <Button
                           variant="ghost"
@@ -443,6 +524,28 @@ export default function ManualSharePage() {
                   </div>
                 )}
               </div>
+
+              {/* 有效期选择 */}
+              {selectedDrive && (
+                <div className="mb-4">
+                  <label className="text-sm font-medium mb-2 block">有效期</label>
+                  <Select 
+                    value={expireDays.toString()} 
+                    onValueChange={(v) => setExpireDays(parseInt(v))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getExpireOptions().map((option) => (
+                        <SelectItem key={option.value} value={option.value.toString()}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* 分享按钮 */}
               <Button
