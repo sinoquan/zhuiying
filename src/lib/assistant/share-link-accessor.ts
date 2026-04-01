@@ -38,10 +38,11 @@ async function getCloudDriveConfig(type: LinkType): Promise<{ cookie?: string; t
   const client = getSupabaseClient()
   
   // 从数据库查找对应类型的网盘配置
+  // 注意：数据库字段是 `name`，不是 `drive_type`
   const { data: drives } = await client
     .from('cloud_drives')
     .select('config')
-    .eq('drive_type', type.toLowerCase())
+    .eq('name', type.toLowerCase())
     .eq('is_active', true)
     .limit(1)
   

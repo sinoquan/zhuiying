@@ -36,8 +36,8 @@ const LINK_PATTERNS: Array<{
 }> = [
   {
     type: '115',
-    // 匹配: https://115cdn.com/s/swfp0113wkx 或 115://swfp0113wkx
-    pattern: /(?:https?:\/\/)?(?:115cdn\.com\/s\/|115:\/\/)([a-zA-Z0-9]+)/i,
+    // 匹配: https://115cdn.com/s/xxx 或 https://115.com/s/xxx 或 115://xxx
+    pattern: /(?:https?:\/\/)?(?:115cdn\.com\/s\/|115\.com\/s\/|115:\/\/)([a-zA-Z0-9]+)/i,
     extractId: (match) => match[1]
   },
   {

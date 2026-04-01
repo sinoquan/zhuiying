@@ -141,6 +141,37 @@ export async function POST(request: NextRequest) {
               console.error('TMDB搜索失败:', error)
             }
           }
+        } else {
+          // 解析不出影视信息，尝试从用户文本中提取文件名
+          const fileName = extractFileName(text, parseResult.originalUrl)
+          if (fileName) {
+            const parsed = parseFileName(fileName)
+            result.file = {
+              name: parsed.title,
+              type: parsed.content_type,
+              season: parsed.season,
+              episode: parsed.episode,
+              episode_end: parsed.episode_end,
+              is_completed: parsed.is_completed,
+            }
+            
+            // 尝试匹配 TMDB
+            if (parsed.title) {
+              try {
+                const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year)
+                if (tmdbResult) {
+                  result.tmdb = tmdbResult
+                }
+              } catch (error) {
+                console.error('TMDB搜索失败:', error)
+              }
+            }
+            
+            result.warning = '无法从分享链接获取完整文件信息，已使用您提供的文件名进行识别'
+          } else if (shareInfo.is_dir && (!shareInfo.files || shareInfo.files.length === 0)) {
+            // 是文件夹但文件列表为空
+            result.warning = `分享链接中暂无文件。请在链接下方添加文件名以辅助识别，例如：\n\n${parseResult.originalUrl}\n剧名.S01E01.1080p.mp4`
+          }
         }
         
         // 如果是文件夹，显示文件列表
