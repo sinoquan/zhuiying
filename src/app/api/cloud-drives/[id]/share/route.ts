@@ -49,18 +49,32 @@ export async function POST(
     }
     
     // 保存分享记录
-    const shareRecords = file_ids.map((fileId: string, index: number) => ({
-      cloud_drive_id: parseInt(id),
-      file_path: file_paths?.[index] || '/',
-      file_name: file_names?.[index] || `文件${index + 1}`,
-      file_size: file_sizes?.[index]?.toString() || '0',
-      content_type: content_types?.[index] || 'other',
-      share_url: shareInfo.share_url,
-      share_code: shareInfo.share_code,
-      share_status: 'active',
-      source: 'manual',
-      expire_at: expireAt,
-    }))
+    // 使用从API返回的total_size（如果有）
+    const totalSize = shareInfo.total_size || 0
+    const fileCount = shareInfo.file_count || file_ids.length
+    
+    const shareRecords = file_ids.map((fileId: string, index: number) => {
+      // 计算单个文件的大小：如果只有一个文件，使用total_size；否则平均分配
+      let fileSize = file_sizes?.[index]?.toString() || '0'
+      if (fileSize === '0' && totalSize > 0) {
+        fileSize = fileCount === 1 
+          ? totalSize.toString() 
+          : Math.floor(totalSize / fileCount).toString()
+      }
+      
+      return {
+        cloud_drive_id: parseInt(id),
+        file_path: file_paths?.[index] || '/',
+        file_name: file_names?.[index] || `文件${index + 1}`,
+        file_size: fileSize,
+        content_type: content_types?.[index] || 'other',
+        share_url: shareInfo.share_url,
+        share_code: shareInfo.share_code,
+        share_status: 'active',
+        source: 'manual',
+        expire_at: expireAt,
+      }
+    })
     
     const { error: insertError } = await client
       .from('share_records')

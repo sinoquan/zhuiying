@@ -21,6 +21,8 @@ export interface ShareInfo {
   share_url: string
   share_code: string
   expire_time?: string
+  total_size?: number  // 文件总大小（字节）
+  file_count?: number  // 文件数量
 }
 
 // 分享链接文件信息

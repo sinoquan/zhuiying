@@ -43,8 +43,12 @@ export async function POST(request: NextRequest) {
     if (driveName === '115' && shareCode) {
       try {
         const service = createCloudDriveService('115', driveConfig)
-        await service.cancelShare(shareCode)
-        console.log('[取消分享] 115网盘分享已取消:', shareCode)
+        const success = await service.cancelShare(shareCode)
+        if (success) {
+          console.log('[取消分享] 115网盘分享已取消:', shareCode)
+        } else {
+          console.warn('[取消分享] 115网盘API取消失败，但仍更新数据库状态:', shareCode)
+        }
       } catch (apiError) {
         console.error('[取消分享] 调用115网盘API失败:', apiError)
         // API调用失败，但仍更新数据库状态

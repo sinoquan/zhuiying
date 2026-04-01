@@ -436,8 +436,13 @@ export default function ManualSharePage() {
                   {/* 表头 */}
                   <div className="flex items-center gap-3 p-3 border-b bg-muted/50">
                     <Checkbox
-                      checked={selectedFiles.size === files.length && files.length > 0}
-                      indeterminate={selectedFiles.size > 0 && selectedFiles.size < files.length}
+                      checked={
+                        selectedFiles.size === 0 
+                          ? false 
+                          : selectedFiles.size === files.length 
+                            ? true 
+                            : "indeterminate"
+                      }
                       onCheckedChange={selectAll}
                     />
                     <span className="text-sm text-muted-foreground flex-1">文件名</span>
