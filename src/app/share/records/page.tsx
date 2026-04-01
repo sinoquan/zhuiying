@@ -210,10 +210,20 @@ export default function ShareRecordsPage() {
 
   // 复制链接
   const copyLink = (record: ShareRecord) => {
-    const text = record.share_code 
-      ? `${record.share_url} 提取码: ${record.share_code}`
-      : record.share_url || ''
-    navigator.clipboard.writeText(text)
+    const is115 = record.cloud_drives?.name === '115'
+    const shareUrl = record.share_url || ''
+    
+    // 115网盘：如果有提取码，直接拼接到链接中
+    if (is115 && record.share_code && shareUrl) {
+      // 提取分享ID，构建标准格式
+      const shareId = shareUrl.split('/').pop() || ''
+      const fullUrl = `https://115cdn.com/s/${shareId}?password=${record.share_code}`
+      navigator.clipboard.writeText(fullUrl)
+    } else if (record.share_code) {
+      navigator.clipboard.writeText(`${shareUrl} 提取码: ${record.share_code}`)
+    } else {
+      navigator.clipboard.writeText(shareUrl)
+    }
     toast.success("已复制到剪贴板")
   }
 
@@ -603,15 +613,35 @@ export default function ShareRecordsPage() {
                       <TableCell>
                         {record.share_url ? (
                           <div className="flex items-center gap-2">
-                            <a 
-                              href={record.share_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline text-sm"
-                              title={record.share_url}
-                            >
-                              115.com/s/{record.share_url.split('/').pop()}
-                            </a>
+                            {record.cloud_drives?.name === '115' && record.share_code ? (
+                              // 115网盘带提取码：显示完整链接
+                              <a 
+                                href={`${record.share_url}?password=${record.share_code}`}
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline text-sm"
+                                title={`${record.share_url}?password=${record.share_code}`}
+                              >
+                                115cdn.com/s/{record.share_url.split('/').pop()}?password={record.share_code}
+                              </a>
+                            ) : (
+                              <>
+                                <a 
+                                  href={record.share_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline text-sm"
+                                  title={record.share_url}
+                                >
+                                  {record.share_url.replace(/^https?:\/\//, '').split('/')[0]}/{record.share_url.split('/').pop()}
+                                </a>
+                                {record.share_code && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {record.share_code}
+                                  </Badge>
+                                )}
+                              </>
+                            )}
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -620,11 +650,6 @@ export default function ShareRecordsPage() {
                             >
                               <Copy className="h-3.5 w-3.5" />
                             </Button>
-                            {record.share_code && (
-                              <Badge variant="secondary" className="text-xs">
-                                {record.share_code}
-                              </Badge>
-                            )}
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>

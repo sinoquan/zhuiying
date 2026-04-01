@@ -575,42 +575,68 @@ export default function ManualSharePage() {
                     分享成功
                   </div>
                   <div className="space-y-2">
-                    <div>
-                      <span className="text-xs text-muted-foreground">链接:</span>
-                      <div className="flex items-center gap-2">
-                        <code className="text-xs bg-background p-1 rounded flex-1 break-all">
-                          {shareResult.share_url}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="shrink-0"
-                          onClick={() => {
-                            navigator.clipboard.writeText(shareResult.share_url)
-                            toast.success("链接已复制")
-                          }}
-                        >
-                          复制
-                        </Button>
-                      </div>
-                    </div>
-                    {shareResult.share_code && (
+                    {selectedDriveName === '115' && shareResult.share_code ? (
+                      // 115网盘：显示完整链接
                       <div>
-                        <span className="text-xs text-muted-foreground">提取码:</span>
+                        <span className="text-xs text-muted-foreground">分享链接:</span>
                         <div className="flex items-center gap-2">
-                          <code className="text-sm font-mono">{shareResult.share_code}</code>
+                          <code className="text-xs bg-background p-1 rounded flex-1 break-all">
+                            {shareResult.share_url}?password={shareResult.share_code}
+                          </code>
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="shrink-0"
                             onClick={() => {
-                              navigator.clipboard.writeText(shareResult.share_code)
-                              toast.success("提取码已复制")
+                              const fullUrl = `${shareResult.share_url}?password=${shareResult.share_code}`
+                              navigator.clipboard.writeText(fullUrl)
+                              toast.success("链接已复制")
                             }}
                           >
                             复制
                           </Button>
                         </div>
                       </div>
+                    ) : (
+                      <>
+                        <div>
+                          <span className="text-xs text-muted-foreground">链接:</span>
+                          <div className="flex items-center gap-2">
+                            <code className="text-xs bg-background p-1 rounded flex-1 break-all">
+                              {shareResult.share_url}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="shrink-0"
+                              onClick={() => {
+                                navigator.clipboard.writeText(shareResult.share_url)
+                                toast.success("链接已复制")
+                              }}
+                            >
+                              复制
+                            </Button>
+                          </div>
+                        </div>
+                        {shareResult.share_code && (
+                          <div>
+                            <span className="text-xs text-muted-foreground">提取码:</span>
+                            <div className="flex items-center gap-2">
+                              <code className="text-sm font-mono">{shareResult.share_code}</code>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(shareResult.share_code)
+                                  toast.success("提取码已复制")
+                                }}
+                              >
+                                复制
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
