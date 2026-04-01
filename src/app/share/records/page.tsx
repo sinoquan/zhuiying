@@ -559,7 +559,7 @@ export default function ShareRecordsPage() {
                   <TableHead className="w-32">分享时间</TableHead>
                   <TableHead className="w-36">网盘</TableHead>
                   <TableHead className="w-48">文件名</TableHead>
-                  <TableHead className="w-32">分享链接</TableHead>
+                  <TableHead className="w-48">分享链接</TableHead>
                   <TableHead className="w-14">类型</TableHead>
                   <TableHead className="w-14">大小</TableHead>
                   <TableHead className="w-14">有效期</TableHead>
@@ -607,7 +607,7 @@ export default function ShareRecordsPage() {
                               href={record.share_url} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="text-primary hover:underline text-xs truncate max-w-[100px]"
+                              className="text-primary hover:underline text-xs truncate max-w-[160px]"
                               title={record.share_url}
                             >
                               {record.share_url.replace('https://', '').replace('115cdn.com/s/', '115.com/s/')}
@@ -615,7 +615,7 @@ export default function ShareRecordsPage() {
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-5 w-5"
+                              className="h-5 w-5 flex-shrink-0"
                               onClick={() => copyLink(record)}
                             >
                               <Copy className="h-3 w-3" />
