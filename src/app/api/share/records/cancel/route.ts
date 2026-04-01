@@ -30,8 +30,7 @@ export async function POST(request: NextRequest) {
     const { error: updateError } = await client
       .from('share_records')
       .update({ 
-        share_status: 'cancelled',
-        updated_at: new Date().toISOString()
+        share_status: 'cancelled'
       })
       .eq('id', id)
     
