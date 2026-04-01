@@ -164,8 +164,11 @@ export class Pan115Service implements ICloudDriveService {
       )
       
       const files: CloudFile[] = (data.data || []).map((item: any) => {
-        // 115网盘: 有cid的是文件夹，有fid的是文件
-        const isDir = item.cid !== undefined
+        // 115网盘判断文件夹的方式：
+        // 1. 有cid字段且不是0表示是文件夹
+        // 2. 有fid字段表示是文件
+        // 3. pc字段存在表示是文件（parent category）
+        const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
         return {
           id: item.cid || item.fid,
           name: item.n || item.name,

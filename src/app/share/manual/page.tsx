@@ -31,13 +31,13 @@ const CLOUD_DRIVE_NAMES: Record<string, string> = {
   'guangya': '光鸭网盘',
 }
 
-// 各网盘支持的有效期选项
+// 各网盘支持的有效期选项（永久排在第一位）
 const EXPIRE_OPTIONS: Record<string, { value: number; label: string }[]> = {
   '115': [
+    { value: 0, label: '永久' },
     { value: 7, label: '7天' },
     { value: 15, label: '15天' },
     { value: 30, label: '30天' },
-    { value: 0, label: '永久' },
   ],
   'aliyun': [
     { value: 0, label: '永久' },
