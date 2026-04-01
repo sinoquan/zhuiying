@@ -274,6 +274,22 @@ export default function ManualSharePage() {
       const fileNames = selectedFilesList.map(f => f.name)
       const filePaths = selectedFilesList.map(f => f.path || currentPath)
       const fileSizes = selectedFilesList.map(f => f.size || 0)
+      // 根据文件扩展名判断内容类型
+      const contentTypes = selectedFilesList.map(f => {
+        if (f.is_dir) return 'folder'
+        const ext = f.name.split('.').pop()?.toLowerCase() || ''
+        // 视频格式
+        if (['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'rmvb', 'rm'].includes(ext)) return 'video'
+        // 音频格式
+        if (['mp3', 'flac', 'wav', 'aac', 'ogg', 'm4a', 'wma'].includes(ext)) return 'audio'
+        // 图片格式
+        if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'].includes(ext)) return 'image'
+        // 文档格式
+        if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md'].includes(ext)) return 'document'
+        // 压缩格式
+        if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext)) return 'archive'
+        return 'other'
+      })
 
       const response = await fetch(`/api/cloud-drives/${selectedDrive}/share`, {
         method: "POST",
@@ -283,6 +299,7 @@ export default function ManualSharePage() {
           file_names: fileNames,
           file_paths: filePaths,
           file_sizes: fileSizes,
+          content_types: contentTypes,
           expire_days: expireDays,
         }),
       })

@@ -64,10 +64,17 @@ const SOURCE_CONFIG = {
 }
 
 // 内容类型配置
-const CONTENT_TYPE_CONFIG = {
-  movie: { label: '电影', icon: Film },
-  tv_series: { label: '剧集', icon: Tv },
-  unknown: { label: '未知', icon: File },
+const CONTENT_TYPE_CONFIG: Record<string, { label: string; icon: typeof File; color?: string }> = {
+  movie: { label: '电影', icon: Film, color: 'text-red-500' },
+  tv_series: { label: '剧集', icon: Tv, color: 'text-purple-500' },
+  video: { label: '视频', icon: Film, color: 'text-red-500' },
+  audio: { label: '音频', icon: File, color: 'text-green-500' },
+  image: { label: '图片', icon: File, color: 'text-blue-500' },
+  document: { label: '文档', icon: FileText, color: 'text-yellow-500' },
+  archive: { label: '压缩包', icon: File, color: 'text-orange-500' },
+  folder: { label: '文件夹', icon: File, color: 'text-amber-500' },
+  other: { label: '其他', icon: File, color: 'text-gray-500' },
+  unknown: { label: '未知', icon: File, color: 'text-gray-500' },
 }
 
 interface PushInfo {
@@ -411,7 +418,7 @@ export default function ShareRecordsPage() {
     const config = CONTENT_TYPE_CONFIG[contentType as keyof typeof CONTENT_TYPE_CONFIG] || CONTENT_TYPE_CONFIG.unknown
     const Icon = config.icon
     return (
-      <Badge variant="outline" className="text-xs">
+      <Badge variant="outline" className={`text-xs ${config.color || ''}`}>
         <Icon className="h-3 w-3 mr-1" />
         {config.label}
       </Badge>

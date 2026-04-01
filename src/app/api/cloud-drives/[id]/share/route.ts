@@ -10,9 +10,9 @@ export async function POST(
   try {
     const { id } = await params
     const body = await request.json()
-    const { file_ids, expire_days = 7, file_names, file_paths, file_sizes } = body
+    const { file_ids, expire_days = 7, file_names, file_paths, file_sizes, content_types } = body
     
-    console.log('[分享API] 收到请求:', { id, file_ids, expire_days, file_names, file_paths, file_sizes })
+    console.log('[分享API] 收到请求:', { id, file_ids, expire_days, file_names, file_paths, file_sizes, content_types })
     
     if (!file_ids || !Array.isArray(file_ids) || file_ids.length === 0) {
       return NextResponse.json({ error: '请选择要分享的文件' }, { status: 400 })
@@ -54,6 +54,7 @@ export async function POST(
       file_path: file_paths?.[index] || '/',
       file_name: file_names?.[index] || `文件${index + 1}`,
       file_size: file_sizes?.[index]?.toString() || '0',
+      content_type: content_types?.[index] || 'other',
       share_url: shareInfo.share_url,
       share_code: shareInfo.share_code,
       share_status: 'active',
