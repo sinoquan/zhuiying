@@ -252,97 +252,78 @@ export class Pan115Service implements ICloudDriveService {
         console.log('[115] 分享创建成功，尝试从响应获取分享码:', { shareCode, availableFields: Object.keys(responseData) })
       }
       
-      // 尝试方式2: /share/send 使用 cid 参数（文件夹）
+      // 尝试方式2: 使用 share_send_app API (proapi)
       if (!shareCode) {
-        console.log('[115] 尝试使用 cid 参数...')
-        response = await fetch(`${this.baseUrl}/share/send`, {
-          method: 'POST',
-          headers: {
-            'Cookie': this.cookie,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            cid: fileIds[0],
-            expire: expireParam.toString(),
-          }).toString(),
-        })
-        
-        data = await response.json()
-        console.log('[115] /share/send (cid) 响应:', JSON.stringify(data))
-        
-        if (data.state === true || data.errno === 0) {
-          const responseData = data.data || data
-          shareCode = responseData.share_code || responseData.scode || responseData.code
-          receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
+        console.log('[115] 尝试 share_send_app API...')
+        try {
+          response = await fetch('https://proapi.115.com/android/2.0/share/send', {
+            method: 'POST',
+            headers: {
+              'Cookie': this.cookie,
+              'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/114.0.0.0 Mobile Safari/537.36',
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              file_ids: fileIds.join(','),
+              ignore_warn: '1',
+            }).toString(),
+          })
+          
+          data = await response.json()
+          console.log('[115] share_send_app 响应:', JSON.stringify(data))
+          
+          if (data.state === true || data.errno === 0) {
+            shareCreated = true
+            const responseData = data.data || data
+            shareCode = responseData.share_code || responseData.scode || responseData.code
+            receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
+            console.log('[115] share_send_app成功，分享码:', shareCode)
+          }
+        } catch (e) {
+          console.log('[115] share_send_app失败:', e)
         }
       }
       
-      // 尝试方式3: /share/add
-      if (!shareCode) {
-        console.log('[115] 尝试 /share/add API...')
-        response = await fetch(`${this.baseUrl}/share/add`, {
-          method: 'POST',
-          headers: {
-            'Cookie': this.cookie,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            fid: fileIds[0],
-            expire: expireParam.toString(),
-          }).toString(),
-        })
-        
-        data = await response.json()
-        console.log('[115] /share/add 响应:', JSON.stringify(data))
-        
-        if (data.state === true || data.errno === 0) {
-          const responseData = data.data || data
-          shareCode = responseData.share_code || responseData.scode || responseData.code
-          receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
-        }
-      }
-      
-      // 尝试方式4: 从分享列表获取（如果分享已创建）
+      // 尝试方式3: 从分享列表获取（使用proapi API）
       if (shareCreated && !shareCode) {
-        console.log('[115] 分享已创建但无分享码，尝试从分享列表获取...')
-        const listEndpoints = [
-          '/share/mysend?offset=0&limit=5&aid=1',
-          '/share/list?offset=0&limit=5&aid=1',
-          '/share/getlist?offset=0&limit=5&aid=1',
+        console.log('[115] 分享已创建但无分享码，尝试从proapi获取分享列表...')
+        
+        // 使用proapi.115.com的API（根据p115client文档）
+        const proapiEndpoints = [
+          'https://proapi.115.com/android/2.0/share/slist?limit=5&offset=0',
+          'https://proapi.115.com/share/slist?limit=5&offset=0',
         ]
         
-        for (const endpoint of listEndpoints) {
+        for (const endpoint of proapiEndpoints) {
           try {
-            const listRes = await fetch(`${this.baseUrl}${endpoint}`, {
+            console.log(`[115] 尝试API: ${endpoint}`)
+            const listRes = await fetch(endpoint, {
               headers: {
                 'Cookie': this.cookie,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/114.0.0.0 Mobile Safari/537.36',
               },
             })
             const listData = await listRes.json()
-            console.log(`[115] ${endpoint.split('?')[0]} 响应: state=${listData.state}, data存在=${!!listData.data}`)
+            console.log(`[115] proapi响应: state=${listData.state}, errno=${listData.errno}`)
             
             if (listData.state === true || listData.errno === 0) {
               const list = listData.data?.list || listData.data || listData.list || []
               console.log(`[115] 分享列表长度: ${Array.isArray(list) ? list.length : 0}`)
               
               if (Array.isArray(list) && list.length > 0) {
-                // 找到最新创建的分享（通常是第一个）
                 const item = list[0]
                 console.log('[115] 最新分享项字段:', Object.keys(item).join(', '))
-                console.log('[115] 最新分享项内容:', JSON.stringify(item).substring(0, 500))
-                shareCode = item.share_code || item.scode || item.code || item.sn
-                receiveCode = item.receive_code || item.rcode || item.password || item.code || ''
+                // 根据p115client，分享码字段可能是 share_code 或 code
+                shareCode = item.share_code || item.code || item.scode || item.sn
+                receiveCode = item.receive_code || item.password || item.code || ''
                 if (shareCode) {
-                  console.log('[115] 从分享列表获取到分享码:', shareCode)
+                  console.log('[115] 从proapi获取到分享码:', shareCode)
                   break
                 }
               }
             }
           } catch (e) {
-            console.log(`[115] ${endpoint} 失败:`, e)
+            console.log(`[115] proapi获取失败:`, e)
           }
         }
       }
