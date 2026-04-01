@@ -39,10 +39,6 @@ export const driveIcons: Record<string, {
     name: '迅雷网盘',
     icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/xunlei-1.png',
   },
-  'weiyun': {
-    name: '腾讯微云',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/weiyun-1.png',
-  },
 }
 
 // 推送渠道图标

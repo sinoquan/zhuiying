@@ -32,7 +32,6 @@ export const driveNames: Record<CloudDriveType, string> = {
   'baidu': '百度网盘',
   '123': '123云盘',
   'xunlei': '迅雷网盘',
-  'weiyun': '腾讯微云',
   'guangya': '光鸭网盘',
   'pikpak': 'PikPak',
 }
@@ -60,9 +59,6 @@ export const driveConfigFields: Record<CloudDriveType, { key: string; label: str
   ],
   'xunlei': [
     { key: 'token', label: 'Token', required: true },
-  ],
-  'weiyun': [
-    { key: 'cookie', label: 'Cookie', required: true },
   ],
   'guangya': [
     { key: 'token', label: 'Token', required: true },

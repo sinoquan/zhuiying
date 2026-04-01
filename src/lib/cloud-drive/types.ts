@@ -98,7 +98,6 @@ export type CloudDriveType =
   | 'baidu'
   | '123'
   | 'xunlei'
-  | 'weiyun'
   | 'guangya'
   | 'pikpak'
 
