@@ -129,9 +129,9 @@ export default function ShareRecordsPage() {
   const [totalPages, setTotalPages] = useState(0)
   
   // 筛选条件
-  const [filterCloudDrive, setFilterCloudDrive] = useState<string>('')
-  const [filterStatus, setFilterStatus] = useState<string>('')
-  const [filterSource, setFilterSource] = useState<string>('')
+  const [filterCloudDrive, setFilterCloudDrive] = useState<string>('all')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [filterSource, setFilterSource] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   
   // 对话框
@@ -148,17 +148,6 @@ export default function ShareRecordsPage() {
   // 操作状态
   const [saving, setSaving] = useState(false)
   const [pushing, setPushing] = useState(false)
-
-  // 加载基础数据
-  useEffect(() => {
-    fetchCloudDrives()
-    fetchPushChannels()
-  }, [])
-
-  // 加载分享记录
-  useEffect(() => {
-    fetchRecords()
-  }, [page, filterCloudDrive, filterStatus, filterSource])
 
   const fetchCloudDrives = async () => {
     try {
@@ -186,9 +175,9 @@ export default function ShareRecordsPage() {
       const params = new URLSearchParams()
       params.set('page', page.toString())
       params.set('pageSize', pageSize.toString())
-      if (filterCloudDrive) params.set('cloud_drive_id', filterCloudDrive)
-      if (filterStatus) params.set('status', filterStatus)
-      if (filterSource) params.set('source', filterSource)
+      if (filterCloudDrive && filterCloudDrive !== 'all') params.set('cloud_drive_id', filterCloudDrive)
+      if (filterStatus && filterStatus !== 'all') params.set('status', filterStatus)
+      if (filterSource && filterSource !== 'all') params.set('source', filterSource)
       if (searchQuery) params.set('search', searchQuery)
       
       const response = await fetch(`/api/share/records?${params}`)
@@ -203,6 +192,16 @@ export default function ShareRecordsPage() {
       setLoading(false)
     }
   }, [page, pageSize, filterCloudDrive, filterStatus, filterSource, searchQuery])
+
+  // 加载基础数据和分享记录
+  useEffect(() => {
+    fetchCloudDrives()
+    fetchPushChannels()
+  }, [])
+
+  useEffect(() => {
+    fetchRecords()
+  }, [fetchRecords])
 
   // 复制链接
   const copyLink = (record: ShareRecord) => {
@@ -448,7 +447,7 @@ export default function ShareRecordsPage() {
                 <SelectValue placeholder="全部网盘" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">全部网盘</SelectItem>
+                <SelectItem value="all">全部网盘</SelectItem>
                 {cloudDrives.map(drive => (
                   <SelectItem key={drive.id} value={drive.id.toString()}>
                     {drive.alias || drive.name}
@@ -462,7 +461,7 @@ export default function ShareRecordsPage() {
                 <SelectValue placeholder="全部状态" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">全部状态</SelectItem>
+                <SelectItem value="all">全部状态</SelectItem>
                 <SelectItem value="pending">审核中</SelectItem>
                 <SelectItem value="active">有效</SelectItem>
                 <SelectItem value="expired">已过期</SelectItem>
@@ -475,7 +474,7 @@ export default function ShareRecordsPage() {
                 <SelectValue placeholder="全部来源" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">全部来源</SelectItem>
+                <SelectItem value="all">全部来源</SelectItem>
                 <SelectItem value="monitor">自动监控</SelectItem>
                 <SelectItem value="manual">手动分享</SelectItem>
                 <SelectItem value="assistant">智能助手</SelectItem>
