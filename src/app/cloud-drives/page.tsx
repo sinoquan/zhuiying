@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -20,14 +20,12 @@ import {
   Plus, 
   Edit, 
   Trash2, 
-  RefreshCw,
   CheckCircle2,
   XCircle,
   Loader2,
   AlertTriangle,
   Power,
-  ChevronDown,
-  ChevronUp,
+  HardDrive,
   ExternalLink
 } from "lucide-react"
 import { toast } from "sonner"
@@ -175,7 +173,6 @@ export default function CloudDrivesPage() {
         
         if (drive.is_active && drive.config) {
           try {
-            // 并行获取空间和验证状态
             const [spaceRes, validateRes] = await Promise.all([
               fetch(`/api/cloud-drives/${drive.id}/space`),
               fetch(`/api/cloud-drives/${drive.id}/validate`),
@@ -226,7 +223,6 @@ export default function CloudDrivesPage() {
     e.preventDefault()
     
     try {
-      // 根据网盘类型构建配置
       const fields = DRIVE_CONFIG_FIELDS[formData.name] || []
       const config: Record<string, string> = {}
       fields.forEach(f => {
@@ -304,7 +300,6 @@ export default function CloudDrivesPage() {
       alias: drive.alias || "",
     }
     
-    // 从config中提取字段值
     if (drive.config) {
       fields.forEach(f => {
         initialFormData[f.key] = (drive.config?.[f.key] as string) || ""
@@ -330,19 +325,12 @@ export default function CloudDrivesPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  // 按网盘类型分组（只显示已添加的）
-  const drivesByType = AVAILABLE_DRIVE_TYPES
-    .map(type => ({
-      ...type,
-      drives: drives.filter(d => d.name === type.value)
-    }))
-    .filter(type => type.drives.length > 0)
-
   // 获取所有已添加的网盘类型
   const addedDriveTypes = new Set(drives.map(d => d.name))
 
   return (
-    <div className="p-8">
+    <div className="p-6 lg:p-8">
+      {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">网盘管理</h1>
@@ -356,72 +344,100 @@ export default function CloudDrivesPage() {
         </Button>
       </div>
 
-      {/* 网盘卡片网格 */}
+      {/* 统计概览 */}
+      <div className="grid gap-4 md:grid-cols-3 mb-8">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">网盘账号</p>
+                <p className="text-2xl font-bold mt-1">{drives.length}</p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-blue-100 dark:bg-blue-950">
+                <HardDrive className="h-5 w-5 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">在线账号</p>
+                <p className="text-2xl font-bold mt-1 text-green-600">
+                  {drives.filter(d => d.is_active).length}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-green-100 dark:bg-green-950">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">验证正常</p>
+                <p className="text-2xl font-bold mt-1">
+                  {Object.values(validationStatus).filter(v => v.valid).length}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-950">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 网盘列表 */}
       {loading ? (
         <div className="text-center py-8 text-muted-foreground">加载中...</div>
       ) : drives.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-            <Plus className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <p className="text-muted-foreground mb-4">还没有添加任何网盘</p>
-          <Button onClick={() => setAddDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            添加第一个网盘
-          </Button>
-        </div>
+        <Card>
+          <CardContent className="py-16 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+              <HardDrive className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <p className="text-muted-foreground mb-4">还没有添加任何网盘</p>
+            <Button onClick={() => setAddDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              添加第一个网盘
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {drivesByType.map((type) => (
-            <Card key={type.value} className="overflow-hidden">
-              {/* 卡片头部 - 网盘类型 */}
-              <div className="flex items-center gap-3 p-4 border-b bg-muted/30">
-                <div className="w-10 h-10 flex items-center justify-center">
-                  <Image 
-                    src={type.icon} 
-                    alt={type.label}
-                    width={40}
-                    height={40}
-                    className="w-10 h-10 object-contain"
-                    unoptimized
-                  />
-                </div>
-                <div className="flex-1">
-                  <div className="font-medium">{type.label}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {type.drives.length} 个账号
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleAddDrive(type.value)}
-                  className="h-8"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* 卡片内容 - 账号列表 */}
-              <CardContent className="p-3 space-y-2">
-                {type.drives.map((drive) => {
-                  const space = spaceInfo[drive.id]
-                  const validation = validationStatus[drive.id]
-                  const isValid = validation?.valid
-                  const showSpaceWarning = space && space.total === 0 && drive.is_active
-                  
-                  return (
-                    <div 
-                      key={drive.id} 
-                      className={`p-3 rounded-lg border transition-colors ${
-                        drive.is_active 
-                          ? 'bg-background hover:bg-muted/50' 
-                          : 'bg-muted/30 opacity-60'
-                      }`}
-                    >
-                      {/* 账号信息行 */}
-                      <div className="flex items-center gap-2 mb-2">
-                        {/* 验证状态图标 */}
+        <div className="grid gap-4">
+          {drives.map((drive) => {
+            const driveType = getDriveTypeInfo(drive.name)
+            const space = spaceInfo[drive.id]
+            const validation = validationStatus[drive.id]
+            const isValid = validation?.valid
+            const showWarning = space && space.total === 0 && drive.is_active && !isValid
+            
+            return (
+              <Card key={drive.id} className={!drive.is_active ? 'opacity-60' : ''}>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    {/* 网盘图标 */}
+                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {driveType && (
+                        <Image 
+                          src={driveType.icon} 
+                          alt={driveType.label}
+                          width={40}
+                          height={40}
+                          className="w-10 h-10 object-contain"
+                          unoptimized
+                        />
+                      )}
+                    </div>
+                    
+                    {/* 账号信息 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {/* 验证状态 */}
                         {drive.is_active && (
                           isValid ? (
                             <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
@@ -432,100 +448,98 @@ export default function CloudDrivesPage() {
                           )
                         )}
                         
-                        {/* 用户头像 */}
-                        {drive.config?.user_avatar ? (
-                          <img 
-                            src={drive.config.user_avatar} 
-                            alt="" 
-                            className="w-6 h-6 rounded-full flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-medium text-primary">
-                              {(drive.alias || drive.config?.user_name || '?').charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                        )}
-                        
-                        {/* 账号名称 */}
-                        <span className="font-medium text-sm flex-1 truncate">
+                        <span className="font-semibold truncate">
                           {drive.alias || drive.config?.user_name || '未命名'}
                         </span>
                         
-                        {/* VIP标签 */}
                         {drive.config?.is_vip && (
-                          <Badge variant="default" className="text-[10px] px-1 py-0 h-4">
+                          <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 bg-amber-500">
                             VIP
                           </Badge>
                         )}
                         
-                        {/* 状态标签 */}
-                        {!drive.is_active && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
-                            离线
-                          </Badge>
-                        )}
+                        <Badge 
+                          variant={drive.is_active ? "default" : "secondary"} 
+                          className={`text-[10px] px-1.5 py-0 h-5 ${
+                            drive.is_active 
+                              ? 'bg-green-500/10 text-green-600 hover:bg-green-500/20' 
+                              : ''
+                          }`}
+                        >
+                          {drive.is_active ? '在线' : '离线'}
+                        </Badge>
                         
-                        {/* 操作菜单 */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 flex-shrink-0">
-                              <Edit className="h-3.5 w-3.5 text-muted-foreground" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-36">
-                            <DropdownMenuItem onClick={() => openEditDialog(drive)}>
-                              <Edit className="mr-2 h-3.5 w-3.5" />
-                              编辑配置
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleToggleActive(drive)}>
-                              <Power className="mr-2 h-3.5 w-3.5" />
-                              {drive.is_active ? '禁用' : '启用'}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              onClick={() => handleDelete(drive.id)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="mr-2 h-3.5 w-3.5" />
-                              删除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <span className="text-xs text-muted-foreground">
+                          {driveType?.label}
+                        </span>
                       </div>
-
+                      
                       {/* 存储空间或警告 */}
-                      {drive.is_active && (
-                        space && space.total > 0 ? (
-                          <div className="mt-2">
-                            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                              <span>{formatSize(space.used)} / {formatSize(space.total)}</span>
-                              <span>{space.used_percent}%</span>
-                            </div>
-                            <Progress 
-                              value={space.used_percent}
-                              className={`h-1.5 ${
-                                space.used_percent > 90 
-                                  ? '[&>div]:bg-red-500' 
-                                  : space.used_percent > 70 
-                                  ? '[&>div]:bg-yellow-500' 
-                                  : '[&>div]:bg-green-500'
-                              }`}
-                            />
-                          </div>
-                        ) : showSpaceWarning && !isValid ? (
-                          <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-1 rounded">
-                            <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-                            <span>Cookie可能已过期，请重新配置</span>
-                          </div>
-                        ) : null
+                      {drive.is_active && space && space.total > 0 ? (
+                        <div className="flex items-center gap-3">
+                          <Progress 
+                            value={space.used_percent}
+                            className={`h-2 flex-1 ${
+                              space.used_percent > 90 
+                                ? '[&>div]:bg-red-500' 
+                                : space.used_percent > 70 
+                                ? '[&>div]:bg-yellow-500' 
+                                : '[&>div]:bg-green-500'
+                            }`}
+                          />
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {formatSize(space.used)} / {formatSize(space.total)}
+                          </span>
+                        </div>
+                      ) : showWarning ? (
+                        <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>Cookie可能已过期，请重新配置</span>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          {drive.config?.user_name || '暂无用户信息'}
+                        </p>
                       )}
                     </div>
-                  )
-                })}
-              </CardContent>
-            </Card>
-          ))}
+                    
+                    {/* 操作按钮 */}
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEditDialog(drive)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Power className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuItem onClick={() => handleToggleActive(drive)}>
+                            <Power className="mr-2 h-3.5 w-3.5" />
+                            {drive.is_active ? '禁用' : '启用'}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => handleDelete(drive.id)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" />
+                            删除
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
 
