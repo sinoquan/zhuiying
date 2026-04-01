@@ -189,6 +189,13 @@ export class QuarkService implements ICloudDriveService {
   }
 
   /**
+   * 取消分享（暂不支持）
+   */
+  async cancelShare(shareCode: string): Promise<boolean> {
+    throw new Error('夸克网盘暂不支持取消分享')
+  }
+
+  /**
    * 访问分享链接，获取文件信息（暂不支持）
    */
   async getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo> {

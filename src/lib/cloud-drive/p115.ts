@@ -442,6 +442,67 @@ export class Pan115Service implements ICloudDriveService {
     }
   }
 
+  /**
+   * 取消分享
+   * API: POST https://webapi.115.com/share/delete
+   * 参数: share_code
+   */
+  async cancelShare(shareCode: string): Promise<boolean> {
+    console.log('[115] 开始取消分享, shareCode:', shareCode)
+    
+    try {
+      // 方法1：使用 webapi
+      const deleteUrl = 'https://webapi.115.com/share/delete'
+      const response = await fetch(deleteUrl, {
+        method: 'POST',
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          share_code: shareCode,
+        }).toString(),
+      })
+      
+      const data = await response.json()
+      console.log('[115] share/delete 响应:', JSON.stringify(data))
+      
+      if (data.state === true || data.errno === 0) {
+        console.log('[115] 分享取消成功')
+        return true
+      }
+      
+      // 方法2：尝试 proapi
+      console.log('[115] 方法1失败，尝试 proapi...')
+      const proapiUrl = 'https://proapi.115.com/android/2.0/share/delete'
+      const proapiRes = await fetch(proapiUrl, {
+        method: 'POST',
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          share_code: shareCode,
+        }).toString(),
+      })
+      
+      const proapiData = await proapiRes.json()
+      console.log('[115] proapi share/delete 响应:', JSON.stringify(proapiData))
+      
+      if (proapiData.state === true || proapiData.errno === 0) {
+        console.log('[115] proapi 分享取消成功')
+        return true
+      }
+      
+      throw new Error(data.error || proapiData.error || '取消分享失败')
+    } catch (error) {
+      console.error('[115] 取消分享失败:', error)
+      throw error
+    }
+  }
+
   async checkNewFiles(path: string, sinceTime: Date): Promise<CloudFile[]> {
     const allFiles: CloudFile[] = []
     let page = 1

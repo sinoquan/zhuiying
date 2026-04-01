@@ -76,6 +76,9 @@ export interface ICloudDriveService {
   // 创建分享链接
   createShare(fileIds: string[], expireDays?: number): Promise<ShareInfo>
   
+  // 取消分享链接
+  cancelShare(shareCode: string): Promise<boolean>
+  
   // 访问分享链接，获取文件信息
   getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo>
   

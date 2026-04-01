@@ -261,6 +261,13 @@ export class AliyunService implements ICloudDriveService {
   }
 
   /**
+   * 取消分享（暂不支持）
+   */
+  async cancelShare(shareCode: string): Promise<boolean> {
+    throw new Error('阿里云盘暂不支持取消分享')
+  }
+
+  /**
    * 访问分享链接，获取文件信息
    * 阿里云盘分享链接格式：https://www.alipan.com/s/xxx
    */
