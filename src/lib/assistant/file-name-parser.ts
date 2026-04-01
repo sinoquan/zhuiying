@@ -170,9 +170,9 @@ export function parseFileName(fileName: string, fileSize?: number): ParsedFileIn
     .trim()
   
   // 处理中文和英文名称
-  // 如果包含中文，提取中文部分作为主标题
+  // 如果包含中文，提取中文部分作为主标题（包括可能的数字后缀，如"流浪地球2"）
   // 但要排除"第X集"等中文数字格式
-  const chineseMatch = cleanName.match(/([\u4e00-\u9fa5]+)/)
+  const chineseMatch = cleanName.match(/([\u4e00-\u9fa5]+\d*)/)
   if (chineseMatch) {
     let title = chineseMatch[1].trim()
     // 如果标题以"第"开头，说明匹配到了"第X集"的部分，需要重新提取

@@ -483,28 +483,57 @@ async function accessAliyunShareAnonymously(shareId: string, shareCode?: string)
 
 /**
  * 匿名访问115分享链接（不需要用户cookie）
+ * 使用完整的浏览器模拟请求
  */
 async function access115ShareAnonymously(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
-  // 115网盘分享链接可以匿名访问
-  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  // 模拟完整的浏览器请求
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Origin': 'https://115.com',
+    'Referer': `https://115.com/s/${shareId}`,
+    'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-site',
+  }
   
   try {
+    // 方式1：尝试访问分享页面获取文件信息（网页版方式）
+    const sharePageUrl = `https://115.com/s/${shareId}${shareCode ? `?password=${shareCode}` : ''}`
+    
+    // 先访问分享页面，获取必要的cookie和上下文
+    const pageRes = await fetch(sharePageUrl, {
+      headers: {
+        'User-Agent': headers['User-Agent'],
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': headers['Accept-Language'],
+      },
+      redirect: 'follow',
+    })
+    
+    // 从页面响应中提取文件信息（通过解析HTML）
+    const html = await pageRes.text()
+    
+    // 尝试从HTML中提取文件信息
+    const fileInfo = extractFileInfoFrom115Page(html, shareId, shareCode)
+    if (fileInfo) {
+      return fileInfo
+    }
+    
+    // 方式2：使用webapi.115.com（备用）
     // 1. 获取分享信息
     const shareInfoUrl = `https://webapi.115.com/share/getinfo?share_code=${shareId}`
-    const shareInfoRes = await fetch(shareInfoUrl, {
-      headers: {
-        'User-Agent': userAgent,
-      },
-    })
+    const shareInfoRes = await fetch(shareInfoUrl, { headers })
     const shareInfoData = await shareInfoRes.json()
     
     // 2. 获取文件列表
     const fileListUrl = `https://webapi.115.com/share/list?share_code=${shareId}${shareCode ? `&receive_code=${shareCode}` : ''}&cid=0`
-    const fileListRes = await fetch(fileListUrl, {
-      headers: {
-        'User-Agent': userAgent,
-      },
-    })
+    const fileListRes = await fetch(fileListUrl, { headers })
     const fileListData = await fileListRes.json()
     
     if (!fileListData.data) {
@@ -553,6 +582,78 @@ async function access115ShareAnonymously(shareId: string, shareCode?: string): P
   } catch (error) {
     console.error('115分享链接匿名访问失败:', error)
     throw error
+  }
+}
+
+/**
+ * 从115分享页面HTML中提取文件信息
+ */
+function extractFileInfoFrom115Page(html: string, shareId: string, shareCode?: string): SharedFileInfo | null {
+  try {
+    // 115页面会在script标签中包含文件信息
+    // 尝试提取文件列表数据
+    
+    // 方法1：查找 window.__INITIAL_STATE__ 或类似的数据注入
+    const stateMatch = html.match(/window\.__INITIAL_STATE__\s*=\s*({[^;]+});/)
+    if (stateMatch) {
+      try {
+        const state = JSON.parse(stateMatch[1])
+        if (state.files || state.fileList || state.shareInfo?.files) {
+          const filesData = state.files || state.fileList || state.shareInfo?.files || []
+          const files = filesData.map((item: any) => ({
+            file_id: item.fid || item.cid || item.id,
+            file_name: item.n || item.name || item.fileName,
+            file_size: item.s || item.size || item.fileSize || 0,
+            is_dir: item.pc || item.isDir || item.is_dir || false,
+          }))
+          
+          if (files.length > 0) {
+            return {
+              share_id: shareId,
+              share_code: shareCode,
+              file_id: files[0].file_id,
+              file_name: files.length === 1 ? files[0].file_name : (state.shareInfo?.name || '分享文件夹'),
+              file_size: files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0),
+              is_dir: files.length > 1 || files[0].is_dir,
+              file_count: files.length,
+              files: files.slice(0, 20).map((f: any) => ({
+                ...f,
+                share_id: shareId,
+                share_code: shareCode,
+              })),
+            }
+          }
+        }
+      } catch (e) {
+        console.error('解析115页面状态失败:', e)
+      }
+    }
+    
+    // 方法2：查找文件名（从title或meta标签）
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/)
+    const metaMatch = html.match(/<meta[^>]+name="description"[^>]+content="([^"]+)"/)
+    
+    if (titleMatch || metaMatch) {
+      const name = titleMatch?.[1]?.replace(' - 115网盘', '').trim() || 
+                   metaMatch?.[1]?.split('，')[0] || 
+                   '未知文件'
+      
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: '0',
+        file_name: name,
+        file_size: 0,
+        is_dir: true,
+        file_count: 0,
+        files: [],
+      }
+    }
+    
+    return null
+  } catch (error) {
+    console.error('从115页面提取文件信息失败:', error)
+    return null
   }
 }
 

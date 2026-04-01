@@ -21,6 +21,7 @@ import {
 import { accessShareLink } from '@/lib/assistant/share-link-accessor'
 import { parseFileName, extractMainInfo } from '@/lib/assistant/file-name-parser'
 import { TMDBService } from '@/lib/tmdb'
+import { DoubanService } from '@/lib/douban'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 
 // 分析请求
@@ -57,6 +58,9 @@ interface AnalyzeResult {
     rating?: number
     genres?: string[]
     cast?: string[]
+    director?: string
+    source?: 'tmdb' | 'douban'
+    url?: string
   }
   // 文件详情（如果是文件夹）
   files?: Array<{
@@ -261,7 +265,8 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * 搜索 TMDB
+ * 搜索 TMDB + 豆瓣联合识别
+ * 优先 TMDB（国际数据），备用豆瓣（中文数据）
  */
 async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'unknown', year?: number) {
   try {
@@ -294,34 +299,68 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
     // 回退到环境变量
     apiKey = apiKey || process.env.TMDB_API_KEY
     
-    if (!apiKey) return null
-    
-    const tmdbService = new TMDBService({
-      apiKey,
-      language,
-    })
-    
-    const tmdbResult = await tmdbService.identifyFromFileName(
-      year ? `${title} (${year})` : title
-    )
-    
-    if (tmdbResult && tmdbResult.tmdb_id) {
-      return {
-        id: tmdbResult.tmdb_id,
-        title: tmdbResult.title,
-        original_title: tmdbResult.original_title,
-        year: tmdbResult.year?.toString(),
-        overview: tmdbResult.overview?.substring(0, 200),
-        poster_path: tmdbResult.poster_url || undefined,
-        rating: undefined,
-        genres: undefined,
-        cast: undefined,
+    // 尝试 TMDB 搜索
+    if (apiKey) {
+      try {
+        const tmdbService = new TMDBService({
+          apiKey,
+          language,
+        })
+        
+        const tmdbResult = await tmdbService.identifyFromFileName(
+          year ? `${title} (${year})` : title
+        )
+        
+        if (tmdbResult && tmdbResult.tmdb_id) {
+          return {
+            id: tmdbResult.tmdb_id,
+            title: tmdbResult.title,
+            original_title: tmdbResult.original_title,
+            year: tmdbResult.year?.toString(),
+            overview: tmdbResult.overview?.substring(0, 200),
+            poster_path: tmdbResult.poster_url || undefined,
+            rating: undefined,
+            genres: undefined,
+            cast: undefined,
+            source: 'tmdb' as const,
+          }
+        }
+      } catch (error) {
+        console.error('TMDB搜索失败:', error)
       }
+    }
+    
+    // TMDB 没有结果，尝试豆瓣
+    try {
+      const doubanService = new DoubanService()
+      const doubanResult = await doubanService.identifyFromFileName(
+        title,
+        contentType === 'tv_series' ? 'tv' : contentType === 'movie' ? 'movie' : 'unknown'
+      )
+      
+      if (doubanResult) {
+        return {
+          id: parseInt(doubanResult.id) || 0,
+          title: doubanResult.title,
+          original_title: doubanResult.original_title,
+          year: doubanResult.year,
+          overview: doubanResult.overview?.substring(0, 200),
+          poster_path: doubanResult.poster_url || undefined,
+          rating: doubanResult.rating,
+          genres: doubanResult.genres,
+          cast: doubanResult.actors,
+          director: doubanResult.director,
+          source: 'douban' as const,
+          url: doubanResult.url,
+        }
+      }
+    } catch (error) {
+      console.error('豆瓣搜索失败:', error)
     }
     
     return null
   } catch (error) {
-    console.error('TMDB搜索失败:', error)
+    console.error('影视搜索失败:', error)
     return null
   }
 }
