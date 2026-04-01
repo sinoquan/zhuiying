@@ -33,7 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { 
   Plus, MoreHorizontal, Edit, Trash2, Send, RefreshCw, Loader2, 
-  Bot, CheckCircle2, ExternalLink, TestTube, Settings
+  Bot, CheckCircle2, ExternalLink, TestTube, Settings, Users, Hash, XCircle
 } from "lucide-react"
 import Image from "next/image"
 import {
@@ -120,6 +120,10 @@ export default function PushChannelsPage() {
   const [botInfo, setBotInfo] = useState<TelegramBotInfo | null>(null)
   const [webhookInfo, setWebhookInfo] = useState<WebhookInfo | null>(null)
   const [settingWebhook, setSettingWebhook] = useState(false)
+  const [allChannels, setAllChannels] = useState<TelegramChannel[]>([])
+  const [allGroups, setAllGroups] = useState<TelegramChannel[]>([])
+  const [loadingAllChannels, setLoadingAllChannels] = useState(false)
+  const [testingChatId, setTestingChatId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchChannels()
@@ -195,6 +199,60 @@ export default function PushChannelsPage() {
       toast.error(error instanceof Error ? error.message : "设置失败")
     } finally {
       setSettingWebhook(false)
+    }
+  }
+
+  // 获取所有频道/群组列表
+  const fetchAllChannels = async () => {
+    if (!channelConfig.telegram_bot_token) {
+      toast.error("请先配置 Telegram Bot Token")
+      return
+    }
+    
+    setLoadingAllChannels(true)
+    try {
+      const response = await fetch(`/api/telegram/channels?bot_token=${encodeURIComponent(channelConfig.telegram_bot_token)}`)
+      const data = await response.json()
+      
+      if (data.error) throw new Error(data.error)
+      
+      setAllChannels(data.channels || [])
+      setAllGroups(data.groups || [])
+      
+      const total = (data.channels?.length || 0) + (data.groups?.length || 0)
+      if (total === 0) {
+        toast.info("未发现频道或群组，请确保机器人已加入并有发言权限")
+      } else {
+        toast.success(`发现 ${total} 个频道/群组`)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "获取频道列表失败")
+    } finally {
+      setLoadingAllChannels(false)
+    }
+  }
+
+  // 测试发送消息到频道/群组
+  const testSendToChat = async (chatId: string, title: string) => {
+    setTestingChatId(chatId)
+    try {
+      const response = await fetch("/api/telegram/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bot_token: channelConfig.telegram_bot_token,
+          chat_id: chatId,
+        }),
+      })
+      
+      const data = await response.json()
+      if (data.error) throw new Error(data.error)
+      
+      toast.success(`测试消息已发送到 ${title}`)
+    } catch (error) {
+      toast.error("发送失败: " + (error instanceof Error ? error.message : "未知错误"))
+    } finally {
+      setTestingChatId(null)
     }
   }
 
@@ -573,6 +631,146 @@ export default function PushChannelsPage() {
                   保存配置
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* 频道/群组列表 */}
+          <Card className="mt-4">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    频道 / 群组列表
+                  </CardTitle>
+                  <CardDescription>
+                    机器人所在的频道和群组，可用于推送配置
+                  </CardDescription>
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={fetchAllChannels}
+                  disabled={loadingAllChannels || !channelConfig.telegram_bot_token}
+                >
+                  {loadingAllChannels ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  <span className="ml-2">刷新列表</span>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {allChannels.length === 0 && allGroups.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  {channelConfig.telegram_bot_token ? (
+                    <>
+                      <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p className="mb-2">点击"刷新列表"获取频道和群组</p>
+                      <p className="text-xs">确保机器人已加入频道/群组，并且有发送消息的权限</p>
+                    </>
+                  ) : (
+                    <p>请先配置 Telegram Bot Token</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* 频道 */}
+                  {allChannels.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                        <Hash className="h-4 w-4 text-blue-600" />
+                        频道 ({allChannels.length})
+                      </h4>
+                      <div className="grid gap-2">
+                        {allChannels.map((channel) => (
+                          <div 
+                            key={channel.id}
+                            className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                                <Hash className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{channel.title}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {channel.username ? `@${channel.username}` : '私有频道'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                                {channel.chat_id}
+                              </code>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => testSendToChat(channel.chat_id, channel.title)}
+                                disabled={testingChatId === channel.chat_id}
+                              >
+                                {testingChatId === channel.chat_id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Send className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 群组 */}
+                  {allGroups.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                        <Users className="h-4 w-4 text-purple-600" />
+                        群组 ({allGroups.length})
+                      </h4>
+                      <div className="grid gap-2">
+                        {allGroups.map((group) => (
+                          <div 
+                            key={group.id}
+                            className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                                <Users className="h-5 w-5 text-purple-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{group.title}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {group.type === 'supergroup' ? '超级群' : '普通群'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                                {group.chat_id}
+                              </code>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => testSendToChat(group.chat_id, group.title)}
+                                disabled={testingChatId === group.chat_id}
+                              >
+                                {testingChatId === group.chat_id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Send className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

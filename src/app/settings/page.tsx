@@ -9,8 +9,8 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { 
-  Settings, Globe, Bot, Database, Loader2, TestTube, RefreshCw, 
-  Send, Users, Hash, ExternalLink, CheckCircle2, XCircle
+  Settings, Globe, Database, Loader2, TestTube,
+  ExternalLink, CheckCircle2, XCircle
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -26,8 +26,6 @@ interface SystemSettings {
   tmdb_api_key: string
   tmdb_language: string
   douban_cookie: string
-  telegram_bot_token: string
-  telegram_chat_id: string
   proxy_enabled: boolean
   proxy_url: string
   auto_monitor: boolean
@@ -37,30 +35,6 @@ interface SystemSettings {
   backup_interval: number
   system_password: string
   disable_auth: boolean
-}
-
-interface TelegramChannel {
-  id: number
-  type: 'group' | 'supergroup' | 'channel'
-  title: string
-  username?: string
-  chat_id: string
-}
-
-interface TelegramBotInfo {
-  id: number
-  username: string
-  first_name: string
-  can_join_groups: boolean
-  can_read_all_group_messages: boolean
-}
-
-interface WebhookInfo {
-  url: string
-  has_custom_certificate: boolean
-  pending_update_count: number
-  last_error_date?: number
-  last_error_message?: string
 }
 
 export default function SettingsPage() {
@@ -77,8 +51,6 @@ export default function SettingsPage() {
     tmdb_api_key: "",
     tmdb_language: "zh-CN",
     douban_cookie: "",
-    telegram_bot_token: "",
-    telegram_chat_id: "",
     proxy_enabled: false,
     proxy_url: "",
     auto_monitor: true,
@@ -89,14 +61,6 @@ export default function SettingsPage() {
     system_password: "",
     disable_auth: false,
   })
-
-  // Telegram 相关状态
-  const [botInfo, setBotInfo] = useState<TelegramBotInfo | null>(null)
-  const [channels, setChannels] = useState<TelegramChannel[]>([])
-  const [groups, setGroups] = useState<TelegramChannel[]>([])
-  const [loadingChannels, setLoadingChannels] = useState(false)
-  const [webhookInfo, setWebhookInfo] = useState<WebhookInfo | null>(null)
-  const [settingWebhook, setSettingWebhook] = useState(false)
 
   useEffect(() => {
     fetchSettings()
@@ -112,61 +76,11 @@ export default function SettingsPage() {
           ...settings,
           ...data,
         })
-        
-        // 如果有 bot token，获取机器人信息
-        if (data.telegram_bot_token) {
-          fetchBotInfo(data.telegram_bot_token)
-        }
       }
     } catch (error) {
       console.error("获取设置失败:", error)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchBotInfo = async (botToken?: string) => {
-    const token = botToken || settings.telegram_bot_token
-    if (!token) return
-    
-    try {
-      const response = await fetch(`/api/telegram/bot-info?bot_token=${encodeURIComponent(token)}`)
-      const data = await response.json()
-      
-      if (data.bot) {
-        setBotInfo(data.bot)
-      }
-    } catch (error) {
-      console.error("获取机器人信息失败:", error)
-    }
-  }
-
-  const fetchChannels = async () => {
-    if (!settings.telegram_bot_token) {
-      toast.error("请先配置 Telegram Bot Token")
-      return
-    }
-    
-    setLoadingChannels(true)
-    try {
-      const response = await fetch(`/api/telegram/channels?bot_token=${encodeURIComponent(settings.telegram_bot_token)}`)
-      const data = await response.json()
-      
-      if (data.error) throw new Error(data.error)
-      
-      setChannels(data.channels || [])
-      setGroups(data.groups || [])
-      
-      const total = (data.channels?.length || 0) + (data.groups?.length || 0)
-      if (total === 0) {
-        toast.info("未发现频道或群组，请确保机器人已加入并有发言权限")
-      } else {
-        toast.success(`发现 ${total} 个频道/群组`)
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "获取频道列表失败")
-    } finally {
-      setLoadingChannels(false)
     }
   }
 
@@ -182,11 +96,6 @@ export default function SettingsPage() {
       if (!response.ok) throw new Error("保存失败")
       
       toast.success("设置已保存")
-      
-      // 如果保存了 Telegram token，刷新机器人信息
-      if (section === "telegram" && settings.telegram_bot_token) {
-        fetchBotInfo()
-      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存失败")
     } finally {
@@ -285,68 +194,6 @@ export default function SettingsPage() {
     }
   }
 
-  const testChannel = async (chatId: string, title: string) => {
-    setTesting(chatId)
-    try {
-      const response = await fetch("/api/telegram/channels", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bot_token: settings.telegram_bot_token,
-          chat_id: chatId,
-        }),
-      })
-      
-      const data = await response.json()
-      if (data.error) throw new Error(data.error)
-      
-      toast.success(`测试消息已发送到 ${title}`)
-    } catch (error) {
-      toast.error("发送失败: " + (error instanceof Error ? error.message : "未知错误"))
-    } finally {
-      setTesting(null)
-    }
-  }
-
-  // 设置 Webhook
-  const setWebhook = async () => {
-    setSettingWebhook(true)
-    try {
-      const response = await fetch("/api/telegram/webhook/set", { method: "POST" })
-      const data = await response.json()
-      
-      if (data.error) throw new Error(data.error)
-      
-      toast.success(data.message || "Webhook 设置成功")
-      setWebhookInfo({ url: data.webhook_url, has_custom_certificate: false, pending_update_count: 0 })
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "设置失败")
-    } finally {
-      setSettingWebhook(false)
-    }
-  }
-
-  // 获取 Webhook 信息
-  const getWebhookInfo = async () => {
-    try {
-      const response = await fetch("/api/telegram/webhook/set")
-      const data = await response.json()
-      
-      if (data.result) {
-        setWebhookInfo(data.result)
-      }
-    } catch (error) {
-      console.error("获取 Webhook 信息失败:", error)
-    }
-  }
-
-  // 当 bot info 获取成功后，也获取 webhook 信息
-  useEffect(() => {
-    if (botInfo) {
-      getWebhookInfo()
-    }
-  }, [botInfo])
-
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center">
@@ -363,22 +210,18 @@ export default function SettingsPage() {
           系统设置
         </h1>
         <p className="text-muted-foreground mt-2">
-          配置系统参数、TMDB API、Telegram Bot 等基础设置
+          配置系统参数、媒体识别、网络代理等基础设置
         </p>
       </div>
 
-      <Tabs defaultValue="telegram" className="space-y-4">
-        <TabsList className="grid grid-cols-5 w-full">
-          <TabsTrigger value="telegram">
-            <Bot className="h-4 w-4 mr-2" />
-            Telegram
-          </TabsTrigger>
+      <Tabs defaultValue="general" className="space-y-4">
+        <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="general">
             <Globe className="h-4 w-4 mr-2" />
             常规
           </TabsTrigger>
           <TabsTrigger value="media">
-            <Bot className="h-4 w-4 mr-2" />
+            <Database className="h-4 w-4 mr-2" />
             媒体识别
           </TabsTrigger>
           <TabsTrigger value="network">
@@ -390,305 +233,6 @@ export default function SettingsPage() {
             备份
           </TabsTrigger>
         </TabsList>
-
-        {/* Telegram 设置 */}
-        <TabsContent value="telegram" className="space-y-4">
-          {/* Bot 配置 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bot className="h-5 w-5" />
-                Telegram Bot 配置
-              </CardTitle>
-              <CardDescription>
-                配置全局 Telegram Bot，用于所有推送服务
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* 机器人信息卡片 */}
-              {botInfo && (
-                <div className="p-4 bg-muted rounded-lg flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                      <Bot className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-lg">@{botInfo.username}</p>
-                      <p className="text-sm text-muted-foreground">{botInfo.first_name}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {botInfo.can_join_groups && (
-                      <Badge variant="outline" className="text-green-600 border-green-600">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        可加入群组
-                      </Badge>
-                    )}
-                    {botInfo.can_read_all_group_messages && (
-                      <Badge variant="outline" className="text-blue-600 border-blue-600">
-                        可读取群消息
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              <div className="grid gap-2">
-                <Label htmlFor="bot_token">Bot Token *</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="bot_token"
-                    type="password"
-                    value={settings.telegram_bot_token}
-                    onChange={(e) => 
-                      setSettings({ ...settings, telegram_bot_token: e.target.value })
-                    }
-                    placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
-                    className="flex-1"
-                  />
-                  <Button 
-                    variant="outline" 
-                    onClick={() => fetchBotInfo()}
-                    disabled={!settings.telegram_bot_token}
-                  >
-                    验证
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  在 <a href="https://t.me/botfather" target="_blank" className="text-primary hover:underline inline-flex items-center gap-1">
-                    @BotFather <ExternalLink className="h-3 w-3" />
-                  </a> 创建机器人获取 Token
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <Button onClick={() => handleSave("telegram")} disabled={saving}>
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  保存设置
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Webhook 配置 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Send className="h-5 w-5" />
-                Bot Webhook 配置
-              </CardTitle>
-              <CardDescription>
-                配置机器人 Webhook 以接收用户消息，实现智能助手功能
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {webhookInfo && (
-                <div className="p-4 bg-muted rounded-lg space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Webhook URL</span>
-                    {webhookInfo.url ? (
-                      <Badge variant="outline" className="text-green-600 border-green-600">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        已配置
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-                        未配置
-                      </Badge>
-                    )}
-                  </div>
-                  {webhookInfo.url && (
-                    <code className="text-xs bg-background px-2 py-1 rounded block break-all">
-                      {webhookInfo.url}
-                    </code>
-                  )}
-                  {webhookInfo.pending_update_count > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      待处理消息: {webhookInfo.pending_update_count} 条
-                    </p>
-                  )}
-                  {webhookInfo.last_error_message && (
-                    <p className="text-xs text-destructive">
-                      错误: {webhookInfo.last_error_message}
-                    </p>
-                  )}
-                </div>
-              )}
-              
-              <div className="flex items-center gap-2">
-                <Button 
-                  onClick={setWebhook} 
-                  disabled={settingWebhook || !settings.telegram_bot_token}
-                >
-                  {settingWebhook && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  设置 Webhook
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  设置后，用户发送链接给机器人即可自动识别并推送
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 频道/群组管理 */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    频道 / 群组列表
-                  </CardTitle>
-                  <CardDescription>
-                    机器人所在的频道和群组，可用于推送配置
-                  </CardDescription>
-                </div>
-                <Button 
-                  variant="outline" 
-                  onClick={fetchChannels}
-                  disabled={loadingChannels || !settings.telegram_bot_token}
-                >
-                  {loadingChannels ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  <span className="ml-2">刷新列表</span>
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {channels.length === 0 && groups.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  {settings.telegram_bot_token ? (
-                    <>
-                      <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p className="mb-2">点击"刷新列表"获取频道和群组</p>
-                      <p className="text-xs">确保机器人已加入频道/群组，并且有发送消息的权限</p>
-                    </>
-                  ) : (
-                    <p>请先配置 Telegram Bot Token</p>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* 频道 */}
-                  {channels.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                        <Hash className="h-4 w-4 text-blue-600" />
-                        频道 ({channels.length})
-                      </h4>
-                      <div className="grid gap-2">
-                        {channels.map((channel) => (
-                          <div 
-                            key={channel.id}
-                            className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                                <Hash className="h-5 w-5 text-blue-600" />
-                              </div>
-                              <div>
-                                <p className="font-medium">{channel.title}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {channel.username ? `@${channel.username}` : '私有频道'}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                                {channel.chat_id}
-                              </code>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => testChannel(channel.chat_id, channel.title)}
-                                disabled={testing === channel.chat_id}
-                              >
-                                {testing === channel.chat_id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Send className="h-3 w-3" />
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* 群组 */}
-                  {groups.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                        <Users className="h-4 w-4 text-purple-600" />
-                        群组 ({groups.length})
-                      </h4>
-                      <div className="grid gap-2">
-                        {groups.map((group) => (
-                          <div 
-                            key={group.id}
-                            className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
-                                <Users className="h-5 w-5 text-purple-600" />
-                              </div>
-                              <div>
-                                <p className="font-medium">{group.title}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {group.type === 'supergroup' ? '超级群' : '普通群'}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                                {group.chat_id}
-                              </code>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => testChannel(group.chat_id, group.title)}
-                                disabled={testing === group.chat_id}
-                              >
-                                {testing === group.chat_id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Send className="h-3 w-3" />
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* 提示信息 */}
-          <Card className="border-dashed">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-3 text-sm text-muted-foreground">
-                <div className="p-2 rounded-lg bg-muted">
-                  <Send className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground mb-1">如何配置推送？</p>
-                  <p>
-                    在这里配置好 Bot 后，前往 
-                    <Link href="/push/channels" className="text-primary hover:underline mx-1">推送渠道</Link>
-                    页面，为每个网盘绑定对应的频道或群组即可实现自动推送。
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         {/* 常规设置 */}
         <TabsContent value="general">
@@ -814,34 +358,41 @@ export default function SettingsPage() {
                       <XCircle className="h-4 w-4" />
                     )}
                     <span>{testResult.message}</span>
-                    {testResult.latency && <Badge variant="outline" className="text-xs">{testResult.latency}ms</Badge>}
+                    {testResult.latency && <span className="text-muted-foreground">({testResult.latency}ms)</span>}
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
                   在 <a href="https://www.themoviedb.org/settings/api" target="_blank" className="text-primary hover:underline inline-flex items-center gap-1">
-                    TMDB官网 <ExternalLink className="h-3 w-3" />
-                  </a> 免费申请 API Key
+                    TMDB 官网 <ExternalLink className="h-3 w-3" />
+                  </a> 申请 API Key
                 </p>
               </div>
-              
+
               <div className="grid gap-2">
                 <Label htmlFor="tmdb_language">语言</Label>
-                <Select 
-                  value={settings.tmdb_language} 
-                  onValueChange={(v) => setSettings({ ...settings, tmdb_language: v })}
+                <Select
+                  value={settings.tmdb_language}
+                  onValueChange={(value) => 
+                    setSettings({ ...settings, tmdb_language: value })
+                  }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="选择语言" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="zh-CN">中文 (简体)</SelectItem>
-                    <SelectItem value="zh-TW">中文 (繁體)</SelectItem>
+                    <SelectItem value="zh-CN">中文（简体）</SelectItem>
+                    <SelectItem value="zh-TW">中文（繁体）</SelectItem>
                     <SelectItem value="en-US">English</SelectItem>
                     <SelectItem value="ja-JP">日本語</SelectItem>
                     <SelectItem value="ko-KR">한국어</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              <Button onClick={() => handleSave("media")} disabled={saving}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                保存设置
+              </Button>
             </CardContent>
           </Card>
 
@@ -849,16 +400,16 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded bg-green-600 flex items-center justify-center text-white text-xs font-bold">豆</div>
-                豆瓣影视配置
+                <span className="text-lg">📖</span>
+                豆瓣 API 配置
               </CardTitle>
               <CardDescription>
-                豆瓣是国内最全的影视评分网站，对中文内容识别更准确（可选）
+                豆瓣作为备用数据源，当 TMDB 识别失败时使用
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-2">
-                <Label htmlFor="douban_cookie">Cookie（可选）</Label>
+                <Label htmlFor="douban_cookie">豆瓣 Cookie</Label>
                 <div className="flex gap-2">
                   <Input
                     id="douban_cookie"
@@ -867,7 +418,7 @@ export default function SettingsPage() {
                     onChange={(e) => 
                       setSettings({ ...settings, douban_cookie: e.target.value })
                     }
-                    placeholder="登录豆瓣后复制Cookie，提高搜索成功率"
+                    placeholder="可选，用于提高豆瓣API访问限额"
                     className="flex-1"
                   />
                   <Button 
@@ -890,50 +441,35 @@ export default function SettingsPage() {
                       <XCircle className="h-4 w-4" />
                     )}
                     <span>{testResult.message}</span>
-                    {testResult.latency && <Badge variant="outline" className="text-xs">{testResult.latency}ms</Badge>}
+                    {testResult.latency && <span className="text-muted-foreground">({testResult.latency}ms)</span>}
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  不填写Cookie也可以使用，但可能受访问限制。获取方法：
-                  <a href="https://www.douban.com" target="_blank" className="text-primary hover:underline ml-1 inline-flex items-center gap-1">
-                    登录豆瓣 <ExternalLink className="h-3 w-3" />
-                  </a>
-                  → F12开发者工具 → Network → 刷新页面 → 点击任意请求 → 复制Cookie值
+                  登录豆瓣后从浏览器开发者工具获取 Cookie，非必须配置
                 </p>
               </div>
 
-              <div className="p-3 bg-muted/50 rounded-lg text-sm">
-                <p className="text-muted-foreground">
-                  💡 <span className="font-medium">提示：</span>系统会优先使用 TMDB 识别，TMDB 无结果时自动回退到豆瓣。两个服务都配置可以获得最佳识别效果。
-                </p>
-              </div>
+              <Button onClick={() => handleSave("douban")} disabled={saving}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                保存设置
+              </Button>
             </CardContent>
           </Card>
-
-          {/* 保存按钮 */}
-          <div className="flex justify-end">
-            <Button onClick={() => handleSave("media")} disabled={saving}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              保存设置
-            </Button>
-          </div>
         </TabsContent>
 
         {/* 网络设置 */}
         <TabsContent value="network">
           <Card>
             <CardHeader>
-              <CardTitle>网络代理设置</CardTitle>
-              <CardDescription>
-                配置代理服务器（访问TMDB等国外服务）
-              </CardDescription>
+              <CardTitle>网络设置</CardTitle>
+              <CardDescription>代理配置（用于访问 TMDB 等海外服务）</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-base">启用代理</Label>
                   <p className="text-sm text-muted-foreground">
-                    通过代理访问国外服务
+                    通过代理访问 TMDB 等海外服务
                   </p>
                 </div>
                 <Switch
@@ -944,54 +480,51 @@ export default function SettingsPage() {
                 />
               </div>
 
-              {settings.proxy_enabled && (
-                <div className="grid gap-2">
-                  <Label htmlFor="proxy_url">代理地址</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="proxy_url"
-                      value={settings.proxy_url}
-                      onChange={(e) => 
-                        setSettings({ ...settings, proxy_url: e.target.value })
-                      }
-                      placeholder="http://127.0.0.1:7890"
-                      className="flex-1"
-                    />
-                    <Button 
-                      variant="outline" 
-                      onClick={testProxy}
-                      disabled={testing === "proxy" || !settings.proxy_url}
-                    >
-                      {testing === "proxy" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <TestTube className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                  {testResult?.type === 'proxy' && (
-                    <div className={`text-sm flex items-center gap-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                      {testResult.success ? (
-                        <CheckCircle2 className="h-4 w-4" />
-                      ) : (
-                        <XCircle className="h-4 w-4" />
-                      )}
-                      <span>{testResult.message}</span>
-                      {testResult.latency && <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">{testResult.latency}ms</Badge>}
-                    </div>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    支持HTTP/HTTPS/SOCKS5代理，例如: http://127.0.0.1:7890
-                  </p>
+              <div className="grid gap-2">
+                <Label htmlFor="proxy_url">代理地址</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="proxy_url"
+                    value={settings.proxy_url}
+                    onChange={(e) => 
+                      setSettings({ ...settings, proxy_url: e.target.value })
+                    }
+                    placeholder="http://127.0.0.1:7890"
+                    className="flex-1"
+                    disabled={!settings.proxy_enabled}
+                  />
+                  <Button 
+                    variant="outline" 
+                    onClick={testProxy}
+                    disabled={testing === "proxy" || !settings.proxy_enabled || !settings.proxy_url}
+                  >
+                    {testing === "proxy" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <TestTube className="h-4 w-4" />
+                    )}
+                  </Button>
                 </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button onClick={() => handleSave("network")} disabled={saving}>
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  保存设置
-                </Button>
+                {testResult?.type === 'proxy' && (
+                  <div className={`text-sm flex items-center gap-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.success ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    <span>{testResult.message}</span>
+                    {testResult.latency && <span className="text-muted-foreground">({testResult.latency}ms)</span>}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  支持 HTTP/HTTPS/SOCKS5 代理，如 http://127.0.0.1:7890
+                </p>
               </div>
+
+              <Button onClick={() => handleSave("network")} disabled={saving}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                保存设置
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1001,14 +534,14 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>备份设置</CardTitle>
-              <CardDescription>配置数据备份策略</CardDescription>
+              <CardDescription>数据库备份配置（开发中）</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="text-base">自动备份</Label>
+                  <Label className="text-base">启用自动备份</Label>
                   <p className="text-sm text-muted-foreground">
-                    定期自动备份系统配置和数据
+                    定期备份系统数据
                   </p>
                 </div>
                 <Switch
@@ -1016,78 +549,58 @@ export default function SettingsPage() {
                   onCheckedChange={(checked) => 
                     setSettings({ ...settings, backup_enabled: checked })
                   }
+                  disabled
                 />
               </div>
 
-              {settings.backup_enabled && (
-                <>
-                  <div className="grid gap-2">
-                    <Label htmlFor="backup_path">备份路径</Label>
-                    <Input
-                      id="backup_path"
-                      value={settings.backup_path}
-                      onChange={(e) => 
-                        setSettings({ ...settings, backup_path: e.target.value })
-                      }
-                      placeholder="/path/to/backup"
-                    />
-                  </div>
-                  
-                  <div className="grid gap-2">
-                    <Label htmlFor="backup_interval">备份间隔（天）</Label>
-                    <Input
-                      id="backup_interval"
-                      type="number"
-                      value={settings.backup_interval}
-                      onChange={(e) => 
-                        setSettings({ ...settings, backup_interval: parseInt(e.target.value) || 7 })
-                      }
-                      min={1}
-                      max={30}
-                    />
-                  </div>
-                </>
-              )}
-
-              <div className="flex gap-2">
-                <Button onClick={() => handleSave("backup")} disabled={saving}>
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  保存设置
-                </Button>
-                {settings.backup_enabled && (
-                  <Button variant="outline" disabled={saving}>
-                    立即备份
-                  </Button>
-                )}
+              <div className="grid gap-2">
+                <Label htmlFor="backup_path">备份路径</Label>
+                <Input
+                  id="backup_path"
+                  value={settings.backup_path}
+                  onChange={(e) => 
+                    setSettings({ ...settings, backup_path: e.target.value })
+                  }
+                  placeholder="/backup"
+                  disabled
+                />
               </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="backup_interval">备份间隔（天）</Label>
+                <Input
+                  id="backup_interval"
+                  type="number"
+                  value={settings.backup_interval}
+                  onChange={(e) => 
+                    setSettings({ ...settings, backup_interval: parseInt(e.target.value) || 7 })
+                  }
+                  disabled
+                />
+              </div>
+
+              <Button onClick={() => handleSave("backup")} disabled={saving || true}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                保存设置
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* 系统信息 */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-base">系统信息</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">版本</span>
-              <p className="font-mono">1.0.0</p>
+      {/* Telegram 配置提示 */}
+      <Card className="mt-8 border-dashed">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3 text-sm text-muted-foreground">
+            <div className="p-2 rounded-lg bg-muted">
+              <Settings className="h-4 w-4" />
             </div>
             <div>
-              <span className="text-muted-foreground">框架</span>
-              <p className="font-mono">Next.js 16</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">数据库</span>
-              <p className="font-mono">PostgreSQL</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">环境</span>
-              <p className="font-mono">
-                <Badge variant="outline">Development</Badge>
+              <p className="font-medium text-foreground mb-1">Telegram 推送配置已移动</p>
+              <p>
+                Telegram Bot 配置、Webhook 设置和频道管理已整合到 
+                <Link href="/push/channels" className="text-primary hover:underline mx-1">推送管理</Link>
+                页面，请前往该页面进行配置。
               </p>
             </div>
           </div>
