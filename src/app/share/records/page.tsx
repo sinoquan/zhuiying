@@ -28,20 +28,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { 
-  FileText, Copy, ExternalLink, MoreHorizontal, Edit, Trash2, 
+  FileText, Copy, Edit, Trash2, 
   Send, RefreshCw, Search, ChevronLeft, ChevronRight, Bot, Eye, 
-  Hand, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, Tag,
+  Hand, Clock, CheckCircle2, XCircle, AlertCircle, Loader2,
   Film, Tv, File, Check
 } from "lucide-react"
 import { toast } from "sonner"
-import { getPushChannelIcon } from "@/lib/icons"
+import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
+
+// 网盘名称映射
+const CLOUD_DRIVE_NAMES: Record<string, string> = {
+  '115': '115网盘',
+  'aliyun': '阿里云盘',
+  'quark': '夸克网盘',
+  'tianyi': '天翼网盘',
+  'baidu': '百度网盘',
+  '123': '123云盘',
+  'guangya': '光鸭网盘',
+}
 
 // 状态配置
 const STATUS_CONFIG = {
@@ -482,14 +487,21 @@ export default function ShareRecordsPage() {
             </div>
             
             <Select value={filterCloudDrive} onValueChange={setFilterCloudDrive}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-48">
                 <SelectValue placeholder="全部网盘" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部网盘</SelectItem>
                 {cloudDrives.map(drive => (
                   <SelectItem key={drive.id} value={drive.id.toString()}>
-                    {drive.alias || drive.name}
+                    <div className="flex items-center gap-1.5">
+                      <img 
+                        src={getCloudDriveIcon(drive.name)} 
+                        alt={drive.name}
+                        className="w-4 h-4 rounded"
+                      />
+                      <span>{CLOUD_DRIVE_NAMES[drive.name] || drive.name}：{drive.alias || drive.name}</span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -544,17 +556,17 @@ export default function ShareRecordsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-36">分享时间</TableHead>
-                  <TableHead className="w-20">网盘</TableHead>
+                  <TableHead className="w-32">分享时间</TableHead>
+                  <TableHead className="w-36">网盘</TableHead>
                   <TableHead className="w-48">文件名</TableHead>
-                  <TableHead className="w-36">分享链接</TableHead>
-                  <TableHead className="w-16">类型</TableHead>
-                  <TableHead className="w-16">大小</TableHead>
-                  <TableHead className="w-16">有效期</TableHead>
-                  <TableHead className="w-20">状态</TableHead>
-                  <TableHead className="w-20">推送状态</TableHead>
-                  <TableHead className="w-20">来源</TableHead>
-                  <TableHead className="w-28">操作</TableHead>
+                  <TableHead className="w-32">分享链接</TableHead>
+                  <TableHead className="w-14">类型</TableHead>
+                  <TableHead className="w-14">大小</TableHead>
+                  <TableHead className="w-14">有效期</TableHead>
+                  <TableHead className="w-16">链接状态</TableHead>
+                  <TableHead className="w-16">推送状态</TableHead>
+                  <TableHead className="w-16">来源</TableHead>
+                  <TableHead className="w-24">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -564,9 +576,16 @@ export default function ShareRecordsPage() {
                       {formatDateTime(record.created_at)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        {record.cloud_drives?.alias || record.cloud_drives?.name || '-'}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <img 
+                          src={getCloudDriveIcon(record.cloud_drives?.name || '')} 
+                          alt={record.cloud_drives?.name || ''}
+                          className="w-4 h-4 rounded flex-shrink-0"
+                        />
+                        <span className="text-xs truncate">
+                          {record.cloud_drives?.alias || CLOUD_DRIVE_NAMES[record.cloud_drives?.name || ''] || record.cloud_drives?.name || '-'}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">

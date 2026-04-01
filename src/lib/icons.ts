@@ -61,6 +61,11 @@ export function getDriveIcon(type: string): string {
   return driveIcons[type]?.icon || driveIcons['baidu'].icon
 }
 
+// 获取网盘图标URL (别名，统一命名)
+export function getCloudDriveIcon(type: string): string {
+  return driveIcons[type]?.icon || driveIcons['baidu'].icon
+}
+
 // 获取网盘名称
 export function getDriveName(type: string): string {
   return driveIcons[type]?.name || type
