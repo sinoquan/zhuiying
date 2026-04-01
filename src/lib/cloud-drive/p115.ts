@@ -33,7 +33,11 @@ export class Pan115Service implements ICloudDriveService {
     
     const data = await response.json()
     
-    if (data.state !== true && data.errno !== 0) {
+    // 115网盘API：state=true 表示成功，或者 errno=0 且没有 error 字段
+    // 某些接口可能返回 state=false 但 errno=0，这时需要检查是否有 data 字段
+    const isSuccess = data.state === true || (data.errno === 0 && !data.error)
+    
+    if (!isSuccess) {
       throw new Error(data.error || '请求失败')
     }
     
@@ -54,40 +58,67 @@ export class Pan115Service implements ICloudDriveService {
   }
 
   async getSpaceInfo(): Promise<SpaceInfo> {
-    try {
-      // 115网盘空间信息在 userinfo 接口返回
-      const data = await this.request('/user/userinfo')
-      const info = data.data || {}
-      // 115返回的字段可能是 total 和 used（单位可能是字节）
-      const total = info.total || info.total_size || 0
-      const used = info.used || info.used_size || info.use_size || 0
-      return {
-        total,
-        used,
-        available: total - used,
-        used_percent: total > 0 ? Math.round((used / total) * 100) : 0,
-      }
-    } catch (error) {
-      // 尝试另一个接口
+    // 尝试多个接口获取空间信息
+    const endpoints = [
+      '/user/userinfo',  // 主接口
+      '/files/get_space', // 备用接口
+    ]
+    
+    for (const endpoint of endpoints) {
       try {
-        const data = await this.request('/files/get_space')
+        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+          headers: {
+            'Cookie': this.cookie,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+        })
+        
+        const data = await response.json()
+        console.log(`[115] API ${endpoint} response:`, JSON.stringify(data).substring(0, 500))
+        
+        // 检查是否成功
+        if (data.state !== true && (data.error || data.errno !== 0)) {
+          console.log(`[115] API ${endpoint} failed:`, data.error)
+          continue
+        }
+        
         const info = data.data || {}
-        const total = info.total || 0
-        const used = info.used || info.use_size || 0
-        return {
-          total,
-          used,
-          available: total - used,
-          used_percent: total > 0 ? Math.round((used / total) * 100) : 0,
+        
+        // 尝试多种字段名获取空间信息
+        let total = 0
+        let used = 0
+        
+        // 总空间字段
+        total = info.space ?? info.total ?? info.total_size ?? info.all_size ?? 0
+        
+        // 已用空间字段
+        used = info.use_size ?? info.used ?? info.used_size ?? info.use ?? 0
+        
+        // 如果是字符串，转换为数字
+        if (typeof total === 'string') total = parseInt(total, 10) || 0
+        if (typeof used === 'string') used = parseInt(used, 10) || 0
+        
+        if (total > 0) {
+          console.log(`[115] Parsed space from ${endpoint}: total=${total}, used=${used}, percent=${Math.round((used / total) * 100)}%`)
+          return {
+            total,
+            used,
+            available: total - used,
+            used_percent: total > 0 ? Math.round((used / total) * 100) : 0,
+          }
         }
-      } catch {
-        return {
-          total: 0,
-          used: 0,
-          available: 0,
-          used_percent: 0,
-        }
+      } catch (error) {
+        console.error(`[115] API ${endpoint} error:`, error)
       }
+    }
+    
+    // 所有接口都失败，返回默认值
+    console.log('[115] All space APIs failed, returning defaults')
+    return {
+      total: 0,
+      used: 0,
+      available: 0,
+      used_percent: 0,
     }
   }
 

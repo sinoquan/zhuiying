@@ -30,11 +30,15 @@ export async function GET(
     
     const spaceInfo = await service.getSpaceInfo()
     
+    // 添加调试日志
+    console.log(`[Space] Drive ${drive.name} (id: ${id}):`, JSON.stringify(spaceInfo))
+    
     return NextResponse.json(spaceInfo)
   } catch (error) {
     console.error('获取网盘空间信息失败:', error)
+    // 返回空数据而不是错误，让前端可以正常渲染
     return NextResponse.json(
-      { total: 0, used: 0, available: 0, used_percent: 0 },
+      { total: 0, used: 0, available: 0, used_percent: 0, error: String(error) },
       { status: 200 }
     )
   }
