@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { 
   Settings, Globe, Bot, Database, Loader2, TestTube, RefreshCw, 
-  Send, Users, Hash, ExternalLink, CheckCircle2
+  Send, Users, Hash, ExternalLink, CheckCircle2, XCircle
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -67,6 +67,12 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
+  const [testResult, setTestResult] = useState<{
+    type: string
+    success: boolean
+    latency?: number
+    message?: string
+  } | null>(null)
   const [settings, setSettings] = useState<SystemSettings>({
     tmdb_api_key: "",
     tmdb_language: "zh-CN",
@@ -190,26 +196,90 @@ export default function SettingsPage() {
 
   const testTMDB = async () => {
     setTesting("tmdb")
+    setTestResult(null)
+    const startTime = Date.now()
     try {
       const response = await fetch("/api/tmdb/search?query=avatar")
       const data = await response.json()
+      const latency = Date.now() - startTime
       
       if (data.error) {
         // 友好的错误提示
         if (data.error.includes('fetch failed') || data.error.includes('网络')) {
-          throw new Error('网络连接失败，请检查服务器是否能访问 api.themoviedb.org，或配置代理')
+          throw new Error('网络连接失败，请检查是否能访问 api.themoviedb.org，或配置代理')
         }
         throw new Error(data.error)
       }
       
-      toast.success("TMDB API 连接成功")
+      setTestResult({ type: 'tmdb', success: true, latency, message: `连接成功` })
+      toast.success(`TMDB API 连接成功 (${latency}ms)`)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "未知错误"
+      const latency = Date.now() - startTime
+      setTestResult({ type: 'tmdb', success: false, latency, message: errorMsg })
       if (errorMsg.includes('fetch failed')) {
-        toast.error("网络连接失败，请检查服务器是否能访问 TMDB API（可能需要配置代理）")
+        toast.error("网络连接失败，请检查是否能访问 TMDB API（可能需要配置代理）")
       } else {
         toast.error("TMDB API 测试失败: " + errorMsg)
       }
+    } finally {
+      setTesting(null)
+    }
+  }
+
+  const testProxy = async () => {
+    setTesting("proxy")
+    setTestResult(null)
+    try {
+      const response = await fetch("/api/settings/test-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proxy_url: settings.proxy_url }),
+      })
+      const data = await response.json()
+      
+      if (data.success) {
+        setTestResult({ type: 'proxy', success: true, latency: data.latency, message: data.message })
+        toast.success(data.message)
+      } else {
+        setTestResult({ type: 'proxy', success: false, latency: data.latency, message: data.error })
+        toast.error(data.error)
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "测试失败"
+      setTestResult({ type: 'proxy', success: false, message: errorMsg })
+      toast.error(errorMsg)
+    } finally {
+      setTesting(null)
+    }
+  }
+
+  const testDouban = async () => {
+    setTesting("douban")
+    setTestResult(null)
+    try {
+      const response = await fetch("/api/settings/test-douban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookie: settings.douban_cookie }),
+      })
+      const data = await response.json()
+      
+      if (data.success) {
+        setTestResult({ type: 'douban', success: true, latency: data.latency, message: data.message })
+        if (data.warning) {
+          toast.info(data.message)
+        } else {
+          toast.success(data.message)
+        }
+      } else {
+        setTestResult({ type: 'douban', success: false, latency: data.latency, message: data.error })
+        toast.error(data.error)
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "测试失败"
+      setTestResult({ type: 'douban', success: false, message: errorMsg })
+      toast.error(errorMsg)
     } finally {
       setTesting(null)
     }
@@ -736,6 +806,17 @@ export default function SettingsPage() {
                     )}
                   </Button>
                 </div>
+                {testResult?.type === 'tmdb' && (
+                  <div className={`text-sm flex items-center gap-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.success ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    <span>{testResult.message}</span>
+                    {testResult.latency && <Badge variant="outline" className="text-xs">{testResult.latency}ms</Badge>}
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
                   在 <a href="https://www.themoviedb.org/settings/api" target="_blank" className="text-primary hover:underline inline-flex items-center gap-1">
                     TMDB官网 <ExternalLink className="h-3 w-3" />
@@ -778,15 +859,40 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid gap-2">
                 <Label htmlFor="douban_cookie">Cookie（可选）</Label>
-                <Input
-                  id="douban_cookie"
-                  type="password"
-                  value={settings.douban_cookie}
-                  onChange={(e) => 
-                    setSettings({ ...settings, douban_cookie: e.target.value })
-                  }
-                  placeholder="登录豆瓣后复制Cookie，提高搜索成功率"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="douban_cookie"
+                    type="password"
+                    value={settings.douban_cookie}
+                    onChange={(e) => 
+                      setSettings({ ...settings, douban_cookie: e.target.value })
+                    }
+                    placeholder="登录豆瓣后复制Cookie，提高搜索成功率"
+                    className="flex-1"
+                  />
+                  <Button 
+                    variant="outline" 
+                    onClick={testDouban}
+                    disabled={testing === "douban"}
+                  >
+                    {testing === "douban" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <TestTube className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                {testResult?.type === 'douban' && (
+                  <div className={`text-sm flex items-center gap-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.success ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    <span>{testResult.message}</span>
+                    {testResult.latency && <Badge variant="outline" className="text-xs">{testResult.latency}ms</Badge>}
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
                   不填写Cookie也可以使用，但可能受访问限制。获取方法：
                   <a href="https://www.douban.com" target="_blank" className="text-primary hover:underline ml-1 inline-flex items-center gap-1">
@@ -841,24 +947,51 @@ export default function SettingsPage() {
               {settings.proxy_enabled && (
                 <div className="grid gap-2">
                   <Label htmlFor="proxy_url">代理地址</Label>
-                  <Input
-                    id="proxy_url"
-                    value={settings.proxy_url}
-                    onChange={(e) => 
-                      setSettings({ ...settings, proxy_url: e.target.value })
-                    }
-                    placeholder="http://127.0.0.1:7890"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="proxy_url"
+                      value={settings.proxy_url}
+                      onChange={(e) => 
+                        setSettings({ ...settings, proxy_url: e.target.value })
+                      }
+                      placeholder="http://127.0.0.1:7890"
+                      className="flex-1"
+                    />
+                    <Button 
+                      variant="outline" 
+                      onClick={testProxy}
+                      disabled={testing === "proxy" || !settings.proxy_url}
+                    >
+                      {testing === "proxy" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <TestTube className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  {testResult?.type === 'proxy' && (
+                    <div className={`text-sm flex items-center gap-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                      {testResult.success ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        <XCircle className="h-4 w-4" />
+                      )}
+                      <span>{testResult.message}</span>
+                      {testResult.latency && <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">{testResult.latency}ms</Badge>}
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     支持HTTP/HTTPS/SOCKS5代理，例如: http://127.0.0.1:7890
                   </p>
                 </div>
               )}
 
-              <Button onClick={() => handleSave("network")} disabled={saving}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                保存设置
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => handleSave("network")} disabled={saving}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  保存设置
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
