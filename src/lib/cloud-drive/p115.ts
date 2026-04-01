@@ -255,20 +255,37 @@ export class Pan115Service implements ICloudDriveService {
         console.log('[115] 响应中无分享码，尝试从分享列表获取...')
         try {
           // 获取分享列表，最新的分享在最前面
-          const listResponse = await fetch(`${this.baseUrl}/share/list?offset=0&limit=1`, {
+          const listResponse = await fetch(`${this.baseUrl}/share/list?offset=0&limit=5`, {
             headers: {
               'Cookie': this.cookie,
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
           })
           const listData = await listResponse.json()
-          console.log('[115] 分享列表响应:', JSON.stringify(listData, null, 2))
+          console.log('[115] 分享列表state:', listData.state)
+          console.log('[115] 分享列表data类型:', typeof listData.data, Array.isArray(listData.data))
           
-          if (listData.state === true && listData.data?.length > 0) {
-            const latestShare = listData.data[0]
-            shareCode = latestShare.share_code || latestShare.code || latestShare.scode
-            receiveCode = latestShare.receive_code || latestShare.rcode || latestShare.code || ''
+          // 115网盘分享列表可能返回 { data: { list: [...] } } 或 { data: [...] }
+          let shareList = []
+          if (Array.isArray(listData.data)) {
+            shareList = listData.data
+          } else if (listData.data?.list && Array.isArray(listData.data.list)) {
+            shareList = listData.data.list
+          } else if (listData.data?.items && Array.isArray(listData.data.items)) {
+            shareList = listData.data.items
+          }
+          
+          console.log('[115] 分享列表数量:', shareList.length)
+          
+          if (shareList.length > 0) {
+            const latestShare = shareList[0]
+            console.log('[115] 最新分享信息:', JSON.stringify(latestShare).substring(0, 500))
+            // 尝试多种字段名
+            shareCode = latestShare.share_code || latestShare.scode || latestShare.code || latestShare.sharecode
+            receiveCode = latestShare.receive_code || latestShare.rcode || latestShare.code || latestShare.password || ''
             console.log('[115] 从分享列表获取到分享码:', { shareCode, receiveCode })
+          } else {
+            console.log('[115] 分享列表为空')
           }
         } catch (listError) {
           console.error('[115] 获取分享列表失败:', listError)
