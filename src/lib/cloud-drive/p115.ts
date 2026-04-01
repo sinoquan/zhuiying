@@ -359,14 +359,63 @@ export class Pan115Service implements ICloudDriveService {
   /**
    * 将分享链接修改为长期有效
    * 115网盘的"永久"分享需要先创建15天，然后调用此方法修改
+   * 根据p115client文档：POST https://webapi.115.com/share/updateshare
+   * 参数 share_duration: -1 表示长期
    */
   private async updateShareToLongTerm(shareCode: string): Promise<void> {
     console.log('[115] 开始修改分享为长期有效, shareCode:', shareCode)
     
     try {
-      // 方法1：通过share_code直接更新
-      const updateUrl = 'https://webapi.115.com/share/update'
+      // 方法1：使用 /share/updateshare API，share_duration = -1 表示长期
+      const updateUrl = 'https://webapi.115.com/share/updateshare'
       const updateRes = await fetch(updateUrl, {
+        method: 'POST',
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          share_code: shareCode,
+          share_duration: '-1',  // -1 表示长期有效
+        }).toString(),
+      })
+      
+      const updateData = await updateRes.json()
+      console.log('[115] updateshare响应:', JSON.stringify(updateData))
+      
+      if (updateData.state === true || updateData.errno === 0) {
+        console.log('[115] 方法1成功：分享已修改为长期有效')
+        return
+      }
+      
+      // 方法2：尝试使用 proapi 的 share_update_app
+      console.log('[115] 方法1失败，尝试使用 proapi...')
+      const proapiUrl = 'https://proapi.115.com/android/2.0/share/updateshare'
+      const proapiRes = await fetch(proapiUrl, {
+        method: 'POST',
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/114.0.0.0 Mobile Safari/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          share_code: shareCode,
+          share_duration: '-1',
+        }).toString(),
+      })
+      
+      const proapiData = await proapiRes.json()
+      console.log('[115] proapi updateshare响应:', JSON.stringify(proapiData))
+      
+      if (proapiData.state === true || proapiData.errno === 0) {
+        console.log('[115] 方法2成功：分享已修改为长期有效')
+        return
+      }
+      
+      // 方法3：使用旧参数 is_long
+      console.log('[115] 方法2失败，尝试使用 is_long 参数...')
+      const updateRes3 = await fetch(updateUrl, {
         method: 'POST',
         headers: {
           'Cookie': this.cookie,
@@ -379,51 +428,14 @@ export class Pan115Service implements ICloudDriveService {
         }).toString(),
       })
       
-      const updateData = await updateRes.json()
-      console.log('[115] 更新分享响应:', updateData)
+      const updateData3 = await updateRes3.json()
+      console.log('[115] is_long参数响应:', JSON.stringify(updateData3))
       
-      if (updateData.state === true || updateData.errno === 0) {
-        return
+      if (updateData3.state !== true && updateData3.errno !== 0) {
+        throw new Error(updateData3.error || '修改分享失败')
       }
       
-      // 如果方法1失败，尝试方法2：先获取share_id再更新
-      console.log('[115] 方法1失败，尝试方法2')
-      
-      const infoUrl = `https://webapi.115.com/share/getinfo?share_code=${shareCode}`
-      const infoRes = await fetch(infoUrl, {
-        headers: {
-          'Cookie': this.cookie,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      })
-      const infoData = await infoRes.json()
-      console.log('[115] 分享信息响应:', infoData)
-      
-      const shareId = infoData.data?.share_id || infoData.data?.id
-      if (!shareId) {
-        throw new Error('无法获取分享ID')
-      }
-      
-      // 使用share_id更新
-      const updateRes2 = await fetch(updateUrl, {
-        method: 'POST',
-        headers: {
-          'Cookie': this.cookie,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          share_id: shareId.toString(),
-          is_long: '1',
-        }).toString(),
-      })
-      
-      const updateData2 = await updateRes2.json()
-      console.log('[115] 方法2更新分享响应:', updateData2)
-      
-      if (!updateData2.state && updateData2.errno !== 0) {
-        throw new Error(updateData2.error || '修改分享失败')
-      }
+      console.log('[115] 方法3成功：分享已修改为长期有效')
     } catch (error) {
       console.error('[115] 修改长期有效失败:', error)
       throw error
