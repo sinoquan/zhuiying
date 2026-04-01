@@ -208,13 +208,12 @@ export class Pan115Service implements ICloudDriveService {
 
   async createShare(fileIds: string[], expireDays = 0): Promise<ShareInfo> {
     try {
-      // 115网盘有效期选项：1=1天，7=7天，15=15天，30=30天，long=长期
-      // 注意：115不支持直接创建永久分享，需要先创建再修改
+      // 115网盘有效期选项：1=1天，7=7天，15=15天，30=30天
+      // 永久分享需要先创建再修改
       let expireParam: string | number
       let needUpdateToLongTerm = false
       
       if (expireDays === 0) {
-        // 永久：先创建15天分享，再修改为长期
         expireParam = 15
         needUpdateToLongTerm = true
       } else {
@@ -223,7 +222,10 @@ export class Pan115Service implements ICloudDriveService {
       
       console.log('[115] 创建分享参数:', { fileIds, expireDays, expireParam })
       
-      // 调用分享API
+      // 方式1: 使用 /share/send API
+      let shareCode: string | undefined
+      let receiveCode = ''
+      
       const response = await fetch(`${this.baseUrl}/share/send`, {
         method: 'POST',
         headers: {
@@ -238,65 +240,76 @@ export class Pan115Service implements ICloudDriveService {
       })
       
       const data = await response.json()
-      console.log('[115] 分享API完整响应:', JSON.stringify(data, null, 2))
+      console.log('[115] /share/send 响应:', JSON.stringify(data, null, 2))
       
-      // 检查响应
-      if (!data.state && data.errno !== 0) {
-        throw new Error(data.error || '创建分享失败')
+      if (data.state === true || data.errno === 0) {
+        // 尝试从响应中获取分享码
+        const responseData = data.data || data
+        shareCode = responseData.share_code || responseData.scode || responseData.code
+        receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
       }
       
-      // 尝试多种可能的字段名获取分享码
-      const responseData = data.data || data
-      let shareCode = responseData.share_code || responseData.code || responseData.scode || data.share_code || data.code
-      let receiveCode = responseData.receive_code || responseData.rcode || data.receive_code || data.rcode || ''
-      
-      // 如果响应中没有分享码，需要从分享列表获取
+      // 方式2: 如果没有分享码，尝试 /share/add API
       if (!shareCode) {
-        console.log('[115] 响应中无分享码，尝试从分享列表获取...')
-        try {
-          // 获取分享列表，最新的分享在最前面
-          const listResponse = await fetch(`${this.baseUrl}/share/list?offset=0&limit=5`, {
-            headers: {
-              'Cookie': this.cookie,
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-          })
-          const listData = await listResponse.json()
-          console.log('[115] 分享列表state:', listData.state)
-          console.log('[115] 分享列表data类型:', typeof listData.data, Array.isArray(listData.data))
-          
-          // 115网盘分享列表可能返回 { data: { list: [...] } } 或 { data: [...] }
-          let shareList = []
-          if (Array.isArray(listData.data)) {
-            shareList = listData.data
-          } else if (listData.data?.list && Array.isArray(listData.data.list)) {
-            shareList = listData.data.list
-          } else if (listData.data?.items && Array.isArray(listData.data.items)) {
-            shareList = listData.data.items
-          }
-          
-          console.log('[115] 分享列表数量:', shareList.length)
-          
-          if (shareList.length > 0) {
-            const latestShare = shareList[0]
-            console.log('[115] 最新分享信息:', JSON.stringify(latestShare).substring(0, 500))
-            // 尝试多种字段名
-            shareCode = latestShare.share_code || latestShare.scode || latestShare.code || latestShare.sharecode
-            receiveCode = latestShare.receive_code || latestShare.rcode || latestShare.code || latestShare.password || ''
-            console.log('[115] 从分享列表获取到分享码:', { shareCode, receiveCode })
-          } else {
-            console.log('[115] 分享列表为空')
-          }
-        } catch (listError) {
-          console.error('[115] 获取分享列表失败:', listError)
+        console.log('[115] 尝试 /share/add API...')
+        const addResponse = await fetch(`${this.baseUrl}/share/add`, {
+          method: 'POST',
+          headers: {
+            'Cookie': this.cookie,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            fid: fileIds[0],
+            expire: expireParam.toString(),
+          }).toString(),
+        })
+        const addData = await addResponse.json()
+        console.log('[115] /share/add 响应:', JSON.stringify(addData, null, 2))
+        
+        if (addData.state === true || addData.errno === 0) {
+          const responseData = addData.data || addData
+          shareCode = responseData.share_code || responseData.scode || responseData.code || responseData.sharecode
+          receiveCode = responseData.receive_code || responseData.rcode || responseData.password || responseData.code || ''
         }
       }
       
-      console.log('[115] 解析的分享码:', { shareCode, receiveCode })
-      
+      // 方式3: 从分享列表获取
       if (!shareCode) {
-        console.error('[115] 未获取到分享码，响应数据:', JSON.stringify(data))
-        throw new Error('未获取到分享码，请检查网盘配置')
+        console.log('[115] 尝试从分享列表获取...')
+        const listEndpoints = ['/share/mysend', '/share/list', '/share/getlist']
+        
+        for (const endpoint of listEndpoints) {
+          try {
+            const listRes = await fetch(`${this.baseUrl}${endpoint}?offset=0&limit=5`, {
+              headers: {
+                'Cookie': this.cookie,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              },
+            })
+            const listData = await listRes.json()
+            console.log(`[115] ${endpoint} 响应: state=${listData.state}`)
+            
+            if (listData.state === true) {
+              const list = listData.data?.list || listData.data || listData.list || []
+              if (list.length > 0) {
+                const item = list[0]
+                console.log('[115] 分享项字段:', Object.keys(item).join(', '))
+                shareCode = item.share_code || item.scode || item.code
+                receiveCode = item.receive_code || item.rcode || item.password || ''
+                if (shareCode) break
+              }
+            }
+          } catch (e) {
+            console.log(`[115] ${endpoint} 失败:`, e)
+          }
+        }
+      }
+      
+      // 如果仍然没有分享码
+      if (!shareCode) {
+        console.error('[115] 所有方式都无法获取分享码')
+        throw new Error('创建分享失败：无法获取分享码，请检查Cookie是否有效')
       }
       
       console.log('[115] 分享创建成功:', { shareCode, receiveCode })
