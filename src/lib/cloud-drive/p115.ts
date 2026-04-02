@@ -165,7 +165,23 @@ export class Pan115Service implements ICloudDriveService {
       
       // 打印原始响应以便调试
       if (data.data && data.data.length > 0) {
-        console.log('[115] 文件列表示例数据:', JSON.stringify(data.data[0], null, 2))
+        const sampleItem = data.data[0]
+        console.log('[115] 文件列表示例数据:', JSON.stringify(sampleItem, null, 2))
+        // 特别检查文件夹的大小字段
+        if (sampleItem.cid && sampleItem.cid !== '0' && sampleItem.cid !== 0 && !sampleItem.fid) {
+          console.log('[115] 文件夹字段:', {
+            name: sampleItem.n || sampleItem.name,
+            cid: sampleItem.cid,
+            fid: sampleItem.fid,
+            s: sampleItem.s,
+            size: sampleItem.size,
+            fs: sampleItem.fs,  // 可能的文件夹大小字段
+            total_size: sampleItem.total_size,
+            file_count: sampleItem.file_count,
+            fc: sampleItem.fc,
+            allKeys: Object.keys(sampleItem)
+          })
+        }
       }
       
       const files: CloudFile[] = (data.data || []).map((item: any) => {
@@ -254,6 +270,10 @@ export class Pan115Service implements ICloudDriveService {
       let data = await response.json()
       console.log('[115] /share/send (file_ids) 响应:', JSON.stringify(data))
       
+      // 用于存储文件大小和数量
+      let totalSize = 0
+      let fileCount = 0
+      
       // 分享创建成功的标志
       let shareCreated = false
       
@@ -263,7 +283,10 @@ export class Pan115Service implements ICloudDriveService {
         // 尝试获取分享码
         shareCode = responseData.share_code || responseData.scode || responseData.code || responseData.sn || responseData.sharecode
         receiveCode = responseData.receive_code || responseData.rcode || responseData.password || responseData.code || ''
-        console.log('[115] 分享创建成功，尝试从响应获取分享码:', { shareCode, availableFields: Object.keys(responseData) })
+        // 从第一次响应中提取文件大小和数量
+        totalSize = responseData.total_size || 0
+        fileCount = responseData.file_count || responseData.folder_count || 0
+        console.log('[115] 分享创建成功，尝试从响应获取分享码:', { shareCode, totalSize, fileCount, availableFields: Object.keys(responseData) })
       }
       
       // 尝试方式2: 使用 share_send_app API (proapi)
@@ -291,16 +314,17 @@ export class Pan115Service implements ICloudDriveService {
             const responseData = data.data || data
             shareCode = responseData.share_code || responseData.scode || responseData.code
             receiveCode = responseData.receive_code || responseData.rcode || responseData.password || ''
-            console.log('[115] share_send_app成功，分享码:', shareCode)
+            // 也尝试从这里获取文件大小和数量
+            if (!totalSize) {
+              totalSize = responseData.total_size || 0
+              fileCount = responseData.file_count || responseData.folder_count || 0
+            }
+            console.log('[115] share_send_app成功，分享码:', shareCode, 'totalSize:', totalSize)
           }
         } catch (e) {
           console.log('[115] share_send_app失败:', e)
         }
       }
-      
-      // 用于存储文件大小和数量
-      let totalSize = 0
-      let fileCount = 0
       
       // 尝试方式3: 从分享列表获取（使用proapi API）
       if (shareCreated && !shareCode) {
@@ -404,8 +428,13 @@ export class Pan115Service implements ICloudDriveService {
         }
       }
       
+      // 构建带密码的完整链接
+      const shareUrl = receiveCode 
+        ? `https://115cdn.com/s/${shareCode}?password=${receiveCode}`
+        : `https://115cdn.com/s/${shareCode}`
+      
       return {
-        share_url: `https://115.com/s/${shareCode}`,
+        share_url: shareUrl,
         share_code: receiveCode,
         expire_time: expireDays === 0 ? undefined : new Date(Date.now() + expireDays * 24 * 60 * 60 * 1000).toISOString(),
         total_size: totalSize,
