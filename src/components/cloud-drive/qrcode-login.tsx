@@ -24,9 +24,7 @@ interface AppType {
 
 export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
   const [status, setStatus] = useState<LoginStatus>('idle')
-  const [qrcodeUrl, setQrcodeUrl] = useState<string>('')
   const [qrcodeImage, setQrcodeImage] = useState<string>('')
-  const [uid, setUid] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [expiresIn, setExpiresIn] = useState(300)
   
@@ -35,11 +33,99 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
   const [selectedApp, setSelectedApp] = useState<string>('alipaymini')
   const [appName, setAppName] = useState<string>('')
   
-  // 使用 ref 追踪轮询定时器和初始化状态
-  const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const initializedRef = useRef(false)
-  const prevAppRef = useRef<string>('alipaymini')
+  // 使用 ref 追踪当前扫码会话，避免闭包问题
+  const currentSessionRef = useRef<{
+    uid: string
+    app: string
+  } | null>(null)
   
+  const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const initializedRef = useRef(false)
+  
+  // 清理所有定时器
+  const clearAllTimers = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current)
+      countdownTimerRef.current = null
+    }
+  }, [])
+  
+  // 检查扫码状态
+  const checkStatus = useCallback(async () => {
+    const session = currentSessionRef.current
+    if (!session || !session.uid) return
+    
+    try {
+      const response = await fetch(`/api/cloud-drives/115/qrcode?action=status&uid=${session.uid}`)
+      const data = await response.json()
+      
+      if (!data.success) {
+        clearAllTimers()
+        setStatus('expired')
+        return
+      }
+      
+      const newStatus = data.data.status
+      
+      if (newStatus === 'confirmed') {
+        clearAllTimers()
+        setStatus('confirmed')
+        toast.success('登录成功')
+        onSuccess(data.data.cookies)
+        
+      } else if (newStatus === 'expired') {
+        clearAllTimers()
+        setStatus('expired')
+        
+      } else if (newStatus === 'canceled') {
+        clearAllTimers()
+        setStatus('canceled')
+        
+      } else if (newStatus === 'scanned') {
+        setStatus('scanned')
+      }
+      
+    } catch (error) {
+      console.error('Check status error:', error)
+    }
+  }, [onSuccess, clearAllTimers])
+
+  // 获取二维码
+  const fetchQRCode = useCallback(async (app: string) => {
+    setStatus('loading')
+    setErrorMessage('')
+    clearAllTimers()
+    
+    try {
+      const response = await fetch(`/api/cloud-drives/115/qrcode?app=${app}`)
+      const data = await response.json()
+      
+      if (!data.success) {
+        throw new Error(data.error || '获取二维码失败')
+      }
+      
+      // 更新当前会话
+      currentSessionRef.current = {
+        uid: data.data.uid,
+        app: data.data.app
+      }
+      
+      setQrcodeImage(data.data.qrcodeImage)
+      setAppName(data.data.appName || '')
+      setExpiresIn(data.data.expiresIn || 300)
+      setStatus('waiting')
+      
+    } catch (error) {
+      setStatus('error')
+      setErrorMessage(error instanceof Error ? error.message : '获取二维码失败')
+    }
+  }, [clearAllTimers])
+
   // 加载支持的端类型
   useEffect(() => {
     const loadAppTypes = async () => {
@@ -56,89 +142,6 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
     loadAppTypes()
   }, [])
 
-  // 获取二维码
-  const fetchQRCode = useCallback(async (app: string) => {
-    setStatus('loading')
-    setErrorMessage('')
-    
-    // 清理旧的轮询
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current)
-      pollTimerRef.current = null
-    }
-    
-    try {
-      const response = await fetch(`/api/cloud-drives/115/qrcode?app=${app}`)
-      const data = await response.json()
-      
-      if (!data.success) {
-        throw new Error(data.error || '获取二维码失败')
-      }
-      
-      setQrcodeUrl(data.data.qrcodeUrl)
-      setQrcodeImage(data.data.qrcodeImage)
-      setUid(data.data.uid)
-      setAppName(data.data.appName || '')
-      setExpiresIn(data.data.expiresIn || 300)
-      setStatus('waiting')
-      
-    } catch (error) {
-      setStatus('error')
-      setErrorMessage(error instanceof Error ? error.message : '获取二维码失败')
-    }
-  }, [])
-
-  // 检查扫码状态
-  const checkStatus = useCallback(async (currentUid: string) => {
-    if (!currentUid) return
-    
-    try {
-      const response = await fetch(`/api/cloud-drives/115/qrcode?action=status&uid=${currentUid}`)
-      const data = await response.json()
-      
-      if (!data.success) {
-        if (pollTimerRef.current) {
-          clearInterval(pollTimerRef.current)
-          pollTimerRef.current = null
-        }
-        setStatus('expired')
-        return
-      }
-      
-      const newStatus = data.data.status
-      
-      if (newStatus === 'confirmed') {
-        if (pollTimerRef.current) {
-          clearInterval(pollTimerRef.current)
-          pollTimerRef.current = null
-        }
-        setStatus('confirmed')
-        toast.success('登录成功')
-        onSuccess(data.data.cookies)
-        
-      } else if (newStatus === 'expired') {
-        if (pollTimerRef.current) {
-          clearInterval(pollTimerRef.current)
-          pollTimerRef.current = null
-        }
-        setStatus('expired')
-        
-      } else if (newStatus === 'canceled') {
-        if (pollTimerRef.current) {
-          clearInterval(pollTimerRef.current)
-          pollTimerRef.current = null
-        }
-        setStatus('canceled')
-        
-      } else if (newStatus === 'scanned') {
-        setStatus('scanned')
-      }
-      
-    } catch (error) {
-      console.error('Check status error:', error)
-    }
-  }, [onSuccess])
-
   // 初始化：端类型加载完成后自动获取二维码
   useEffect(() => {
     if (appTypes.length > 0 && !initializedRef.current) {
@@ -146,41 +149,36 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
       fetchQRCode(selectedApp)
     }
   }, [appTypes.length, selectedApp, fetchQRCode])
-
-  // 监听 selectedApp 变化，重新获取二维码
+  
+  // 组件卸载时重置初始化标志
   useEffect(() => {
-    // 跳过初始化阶段
-    if (!initializedRef.current) return
-    
-    // 检查是否真的发生了变化
-    if (prevAppRef.current !== selectedApp) {
-      prevAppRef.current = selectedApp
-      fetchQRCode(selectedApp)
+    return () => {
+      initializedRef.current = false
+    }
+  }, [])
+
+  // 端切换时重新获取二维码
+  const handleAppChange = useCallback((app: string) => {
+    if (app !== selectedApp) {
+      setSelectedApp(app)
+      fetchQRCode(app)
     }
   }, [selectedApp, fetchQRCode])
 
-  // 开始轮询
+  // 开始轮询（当状态变为 waiting 或 scanned 时）
   useEffect(() => {
     if (status === 'waiting' || status === 'scanned') {
-      pollTimerRef.current = setInterval(() => {
-        checkStatus(uid)
-      }, 2000)
+      // 立即检查一次
+      checkStatus()
       
-      return () => {
-        if (pollTimerRef.current) {
-          clearInterval(pollTimerRef.current)
-          pollTimerRef.current = null
-        }
-      }
-    }
-  }, [status, uid, checkStatus])
-
-  // 倒计时
-  useEffect(() => {
-    if (status === 'waiting' || status === 'scanned') {
-      const timer = setInterval(() => {
+      // 每2秒轮询
+      pollTimerRef.current = setInterval(checkStatus, 2000)
+      
+      // 倒计时
+      countdownTimerRef.current = setInterval(() => {
         setExpiresIn(prev => {
           if (prev <= 1) {
+            clearAllTimers()
             setStatus('expired')
             return 0
           }
@@ -188,18 +186,18 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
         })
       }, 1000)
       
-      return () => clearInterval(timer)
-    }
-  }, [status])
-
-  // 清理
-  useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
+      return () => {
+        clearAllTimers()
       }
     }
-  }, [])
+  }, [status, checkStatus, clearAllTimers])
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      clearAllTimers()
+    }
+  }, [clearAllTimers])
 
   const renderContent = () => {
     switch (status) {
@@ -343,7 +341,7 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
         {/* 端选择器 */}
         <div className="mb-4">
           <Label className="text-sm font-medium mb-2 block">登录端选择</Label>
-          <Select value={selectedApp} onValueChange={setSelectedApp}>
+          <Select value={selectedApp} onValueChange={handleAppChange}>
             <SelectTrigger>
               <SelectValue placeholder="选择登录端" />
             </SelectTrigger>

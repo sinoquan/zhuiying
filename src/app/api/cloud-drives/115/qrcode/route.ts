@@ -224,7 +224,8 @@ async function checkStatus(uid: string) {
     const statusData = await statusResponse.json()
     console.log(`[115] 状态查询响应:`, JSON.stringify(statusData))
     
-    const status = statusData.status
+    // 状态在 data.status 里面
+    const status = statusData.data?.status ?? statusData.status
     
     // 根据状态更新
     if (status === 2) {
