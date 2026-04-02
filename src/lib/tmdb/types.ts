@@ -8,6 +8,14 @@ export interface TMDBConfig {
   apiKey: string
   language?: string
   proxyUrl?: string  // 代理地址
+  cacheTTL?: number  // 缓存过期时间（秒），默认24小时
+}
+
+// 缓存项
+interface CacheItem<T> {
+  data: T
+  timestamp: number
+  expiresAt: number
 }
 
 // 搜索结果
@@ -75,14 +83,88 @@ export class TMDBService {
   private proxyUrl: string | null
   private baseUrl = 'https://api.themoviedb.org/3'
   private imageBaseUrl = 'https://image.tmdb.org/t/p/w500'
+  private cacheTTL: number
+  
+  // 内存缓存
+  private cache: Map<string, CacheItem<unknown>> = new Map()
+  
+  // 缓存统计
+  private stats = {
+    hits: 0,
+    misses: 0,
+    requests: 0,
+  }
 
   constructor(config: TMDBConfig) {
     this.apiKey = config.apiKey
     this.language = config.language || 'zh-CN'
     this.proxyUrl = config.proxyUrl || null
+    this.cacheTTL = config.cacheTTL || 86400 // 默认24小时
+  }
+  
+  // 生成缓存key
+  private getCacheKey(endpoint: string, params: Record<string, string> = {}): string {
+    const sortedParams = Object.keys(params)
+      .sort()
+      .map(k => `${k}=${params[k]}`)
+      .join('&')
+    return `${endpoint}?${sortedParams}&lang=${this.language}`
+  }
+  
+  // 获取缓存
+  private getFromCache<T>(key: string): T | null {
+    const item = this.cache.get(key)
+    if (!item) return null
+    
+    const now = Date.now()
+    if (now > item.expiresAt) {
+      this.cache.delete(key)
+      return null
+    }
+    
+    this.stats.hits++
+    return item.data as T
+  }
+  
+  // 设置缓存
+  private setCache<T>(key: string, data: T): void {
+    const now = Date.now()
+    this.cache.set(key, {
+      data,
+      timestamp: now,
+      expiresAt: now + this.cacheTTL * 1000,
+    })
+  }
+  
+  // 获取缓存统计
+  getCacheStats() {
+    return {
+      ...this.stats,
+      size: this.cache.size,
+      hitRate: this.stats.hits + this.stats.misses > 0 
+        ? (this.stats.hits / (this.stats.hits + this.stats.misses) * 100).toFixed(2) + '%'
+        : '0%',
+    }
+  }
+  
+  // 清空缓存
+  clearCache(): void {
+    this.cache.clear()
+    this.stats = { hits: 0, misses: 0, requests: 0 }
   }
 
   private async request(endpoint: string, params: Record<string, string> = {}) {
+    this.stats.requests++
+    
+    // 检查缓存
+    const cacheKey = this.getCacheKey(endpoint, params)
+    const cached = this.getFromCache(cacheKey)
+    if (cached) {
+      return cached
+    }
+    
+    this.stats.misses++
+    
     const url = new URL(`${this.baseUrl}${endpoint}`)
     url.searchParams.set('api_key', this.apiKey)
     url.searchParams.set('language', this.language)
@@ -116,7 +198,10 @@ export class TMDBService {
           throw new Error(`TMDB API错误: ${response.status}`)
         }
         
-        return response.json()
+        const data = await response.json()
+        // 存入缓存
+        this.setCache(cacheKey, data)
+        return data
       } catch (error) {
         // 确保恢复环境变量
         if (originalProxy) {
@@ -139,7 +224,10 @@ export class TMDBService {
       throw new Error(`TMDB API错误: ${response.status}`)
     }
     
-    return response.json()
+    const data = await response.json()
+    // 存入缓存
+    this.setCache(cacheKey, data)
+    return data
   }
 
   // 搜索多类型
@@ -151,7 +239,7 @@ export class TMDBService {
     
     return {
       results: (data.results || []).filter(
-        (r: any) => r.media_type === 'movie' || r.media_type === 'tv'
+        (r: { media_type: string }) => r.media_type === 'movie' || r.media_type === 'tv'
       ),
       total_results: data.total_results,
     }

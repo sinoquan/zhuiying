@@ -34,7 +34,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { 
   FolderOpen, Plus, MoreHorizontal, Edit, Trash2, Activity, 
-  Loader2, ChevronRight, ChevronLeft, RefreshCw, Home, File, X, Clock
+  Loader2, ChevronRight, ChevronLeft, RefreshCw, Home, File, X, Clock,
+  CheckCircle2, XCircle, AlertCircle
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -45,6 +46,13 @@ import {
 import { toast } from "sonner"
 import { getDriveIcon } from "@/lib/icons"
 
+interface ScanStats {
+  shared: number
+  pushed: number
+  lastScan: string | null
+  lastScanStatus: string | null
+}
+
 interface FileMonitor {
   id: number
   cloud_drive_id: number
@@ -54,9 +62,11 @@ interface FileMonitor {
   cron_expression?: string
   created_at: string
   cloud_drives?: {
+    id: number
     name: string
     alias: string | null
   }
+  scan_stats?: ScanStats
 }
 
 interface CloudDrive {
@@ -392,76 +402,109 @@ export default function FileMonitorPage() {
                   <TableHead>监控目录</TableHead>
                   <TableHead>检测频率</TableHead>
                   <TableHead>状态</TableHead>
+                  <TableHead>最近扫描</TableHead>
                   <TableHead>创建时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {monitors.map((monitor) => (
-                  <TableRow key={monitor.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <img 
-                          src={getDriveIcon(monitor.cloud_drives?.name || '')} 
-                          alt={monitor.cloud_drives?.name}
-                          width={20}
-                          height={20}
-                          className="rounded"
-                        />
-                        <span className="font-medium">{getDriveName(monitor)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-medium text-sm">
-                          {monitor.path_name || monitor.path.split('/').pop() || monitor.path}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {monitor.path}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-sm">
-                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                        {getCronDescription(monitor.cron_expression)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={monitor.enabled}
-                          onCheckedChange={() => handleToggle(monitor)}
-                        />
-                        <Badge variant={monitor.enabled ? "default" : "secondary"}>
-                          {monitor.enabled ? "运行中" : "已暂停"}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(monitor.created_at).toLocaleString("zh-CN")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEditDialog(monitor)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            编辑
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDelete(monitor.id)}>
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {monitors.map((monitor) => {
+                  const scanStats = monitor.scan_stats
+                  const lastScanTime = scanStats?.lastScan 
+                    ? new Date(scanStats.lastScan).toLocaleString("zh-CN")
+                    : null
+                  const scanStatus = scanStats?.lastScanStatus
+                  
+                  return (
+                    <TableRow key={monitor.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <img 
+                            src={getDriveIcon(monitor.cloud_drives?.name || '')} 
+                            alt={monitor.cloud_drives?.name}
+                            width={20}
+                            height={20}
+                            className="rounded"
+                          />
+                          <span className="font-medium">{getDriveName(monitor)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">
+                            {monitor.path_name || monitor.path.split('/').pop() || monitor.path}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {monitor.path}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-sm">
+                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                          {getCronDescription(monitor.cron_expression)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={monitor.enabled}
+                            onCheckedChange={() => handleToggle(monitor)}
+                          />
+                          <Badge variant={monitor.enabled ? "default" : "secondary"}>
+                            {monitor.enabled ? "运行中" : "已暂停"}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {scanStats ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1 text-xs">
+                              {scanStatus === 'success' ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                              ) : scanStatus === 'partial' ? (
+                                <AlertCircle className="h-3.5 w-3.5 text-yellow-500" />
+                              ) : scanStatus === 'failed' ? (
+                                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                              ) : (
+                                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                              <span className="text-muted-foreground">{lastScanTime || '-'}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-green-600">分享 {scanStats.shared}</span>
+                              <span className="text-blue-600">推送 {scanStats.pushed}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">暂无扫描记录</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(monitor.created_at).toLocaleString("zh-CN")}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openEditDialog(monitor)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              编辑
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDelete(monitor.id)}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              删除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           )}

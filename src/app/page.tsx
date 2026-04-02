@@ -7,7 +7,8 @@ import { Progress } from "@/components/ui/progress"
 import Image from "next/image"
 import { 
   HardDrive, Share2, Send, Activity, TrendingUp, AlertCircle, 
-  Clock, XCircle, FileText, Zap, ChevronRight, CheckCircle2
+  Clock, XCircle, FileText, Zap, ChevronRight, CheckCircle2,
+  AlertTriangle, RefreshCw
 } from "lucide-react"
 import Link from "next/link"
 import { driveIcons, getDriveIcon } from "@/lib/icons"
@@ -47,6 +48,53 @@ interface DashboardStats {
     todayShares: number
     todayPushes: number
   }>
+  
+  // 即将过期的分享
+  expiringShares: Array<{
+    id: number
+    file_name: string
+    expire_time: string
+    share_url: string
+    cloud_drive_id: number
+    cloud_drives: {
+      name: string
+      alias: string
+    } | null
+  }>
+  
+  // 最近活动
+  recentShares: Array<{
+    id: number
+    file_name: string
+    created_at: string
+    share_status: string
+    cloud_drive_id: number
+    cloud_drives: {
+      name: string
+      alias: string
+    } | null
+  }>
+  
+  recentPushes: Array<{
+    id: number
+    push_status: string
+    created_at: string
+    push_channels: {
+      name: string
+      type: string
+    } | null
+    share_records: {
+      file_name: string
+      cloud_drives: {
+        name: string
+        alias: string
+      } | null
+    } | null
+  }>
+  
+  // 状态统计
+  shareStatusCounts: Record<string, number>
+  pushStatusCounts: Record<string, number>
 }
 
 export default function DashboardPage() {
@@ -64,6 +112,11 @@ export default function DashboardPage() {
     todayWarnings: 0,
     topFiles: [],
     driveStats: [],
+    expiringShares: [],
+    recentShares: [],
+    recentPushes: [],
+    shareStatusCounts: {},
+    pushStatusCounts: {},
   })
   const [loading, setLoading] = useState(true)
 
@@ -334,6 +387,155 @@ export default function DashboardPage() {
                         <span>·</span>
                         <span>推送 {file.push_count} 次</span>
                       </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 即将过期分享 + 最近活动 */}
+      <div className="grid gap-6 lg:grid-cols-2 mt-6">
+        {/* 即将过期的分享 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              即将过期
+            </CardTitle>
+            <CardDescription>7天内将过期的分享链接</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {stats.expiringShares.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                暂无即将过期的分享
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {stats.expiringShares.map((share) => {
+                  const expireDate = new Date(share.expire_time)
+                  const now = new Date()
+                  const daysLeft = Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                  const isUrgent = daysLeft <= 1
+                  
+                  return (
+                    <div 
+                      key={share.id} 
+                      className={`flex items-center gap-3 p-3 rounded-lg border ${isUrgent ? 'border-red-300 bg-red-50 dark:bg-red-950/20' : 'border-amber-200 bg-amber-50 dark:bg-amber-950/20'}`}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+                        <Image 
+                          src={getDriveIcon(share.cloud_drives?.name || '')} 
+                          alt={share.cloud_drives?.alias || ''}
+                          width={28}
+                          height={28}
+                          className="w-7 h-7 object-contain"
+                          unoptimized
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate" title={share.file_name}>
+                          {share.file_name}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {share.cloud_drives?.alias || '未知网盘'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant={isUrgent ? "destructive" : "secondary"}>
+                          {daysLeft}天后过期
+                        </Badge>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {expireDate.toLocaleDateString("zh-CN")}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 最近活动 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              最近活动
+            </CardTitle>
+            <CardDescription>最新的分享和推送记录</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {stats.recentShares.length === 0 && stats.recentPushes.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                暂无活动记录
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* 最近分享 */}
+                {stats.recentShares.slice(0, 3).map((share) => (
+                  <div 
+                    key={`share-${share.id}`} 
+                    className="flex items-center gap-3 p-3 rounded-lg border"
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      share.share_status === 'success' ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400' :
+                      share.share_status === 'failed' ? 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-400' :
+                      'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                    }`}>
+                      <Share2 className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" title={share.file_name}>
+                        {share.file_name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        分享 · {share.cloud_drives?.alias || '未知网盘'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant={share.share_status === 'success' ? 'default' : 'destructive'}>
+                        {share.share_status === 'success' ? '成功' : share.share_status === 'failed' ? '失败' : share.share_status}
+                      </Badge>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatTime(share.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* 最近推送 */}
+                {stats.recentPushes.slice(0, 3).map((push) => (
+                  <div 
+                    key={`push-${push.id}`} 
+                    className="flex items-center gap-3 p-3 rounded-lg border"
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      push.push_status === 'success' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-400' :
+                      push.push_status === 'failed' ? 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-400' :
+                      'bg-amber-100 text-amber-600 dark:bg-amber-900 dark:text-amber-400'
+                    }`}>
+                      <Send className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" title={push.share_records?.file_name}>
+                        {push.share_records?.file_name || '未知文件'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        推送 · {push.push_channels?.name || '未知渠道'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant={push.push_status === 'success' ? 'default' : push.push_status === 'pending' ? 'secondary' : 'destructive'}>
+                        {push.push_status === 'success' ? '成功' : push.push_status === 'pending' ? '待发送' : '失败'}
+                      </Badge>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatTime(push.created_at)}
+                      </p>
                     </div>
                   </div>
                 ))}

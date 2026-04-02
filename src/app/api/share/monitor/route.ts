@@ -12,6 +12,7 @@ export async function GET() {
         .select(`
           *,
           cloud_drives (
+            id,
             name,
             alias
           )
@@ -19,6 +20,53 @@ export async function GET() {
         .order('created_at', { ascending: false })
       
       if (error) throw new Error(`获取监控任务失败: ${error.message}`)
+      
+      // 获取每个监控任务的最近扫描记录
+      if (data && data.length > 0) {
+        const monitorIds = data.map((m: any) => m.id)
+        
+        // 从operation_logs获取最近扫描记录
+        const { data: logs } = await client
+          .from('operation_logs')
+          .select('cloud_drive_id, operation_detail, status, created_at')
+          .eq('operation_type', 'monitor_scan')
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        // 统计每个监控任务的分享和推送数量
+        const monitorStats = new Map<number, { shared: number; pushed: number; lastScan: string | null; lastScanStatus: string | null }>()
+        
+        for (const log of logs || []) {
+          try {
+            const detail = typeof log.operation_detail === 'string' 
+              ? JSON.parse(log.operation_detail) 
+              : log.operation_detail
+            
+            if (detail?.monitor_id && !monitorStats.has(detail.monitor_id)) {
+              monitorStats.set(detail.monitor_id, {
+                shared: detail.shared_files || 0,
+                pushed: detail.pushed_files || 0,
+                lastScan: log.created_at,
+                lastScanStatus: log.status
+              })
+            }
+          } catch (e) {
+            // 忽略解析错误
+          }
+        }
+        
+        // 附加统计信息
+        data.forEach((monitor: any) => {
+          const stats = monitorStats.get(monitor.id)
+          monitor.scan_stats = stats || {
+            shared: 0,
+            pushed: 0,
+            lastScan: null,
+            lastScanStatus: null
+          }
+        })
+      }
+      
       return data
     },
     [],

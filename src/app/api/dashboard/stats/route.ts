@@ -151,6 +151,61 @@ export async function GET() {
       })
     )
     
+    // 即将过期的分享链接（7天内）
+    const sevenDaysLater = new Date()
+    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7)
+    const { data: expiringShares, error: expiringError } = await client
+      .from('share_records')
+      .select('id, file_name, expire_time, share_url, cloud_drive_id, cloud_drives(name, alias)')
+      .eq('share_status', 'success')
+      .not('expire_time', 'is', null)
+      .gte('expire_time', todayISO)
+      .lte('expire_time', sevenDaysLater.toISOString())
+      .order('expire_time', { ascending: true })
+      .limit(10)
+    
+    if (expiringError) throw new Error(`获取即将过期分享失败: ${expiringError.message}`)
+    
+    // 最近活动（最近10条分享和推送）
+    const { data: recentShares, error: recentSharesError } = await client
+      .from('share_records')
+      .select('id, file_name, created_at, share_status, cloud_drive_id, cloud_drives(name, alias)')
+      .order('created_at', { ascending: false })
+      .limit(5)
+    
+    if (recentSharesError) throw new Error(`获取最近分享失败: ${recentSharesError.message}`)
+    
+    const { data: recentPushes, error: recentPushesError } = await client
+      .from('push_records')
+      .select('id, push_status, created_at, push_channels(name, type), share_records(file_name, cloud_drives(name, alias))')
+      .order('created_at', { ascending: false })
+      .limit(5)
+    
+    if (recentPushesError) throw new Error(`获取最近推送失败: ${recentPushesError.message}`)
+    
+    // 统计各状态的分享和推送数
+    const { data: shareStatusStats, error: shareStatusError } = await client
+      .from('share_records')
+      .select('share_status')
+    
+    if (shareStatusError) throw new Error(`获取分享状态统计失败: ${shareStatusError.message}`)
+    
+    const shareStatusCounts = (shareStatusStats || []).reduce((acc: Record<string, number>, item: { share_status: string }) => {
+      acc[item.share_status] = (acc[item.share_status] || 0) + 1
+      return acc
+    }, {})
+    
+    const { data: pushStatusStats, error: pushStatusError } = await client
+      .from('push_records')
+      .select('push_status')
+    
+    if (pushStatusError) throw new Error(`获取推送状态统计失败: ${pushStatusError.message}`)
+    
+    const pushStatusCounts = (pushStatusStats || []).reduce((acc: Record<string, number>, item: { push_status: string }) => {
+      acc[item.push_status] = (acc[item.push_status] || 0) + 1
+      return acc
+    }, {})
+    
     return NextResponse.json({
       // 基础统计
       totalDrives,
@@ -174,6 +229,17 @@ export async function GET() {
       
       // 网盘统计
       driveStats,
+      
+      // 即将过期的分享
+      expiringShares: expiringShares || [],
+      
+      // 最近活动
+      recentShares: recentShares || [],
+      recentPushes: recentPushes || [],
+      
+      // 状态统计
+      shareStatusCounts,
+      pushStatusCounts,
     })
   } catch (error) {
     console.error('获取统计数据失败:', error)
@@ -192,6 +258,11 @@ export async function GET() {
         todayWarnings: 0,
         topFiles: [],
         driveStats: [],
+        expiringShares: [],
+        recentShares: [],
+        recentPushes: [],
+        shareStatusCounts: {},
+        pushStatusCounts: {},
       },
       { status: 200 }
     )

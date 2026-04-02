@@ -81,6 +81,42 @@ export async function GET(request: NextRequest) {
         data.forEach((record: { id: number }) => {
           (record as any).push_info = pushMap.get(record.id) || []
         })
+        
+        // 查询相同文件在其他网盘的分享记录（多网盘联动）
+        const fileNames = data.map((r: { file_name: string }) => r.file_name)
+        const fileSizes = data.map((r: { file_size: string | null }) => r.file_size)
+        
+        const { data: duplicateShares } = await client
+          .from('share_records')
+          .select(`
+            id,
+            file_name,
+            file_size,
+            share_url,
+            share_code,
+            cloud_drive_id,
+            cloud_drives (id, name, alias)
+          `)
+          .eq('share_status', 'success')
+          .in('file_name', fileNames)
+        
+        // 按文件名+大小分组
+        const duplicateMap = new Map<string, any[]>()
+        duplicateShares?.forEach((ds: any) => {
+          const key = `${ds.file_name}_${ds.file_size || ''}`
+          if (!duplicateMap.has(key)) {
+            duplicateMap.set(key, [])
+          }
+          duplicateMap.get(key)!.push(ds)
+        })
+        
+        // 附加多网盘链接到分享记录
+        data.forEach((record: any) => {
+          const key = `${record.file_name}_${record.file_size || ''}`
+          const duplicates = duplicateMap.get(key) || []
+          // 排除自身
+          record.other_drive_links = duplicates.filter((d: any) => d.id !== record.id)
+        })
       }
       
       return { data, count }
@@ -102,6 +138,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * DELETE - 删除分享记录
+ * 支持单个删除和批量删除
  */
 export async function DELETE(request: NextRequest) {
   try {
@@ -109,11 +146,35 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id')
     const cancelShare = searchParams.get('cancel') === 'true'
     
-    if (!id) {
-      return NextResponse.json({ error: '缺少分享记录ID' }, { status: 400 })
+    // 检查是否为批量删除
+    let body: { ids?: number[] } = {}
+    try {
+      const text = await request.text()
+      if (text) {
+        body = JSON.parse(text)
+      }
+    } catch {
+      // 忽略解析错误，说明不是JSON body
     }
     
     const client = getSupabaseClient()
+    
+    // 批量删除
+    if (body.ids && body.ids.length > 0) {
+      const { error: deleteError } = await client
+        .from('share_records')
+        .delete()
+        .in('id', body.ids)
+      
+      if (deleteError) throw new Error(`批量删除失败: ${deleteError.message}`)
+      
+      return NextResponse.json({ success: true, message: `成功删除 ${body.ids.length} 条记录` })
+    }
+    
+    // 单个删除
+    if (!id) {
+      return NextResponse.json({ error: '缺少分享记录ID' }, { status: 400 })
+    }
     
     // 获取分享记录
     const { data: record, error: fetchError } = await client

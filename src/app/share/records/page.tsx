@@ -32,7 +32,7 @@ import {
   FileText, Copy, Trash2, 
   Send, RefreshCw, Search, ChevronLeft, ChevronRight, Bot, Eye, 
   Hand, Clock, CheckCircle2, XCircle, AlertCircle, Loader2,
-  Film, Tv, File, Check
+  Film, Tv, File, Check, Square
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
@@ -86,6 +86,20 @@ interface PushInfo {
   }
 }
 
+interface OtherDriveLink {
+  id: number
+  file_name: string
+  file_size: string | null
+  share_url: string
+  share_code: string | null
+  cloud_drive_id: number
+  cloud_drives: {
+    id: number
+    name: string
+    alias: string | null
+  } | null
+}
+
 interface ShareRecord {
   id: number
   cloud_drive_id: number
@@ -110,6 +124,7 @@ interface ShareRecord {
     alias: string | null
   }
   push_info?: PushInfo[]
+  other_drive_links?: OtherDriveLink[]
 }
 
 interface CloudDrive {
@@ -155,6 +170,11 @@ export default function ShareRecordsPage() {
   // 操作状态
   const [saving, setSaving] = useState(false)
   const [pushing, setPushing] = useState(false)
+  
+  // 批量操作
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [batchPushDialogOpen, setBatchPushDialogOpen] = useState(false)
+  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
 
   const fetchCloudDrives = async () => {
     try {
@@ -434,6 +454,96 @@ export default function ShareRecordsPage() {
       </Badge>
     )
   }
+  
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (selectedIds.size === records.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(records.map(r => r.id)))
+    }
+  }
+  
+  // 切换单个选择
+  const toggleSelect = (id: number) => {
+    const newSelection = new Set(selectedIds)
+    if (newSelection.has(id)) {
+      newSelection.delete(id)
+    } else {
+      newSelection.add(id)
+    }
+    setSelectedIds(newSelection)
+  }
+  
+  // 批量删除
+  const batchDelete = async () => {
+    if (selectedIds.size === 0) return
+    
+    setSaving(true)
+    try {
+      const response = await fetch('/api/share/records', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      })
+      
+      if (!response.ok) throw new Error('删除失败')
+      
+      toast.success(`成功删除 ${selectedIds.size} 条记录`)
+      setBatchDeleteDialogOpen(false)
+      setSelectedIds(new Set())
+      fetchRecords()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "删除失败")
+    } finally {
+      setSaving(false)
+    }
+  }
+  
+  // 批量推送
+  const batchPush = async () => {
+    if (selectedIds.size === 0 || selectedChannels.size === 0) return
+    
+    setPushing(true)
+    try {
+      const selectedRecords = records.filter(r => selectedIds.has(r.id))
+      const results = await Promise.all(
+        selectedRecords.map(record =>
+          fetch("/api/assistant/push", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              link: {
+                type: record.cloud_drives?.name,
+                shareUrl: record.share_url,
+                shareCode: record.share_code,
+              },
+              file: {
+                name: record.tmdb_title || record.file_name,
+                type: record.content_type || 'unknown',
+              },
+              channels: Array.from(selectedChannels),
+              edit: {
+                title: record.tmdb_title || record.file_name,
+                note: record.remark || '',
+              },
+            }),
+          })
+        )
+      )
+      
+      const successCount = results.filter(r => r.ok).length
+      toast.success(`成功推送 ${successCount}/${selectedIds.size} 条记录`)
+      setBatchPushDialogOpen(false)
+      setSelectedIds(new Set())
+      setSelectedChannels(new Set())
+      fetchRecords()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "推送失败")
+    } finally {
+      setPushing(false)
+    }
+  }
 
   return (
     <div className="p-8">
@@ -450,68 +560,102 @@ export default function ShareRecordsPage() {
       {/* 筛选区域 */}
       <Card className="mb-6">
         <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="搜索文件名或链接..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64"
-                onKeyDown={(e) => e.key === 'Enter' && fetchRecords()}
-              />
+          <div className="flex flex-wrap gap-4 items-center justify-between">
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="搜索文件名或链接..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-64"
+                  onKeyDown={(e) => e.key === 'Enter' && fetchRecords()}
+                />
+              </div>
+              
+              <Select value={filterCloudDrive} onValueChange={setFilterCloudDrive}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="全部网盘" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部网盘</SelectItem>
+                  {cloudDrives.map(drive => (
+                    <SelectItem key={drive.id} value={drive.id.toString()}>
+                      <div className="flex items-center gap-1.5">
+                        <img 
+                          src={getCloudDriveIcon(drive.name)} 
+                          alt={drive.name}
+                          className="w-4 h-4 rounded"
+                        />
+                        <span>{CLOUD_DRIVE_NAMES[drive.name] || drive.name}：{drive.alias || drive.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="全部状态" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部状态</SelectItem>
+                  <SelectItem value="pending">审核中</SelectItem>
+                  <SelectItem value="active">有效</SelectItem>
+                  <SelectItem value="expired">已过期</SelectItem>
+                  <SelectItem value="cancelled">已取消</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Select value={filterSource} onValueChange={setFilterSource}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="全部来源" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部来源</SelectItem>
+                  <SelectItem value="monitor">自动监控</SelectItem>
+                  <SelectItem value="manual">手动分享</SelectItem>
+                  <SelectItem value="assistant">智能助手</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Button variant="outline" onClick={fetchRecords}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                刷新
+              </Button>
             </div>
             
-            <Select value={filterCloudDrive} onValueChange={setFilterCloudDrive}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="全部网盘" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部网盘</SelectItem>
-                {cloudDrives.map(drive => (
-                  <SelectItem key={drive.id} value={drive.id.toString()}>
-                    <div className="flex items-center gap-1.5">
-                      <img 
-                        src={getCloudDriveIcon(drive.name)} 
-                        alt={drive.name}
-                        className="w-4 h-4 rounded"
-                      />
-                      <span>{CLOUD_DRIVE_NAMES[drive.name] || drive.name}：{drive.alias || drive.name}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="全部状态" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部状态</SelectItem>
-                <SelectItem value="pending">审核中</SelectItem>
-                <SelectItem value="active">有效</SelectItem>
-                <SelectItem value="expired">已过期</SelectItem>
-                <SelectItem value="cancelled">已取消</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            <Select value={filterSource} onValueChange={setFilterSource}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="全部来源" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部来源</SelectItem>
-                <SelectItem value="monitor">自动监控</SelectItem>
-                <SelectItem value="manual">手动分享</SelectItem>
-                <SelectItem value="assistant">智能助手</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            <Button variant="outline" onClick={fetchRecords}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              刷新
-            </Button>
+            {/* 批量操作按钮 */}
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  已选择 {selectedIds.size} 项
+                </span>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setBatchPushDialogOpen(true)}
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  批量推送
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={() => setBatchDeleteDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  批量删除
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  取消选择
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -533,6 +677,20 @@ export default function ShareRecordsPage() {
               <Table className="min-w-[1200px]">
                 <TableHeader>
                   <TableRow className="bg-muted/50">
+                    <TableHead className="w-[40px]">
+                      <button
+                        className={`w-5 h-5 border rounded flex items-center justify-center ${
+                          selectedIds.size === records.length && records.length > 0
+                            ? 'bg-primary border-primary text-white'
+                            : 'border-gray-300'
+                        }`}
+                        onClick={toggleSelectAll}
+                      >
+                        {selectedIds.size === records.length && records.length > 0 && (
+                          <Check className="h-3 w-3" />
+                        )}
+                      </button>
+                    </TableHead>
                     <TableHead className="w-[140px]">分享时间</TableHead>
                     <TableHead className="w-[120px]">网盘</TableHead>
                     <TableHead className="w-[240px]">文件名</TableHead>
@@ -549,6 +707,20 @@ export default function ShareRecordsPage() {
                 <TableBody>
                   {records.map((record) => (
                     <TableRow key={record.id} className="hover:bg-muted/30">
+                      <TableCell>
+                        <button
+                          className={`w-5 h-5 border rounded flex items-center justify-center ${
+                            selectedIds.has(record.id)
+                              ? 'bg-primary border-primary text-white'
+                              : 'border-gray-300 hover:border-primary'
+                          }`}
+                          onClick={() => toggleSelect(record.id)}
+                        >
+                          {selectedIds.has(record.id) && (
+                            <Check className="h-3 w-3" />
+                          )}
+                        </button>
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDateTime(record.created_at)}
                       </TableCell>
@@ -578,44 +750,65 @@ export default function ShareRecordsPage() {
                       </TableCell>
                       <TableCell>
                         {record.share_url ? (
-                          <div className="flex items-center gap-2">
-                            {record.cloud_drives?.name === '115' && record.share_code ? (
-                              // 115网盘：share_url已包含password参数，直接使用
-                              <a 
-                                href={record.share_url}
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline text-sm"
-                                title={record.share_url}
-                              >
-                                {record.share_url.replace(/^https?:\/\//, '')}
-                              </a>
-                            ) : (
-                              <>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              {record.cloud_drives?.name === '115' && record.share_code ? (
                                 <a 
-                                  href={record.share_url} 
+                                  href={record.share_url}
                                   target="_blank" 
                                   rel="noopener noreferrer"
                                   className="text-primary hover:underline text-sm"
                                   title={record.share_url}
                                 >
-                                  {record.share_url.replace(/^https?:\/\//, '').split('/')[0]}/{record.share_url.split('/').pop()}
+                                  {record.share_url.replace(/^https?:\/\//, '')}
                                 </a>
-                                {record.share_code && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {record.share_code}
-                                  </Badge>
-                                )}
-                              </>
+                              ) : (
+                                <>
+                                  <a 
+                                    href={record.share_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-primary hover:underline text-sm"
+                                    title={record.share_url}
+                                  >
+                                    {record.share_url.replace(/^https?:\/\//, '').split('/')[0]}/{record.share_url.split('/').pop()}
+                                  </a>
+                                  {record.share_code && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {record.share_code}
+                                    </Badge>
+                                  )}
+                                </>
+                              )}
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-6 w-6"
+                                onClick={() => copyLink(record)}
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            {/* 多网盘链接 */}
+                            {record.other_drive_links && record.other_drive_links.length > 0 && (
+                              <div className="pt-1 border-t border-dashed">
+                                {record.other_drive_links.map((link) => (
+                                  <div key={link.id} className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <img 
+                                      src={getCloudDriveIcon(link.cloud_drives?.name || '')} 
+                                      alt={link.cloud_drives?.name || ''}
+                                      className="w-3 h-3 rounded"
+                                    />
+                                    <span>{link.cloud_drives?.alias || CLOUD_DRIVE_NAMES[link.cloud_drives?.name || ''] || link.cloud_drives?.name}</span>
+                                    {link.share_code && (
+                                      <Badge variant="outline" className="text-[10px] h-4 px-1">
+                                        {link.share_code}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             )}
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6"
-                              onClick={() => copyLink(record)}
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </Button>
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>
@@ -800,6 +993,96 @@ export default function ShareRecordsPage() {
             >
               {pushing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               推送
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* 批量推送对话框 */}
+      <Dialog open={batchPushDialogOpen} onOpenChange={setBatchPushDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>批量推送到渠道</DialogTitle>
+            <DialogDescription>
+              已选择 {selectedIds.size} 条记录，选择要推送的渠道
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="text-sm font-medium">选择渠道</div>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {pushChannels.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  暂无可用推送渠道
+                </p>
+              ) : (
+                pushChannels.map(channel => (
+                  <div
+                    key={channel.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedChannels.has(channel.id)
+                        ? 'border-primary bg-primary/10'
+                        : 'hover:border-primary/50'
+                    }`}
+                    onClick={() => toggleChannel(channel.id)}
+                  >
+                    <div className="flex items-center gap-2 flex-1">
+                      <img 
+                        src={getPushChannelIcon(channel.channel_type)} 
+                        alt={channel.channel_type}
+                        width={20}
+                        height={20}
+                        className="rounded"
+                      />
+                      <div>
+                        <div className="font-medium text-sm">{channel.channel_name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {channel.cloud_drives?.alias || channel.cloud_drives?.name || '全局'}
+                        </div>
+                      </div>
+                    </div>
+                    {selectedChannels.has(channel.id) && (
+                      <Check className="h-4 w-4 text-primary" />
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchPushDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              onClick={batchPush} 
+              disabled={pushing || selectedChannels.size === 0}
+            >
+              {pushing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              批量推送
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* 批量删除对话框 */}
+      <Dialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>批量删除分享记录</DialogTitle>
+            <DialogDescription>
+              确定要删除选中的 {selectedIds.size} 条分享记录吗？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => setBatchDeleteDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={batchDelete}
+              disabled={saving}
+            >
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              确认删除
             </Button>
           </DialogFooter>
         </DialogContent>
