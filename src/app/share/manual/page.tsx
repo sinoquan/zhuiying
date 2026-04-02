@@ -239,12 +239,16 @@ export default function ManualSharePage() {
 
   // 切换文件选中状态
   const toggleFileSelection = (file: CloudFile) => {
+    console.log('[toggleFileSelection] 被调用, file:', file.name, 'id:', file.id)
     setSelectedFiles(prev => {
+      console.log('[toggleFileSelection] prev size:', prev.size, 'has id:', prev.has(file.id))
       const newSelection = new Set(prev)
       if (newSelection.has(file.id)) {
         newSelection.delete(file.id)
+        console.log('[toggleFileSelection] 删除, 新 size:', newSelection.size)
       } else {
         newSelection.add(file.id)
+        console.log('[toggleFileSelection] 添加, 新 size:', newSelection.size)
       }
       return newSelection
     })
@@ -252,10 +256,13 @@ export default function ManualSharePage() {
 
   // 全选/取消全选
   const selectAll = () => {
+    console.log('[selectAll] 被调用, 当前 selectedFiles.size:', selectedFiles.size, 'files.length:', files.length)
     // 如果当前有选中，则清空；否则全选
     if (selectedFiles.size > 0) {
+      console.log('[selectAll] 清空选择')
       setSelectedFiles(new Set())
     } else {
+      console.log('[selectAll] 全选, 文件IDs:', files.map(f => f.id))
       setSelectedFiles(new Set(files.map(f => f.id)))
     }
   }
@@ -486,10 +493,14 @@ export default function ManualSharePage() {
                             className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
                             checked={selectedFiles.has(file.id)}
                             onChange={(e) => {
+                              console.log('[input onChange] file:', file.name, 'checked:', e.target.checked)
                               e.stopPropagation()
                               toggleFileSelection(file)
                             }}
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              console.log('[input onClick] file:', file.name)
+                              e.stopPropagation()
+                            }}
                           />
                           
                           {/* 文件名 */}
