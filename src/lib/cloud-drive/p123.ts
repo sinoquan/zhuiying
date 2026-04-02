@@ -174,20 +174,11 @@ export class Pan123Service implements ICloudDriveService {
   }
 
   async createShare(fileIds: string[], expireDays: number = 7): Promise<ShareInfo> {
-    const data = await this.request('/api/share/create', {
-      method: 'POST',
-      body: JSON.stringify({
-        driveId: 0,
-        expireTime: expireDays * 24 * 3600,
-        fileIds: fileIds.map(id => parseInt(id)),
-      }),
-    })
-
-    return {
-      share_url: data.shareUrl,
-      share_code: data.sharePwd || '',
-      expire_time: data.expireTime,
-    }
+    console.log(`[123] 创建分享: fileIds=${fileIds.join(',')}, expireDays=${expireDays}`)
+    
+    // 123云盘分享API - 当前API端点格式要求不明确
+    // 暂时抛出错误，提示用户手动分享
+    throw new Error('123云盘分享功能暂不可用，请使用网页端手动分享。错误原因：API参数格式不兼容')
   }
 
   async checkNewFiles(path: string, sinceTime: Date): Promise<CloudFile[]> {
