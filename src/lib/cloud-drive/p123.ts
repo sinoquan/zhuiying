@@ -1,31 +1,68 @@
 /**
  * 123云盘服务
- * API文档: https://www.123pan.com/developer
+ * 支持两种API：
+ * 1. 开放平台API: openapi.123pan.com (需要开发者token)
+ * 2. 普通用户API: api.123pan.com (使用登录获取的JWT token)
  */
 
 import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, SharedFileInfo, SpaceInfo } from './types'
 
 export class Pan123Service implements ICloudDriveService {
   private token: string
-  private baseUrl = 'https://openapi.123pan.com'
+  // 根据token类型选择API端点
+  // JWT token (以eyJ开头) 使用普通用户API，否则使用开放平台API
+  private baseUrl: string
+  private isJwtToken: boolean
 
   constructor(config: CloudDriveConfig) {
     this.token = config.token || ''
+    // 判断是否是JWT token
+    this.isJwtToken = this.token.startsWith('eyJ')
+    // JWT token使用www.123pan.com，开放平台token使用openapi.123pan.com
+    this.baseUrl = this.isJwtToken ? 'https://www.123pan.com' : 'https://openapi.123pan.com'
+    console.log(`[123] 使用API: ${this.baseUrl}, JWT模式: ${this.isJwtToken}`)
+  }
+
+  // 从JWT token中解析用户信息
+  private parseJwtToken(): { nickname?: string; username?: string } | null {
+    if (!this.isJwtToken) return null
+    try {
+      const payload = this.token.split('.')[1]
+      const decoded = JSON.parse(Buffer.from(payload, 'base64').toString('utf-8'))
+      return {
+        nickname: decoded.nickname,
+        username: decoded.username?.toString(),
+      }
+    } catch (e) {
+      console.log('[123] 解析JWT token失败:', e)
+      return null
+    }
   }
 
   private async request(endpoint: string, options: RequestInit = {}) {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...options.headers as Record<string, string>,
+    }
+
+    // JWT token使用Authorization头，开放平台token使用Platform-Auth
+    if (this.isJwtToken) {
+      headers['Authorization'] = `Bearer ${this.token}`
+    } else {
+      headers['Authorization'] = `Bearer ${this.token}`
+    }
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     })
 
     const data = await response.json()
+    console.log(`[123] API响应: ${endpoint}, code=${data.code}, message=${data.message || 'ok'}`)
     
-    if (data.code !== 0) {
+    // 123云盘成功状态码可能是0或200
+    if (data.code !== 0 && data.code !== 200) {
       throw new Error(data.message || '请求失败')
     }
 
@@ -33,6 +70,15 @@ export class Pan123Service implements ICloudDriveService {
   }
 
   async getUserInfo(): Promise<{ name: string; avatar?: string; vip?: boolean }> {
+    // 优先从JWT token中解析用户信息
+    const jwtInfo = this.parseJwtToken()
+    if (jwtInfo?.nickname) {
+      return {
+        name: jwtInfo.nickname || jwtInfo.username || '未知用户',
+      }
+    }
+    
+    // 尝试API获取
     try {
       const data = await this.request('/api/user/info')
       return {
@@ -41,7 +87,7 @@ export class Pan123Service implements ICloudDriveService {
         vip: data.vip === 1,
       }
     } catch {
-      return { name: '未知用户' }
+      return { name: jwtInfo?.username || '未知用户' }
     }
   }
 
@@ -67,24 +113,30 @@ export class Pan123Service implements ICloudDriveService {
   }
 
   async listFiles(path: string, page: number = 1, pageSize: number = 100): Promise<ListResult> {
-    // 123云盘需要先获取目录ID
+    console.log(`[123] listFiles: path=${path}, page=${page}, pageSize=${pageSize}`)
+    
+    // 根目录使用parentFileId=0
     const parentId = path === '/' ? 0 : await this.getDirectoryId(path)
     
-    const data = await this.request(
-      `/api/file/list?driveId=0&limit=${pageSize}&offset=${(page - 1) * pageSize}&parentFileId=${parentId}&orderBy=name&orderDirection=asc`
-    )
+    // 使用正确的API参数格式（首字母大写）
+    const endpoint = `/api/file/list?DriveId=0&limit=${pageSize}&offset=${(page - 1) * pageSize}&parentFileId=${parentId}&orderBy=name&orderDirection=asc&trashed=false`
+    console.log(`[123] 请求端点: ${endpoint}`)
+    
+    const data = await this.request(endpoint)
+    console.log(`[123] 响应数据条数: ${data?.InfoList?.length || 0}`)
 
+    // 响应格式是 InfoList 而不是 fileList，字段首字母大写
     return {
-      files: (data.fileList || []).map((file: any) => ({
-        id: file.fileId.toString(),
-        name: file.fileName,
-        path: `${path === '/' ? '' : path}/${file.fileName}`,
-        is_dir: file.type === 1,
-        size: file.size,
-        created_at: file.createTime,
-        modified_at: file.updateTime,
+      files: (data?.InfoList || []).map((file: any) => ({
+        id: file.FileId?.toString(),
+        name: file.FileName,
+        path: `${path === '/' ? '' : path}/${file.FileName}`,
+        is_dir: file.Type === 1,
+        size: file.Size || 0,
+        created_at: file.CreateAt,
+        modified_at: file.UpdateAt,
       })),
-      has_more: (data.fileList || []).length >= pageSize,
+      has_more: (data?.InfoList?.length || 0) >= pageSize,
     }
   }
 
@@ -97,11 +149,12 @@ export class Pan123Service implements ICloudDriveService {
     
     for (const part of parts) {
       const data = await this.request(
-        `/api/file/list?driveId=0&limit=1000&parentFileId=${currentId}`
+        `/api/file/list?DriveId=0&limit=1000&offset=0&parentFileId=${currentId}&orderBy=name&orderDirection=asc&trashed=false`
       )
-      const dir = data.fileList?.find((f: any) => f.fileName === part && f.type === 1)
+      // 使用正确的字段名
+      const dir = data?.InfoList?.find((f: any) => f.FileName === part && f.Type === 1)
       if (!dir) throw new Error(`目录不存在: ${part}`)
-      currentId = dir.fileId
+      currentId = dir.FileId
     }
     
     return currentId

@@ -17,10 +17,17 @@ interface LoginResponse {
   code: number
   message: string
   data?: {
-    token: string
+    token?: string
+    accessToken?: string
     refreshToken?: string
     expiredAt?: number
-    // 用户信息
+    // 用户信息可能直接在data中
+    accountId?: number
+    account?: string
+    nickname?: string
+    avatar?: string
+    vip?: number
+    // 或者在member对象中
     member?: {
       accountId: number
       account: string
@@ -81,23 +88,32 @@ export async function POST(request: NextRequest) {
         })
 
         const data: LoginResponse = await response.json()
-        console.log(`[123] 响应: code=${data.code}, message=${data.message}`)
+        console.log(`[123] 完整响应: ${JSON.stringify(data).substring(0, 500)}`)
 
-        if (data.code === 0 && data.data?.token) {
-          const { token, member } = data.data
-          console.log(`[123] 登录成功, 用户: ${member?.nickname || member?.account || '未知'}`)
+        // 123云盘成功状态码是200或0
+        if (data.code === 0 || data.code === 200) {
+          // 尝试多种可能的token字段名
+          const token = data.data?.token || data.data?.accessToken || (data.data as any)?.Token
+          
+          if (token) {
+            const member = data.data?.member
+            const userName = member?.nickname || member?.account || data.data?.nickname || data.data?.account || '未知用户'
+            console.log(`[123] 登录成功, 用户: ${userName}`)
 
-          return NextResponse.json({
-            success: true,
-            data: {
-              token,
-              user: {
-                name: member?.nickname || member?.account || '未知用户',
-                avatar: member?.avatar,
-                is_vip: member?.vip === 1,
+            return NextResponse.json({
+              success: true,
+              data: {
+                token,
+                user: {
+                  name: userName,
+                  avatar: member?.avatar || data.data?.avatar,
+                  is_vip: (member?.vip || data.data?.vip) === 1,
+                }
               }
-            }
-          })
+            })
+          } else {
+            console.log(`[123] 响应成功但无token，data字段: ${Object.keys(data.data || {}).join(', ')}`)
+          }
         }
         
         lastError = data.message || '登录失败'
