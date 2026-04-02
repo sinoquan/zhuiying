@@ -4,7 +4,7 @@
  */
 
 import { Pool } from 'pg';
-import { addDevLog } from '@/app/api/dev-logs/route';
+import { addDevLog } from '@/lib/dev-logger';
 
 let pool: Pool | null = null;
 let supabaseClient: any = null;
