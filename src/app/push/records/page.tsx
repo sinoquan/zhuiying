@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
+import Image from "next/image"
 
 // 状态配置
 const STATUS_CONFIG = {
@@ -164,6 +165,19 @@ export default function PushRecordsPage() {
     const Icon = config.icon
     return <Icon className="h-4 w-4" />
   }
+  
+  // 格式化文件大小
+  const formatFileSize = (size: string | null | undefined) => {
+    if (!size) return ''
+    const bytes = parseInt(size)
+    if (isNaN(bytes) || bytes <= 0) return ''
+    
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    const k = 1024
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    const safeI = Math.min(i, units.length - 1)
+    return parseFloat((bytes / Math.pow(k, safeI)).toFixed(2)) + ' ' + units[safeI]
+  }
 
   return (
     <div className="p-8">
@@ -243,11 +257,18 @@ export default function PushRecordsPage() {
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 {share.cloud_drives && (
                                   <>
-                                    {getCloudDriveIcon(share.cloud_drives.name)}
+                                    <Image 
+                                      src={getCloudDriveIcon(share.cloud_drives.name)} 
+                                      alt={share.cloud_drives.name}
+                                      width={16}
+                                      height={16}
+                                      className="rounded"
+                                      unoptimized
+                                    />
                                     <span>{share.cloud_drives.alias || share.cloud_drives.name}</span>
                                   </>
                                 )}
-                                {share.file_size && <span>· {share.file_size}</span>}
+                                {share.file_size && <span>· {formatFileSize(share.file_size)}</span>}
                               </div>
                               {share.share_url && (
                                 <a 
@@ -268,7 +289,14 @@ export default function PushRecordsPage() {
                         <TableCell>
                           {channel ? (
                             <div className="flex items-center gap-2">
-                              {getPushChannelIcon(channel.channel_type)}
+                              <Image 
+                                src={getPushChannelIcon(channel.channel_type)} 
+                                alt={channel.channel_type}
+                                width={20}
+                                height={20}
+                                className="rounded"
+                                unoptimized
+                              />
                               <span>{channel.channel_name}</span>
                             </div>
                           ) : (
