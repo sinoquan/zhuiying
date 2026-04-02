@@ -58,6 +58,14 @@ export async function POST(request: NextRequest) {
 
 // GET - 检查登录状态
 export async function GET(request: NextRequest) {
+  // 如果禁用认证，直接返回已登录状态
+  if (process.env.DISABLE_AUTH === 'true') {
+    return NextResponse.json({
+      authenticated: true,
+      username: 'admin'
+    })
+  }
+  
   const token = request.cookies.get('auth_token')
   const user = request.cookies.get('auth_user')
   
