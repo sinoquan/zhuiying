@@ -68,6 +68,11 @@ interface ContentInfo {
   cast?: string[]
   runtime?: number
   nextEpisode?: string
+  resolution?: string
+  video_codec?: string
+  audio_codec?: string
+  source?: string
+  quality_type?: string
 }
 
 // 推送消息
@@ -91,6 +96,12 @@ interface PushMessage {
     cast?: string[]
     file_count?: number
     quality?: string
+    resolution?: string
+    video_codec?: string
+    audio_codec?: string
+    runtime?: number
+    status?: string
+    nextEpisode?: string
   }
 }
 
@@ -195,6 +206,14 @@ export class FileMonitorService {
           } else {
             // 单集分享
             for (const file of files) {
+              // 文件质量检测
+              const parsed = parseFileName(file.name, file.size)
+              if (parsed.is_non_main_content) {
+                console.log(`[Monitor] 跳过非正片: ${file.name} (${parsed.quality_type})`)
+                result.skipped_files++
+                continue
+              }
+              
               // 去重检查
               if (await this.isDuplicateFile(monitor.cloud_drive_id, file.path)) {
                 result.skipped_files++
@@ -205,7 +224,8 @@ export class FileMonitorService {
                 driveService, 
                 monitor, 
                 file, 
-                seriesInfo
+                seriesInfo,
+                parsed  // 传递解析结果
               )
               
               if (shareRecord) {
@@ -411,11 +431,22 @@ export class FileMonitorService {
     driveService: any,
     monitor: MonitorTask,
     file: FileInfo,
-    seriesInfo: { contentInfo: ContentInfo; isCompleted: boolean }
+    seriesInfo: { contentInfo: ContentInfo; isCompleted: boolean },
+    parsedInfo?: any  // 文件解析信息
   ): Promise<any | null> {
     try {
       // 创建分享
       const shareInfo = await driveService.createShare([file.id])
+      
+      // 构建TMDB信息，包含视频编码等
+      const tmdbInfo = {
+        ...seriesInfo.contentInfo,
+        resolution: parsedInfo?.resolution,
+        video_codec: parsedInfo?.video_codec,
+        audio_codec: parsedInfo?.audio_codec,
+        source: parsedInfo?.source,
+        quality_type: parsedInfo?.quality_type || 'normal',
+      }
       
       // 记录分享
       const { data: shareRecord, error } = await this.client
@@ -429,12 +460,15 @@ export class FileMonitorService {
           share_code: shareInfo.share_code,
           share_status: 'success',
           file_created_at: file.created_at,
-          tmdb_info: seriesInfo.contentInfo,
+          tmdb_info: tmdbInfo,
           content_type: seriesInfo.contentInfo.type,
           is_completed: seriesInfo.isCompleted,
           source: 'monitor',
         })
-        .select()
+        .select(`
+          *,
+          cloud_drives (id, name, alias)
+        `)
         .single()
       
       if (error) {
@@ -555,6 +589,29 @@ export class FileMonitorService {
 
   // ==================== 推送功能 ====================
   
+  // 查找同一文件在其他网盘的分享记录
+  private async findDuplicateShares(
+    fileName: string, 
+    fileSize: string, 
+    excludeId: number
+  ): Promise<any[]> {
+    const { data } = await this.client
+      .from('share_records')
+      .select(`
+        id,
+        share_url,
+        share_code,
+        cloud_drive_id,
+        cloud_drives (id, name, alias)
+      `)
+      .eq('file_name', fileName)
+      .eq('file_size', fileSize)
+      .eq('share_status', 'success')
+      .neq('id', excludeId)
+    
+    return data || []
+  }
+  
   private async autoPush(cloudDriveId: number, shareRecord: any): Promise<boolean> {
     try {
       // 获取该网盘的推送渠道
@@ -659,18 +716,28 @@ export class FileMonitorService {
       ? JSON.parse(shareRecord.tmdb_info) 
       : shareRecord.tmdb_info || { type: 'unknown', title: shareRecord.file_name }
     
+    // 查找其他网盘的相同文件分享记录
+    const duplicateShares = await this.findDuplicateShares(
+      shareRecord.file_name,
+      shareRecord.file_size,
+      shareRecord.id
+    )
+    
     // 使用模板
     if (templates && templates.length > 0) {
       return this.buildMessageFromTemplate(shareRecord, contentInfo, templates[0])
     }
     
-    // 默认格式
-    return this.buildDefaultMessage(shareRecord, contentInfo)
+    // 默认格式（支持多网盘链接）
+    return this.buildDefaultMessage(shareRecord, contentInfo, duplicateShares)
   }
 
-  private buildDefaultMessage(shareRecord: any, contentInfo: ContentInfo): PushMessage {
+  private buildDefaultMessage(
+    shareRecord: any, 
+    contentInfo: ContentInfo, 
+    duplicateShares: any[] = []
+  ): PushMessage {
     let title = ''
-    let content = ''
     
     if (contentInfo.type === 'tv') {
       title = `📺 电视剧：${contentInfo.title}`
@@ -699,43 +766,108 @@ export class FileMonitorService {
     // 构建详细内容
     const lines: string[] = []
     
+    // 基本信息
     if (contentInfo.tmdbId) {
       lines.push(`🍿 TMDB ID: ${contentInfo.tmdbId}`)
     }
     
     if (contentInfo.rating) {
-      lines.push(`⭐️ 评分: ${contentInfo.rating}`)
+      lines.push(`⭐️ 评分: ${contentInfo.rating}/10`)
     }
     
     if (contentInfo.genres && contentInfo.genres.length > 0) {
-      lines.push(`🎭 类型: ${contentInfo.genres.join(', ')}`)
+      lines.push(`🎭 类型: ${contentInfo.genres.slice(0, 3).join(', ')}`)
     }
     
+    // 剧集进度信息
+    if (contentInfo.type === 'tv' && contentInfo.totalEpisodes) {
+      const currentEp = contentInfo.episode || 1
+      const total = contentInfo.totalEpisodes
+      const progress = Math.round((currentEp / total) * 100)
+      
+      // 进度条
+      const filled = Math.floor(progress / 10)
+      const empty = 10 - filled
+      const progressBar = '█'.repeat(filled) + '░'.repeat(empty)
+      lines.push(`📊 进度: ${progressBar} ${progress}% (${currentEp}/${total}集)`)
+      
+      // 下一集播出时间
+      if (contentInfo.nextEpisode && !shareRecord.is_completed) {
+        lines.push(`📅 下一集: ${contentInfo.nextEpisode}`)
+      }
+      
+      // 状态
+      if (contentInfo.status) {
+        const statusEmoji = contentInfo.status === 'Ended' ? '✅' : '🔄'
+        const statusText = contentInfo.status === 'Ended' ? '已完结' : '连载中'
+        lines.push(`${statusEmoji} 状态: ${statusText}`)
+      }
+    }
+    
+    // 电影额外信息
+    if (contentInfo.type === 'movie') {
+      if (contentInfo.runtime) {
+        const hours = Math.floor(contentInfo.runtime / 60)
+        const mins = contentInfo.runtime % 60
+        lines.push(`⏱️ 时长: ${hours > 0 ? `${hours}小时` : ''}${mins}分钟`)
+      }
+    }
+    
+    // 文件质量信息
+    if (contentInfo.resolution || contentInfo.video_codec || contentInfo.audio_codec) {
+      const qualityParts: string[] = []
+      if (contentInfo.resolution) qualityParts.push(contentInfo.resolution)
+      if (contentInfo.video_codec) qualityParts.push(contentInfo.video_codec)
+      if (contentInfo.audio_codec) qualityParts.push(contentInfo.audio_codec)
+      lines.push(`🎥 画质: ${qualityParts.join(' | ')}`)
+    }
+    
+    // 文件信息
     if (shareRecord.file_count) {
       lines.push(`📦 文件: ${shareRecord.file_count} 个`)
     }
     
     lines.push(`💾 大小: ${shareRecord.file_size}`)
     
+    // 主演
     if (contentInfo.cast && contentInfo.cast.length > 0) {
-      lines.push(`👥 主演: ${contentInfo.cast.join(', ')}`)
+      lines.push(`👥 主演: ${contentInfo.cast.slice(0, 5).join(', ')}`)
     }
     
+    // 简介
     if (contentInfo.overview) {
-      const shortOverview = contentInfo.overview.length > 150 
-        ? contentInfo.overview.substring(0, 150) + '...' 
+      const shortOverview = contentInfo.overview.length > 120 
+        ? contentInfo.overview.substring(0, 120) + '...' 
         : contentInfo.overview
       lines.push(`📝 简介: ${shortOverview}`)
     }
     
     lines.push('')
-    lines.push(`🔗 链接: ${shareRecord.share_url}`)
+    
+    // 主链接
+    const driveName = shareRecord.cloud_drives?.alias || shareRecord.cloud_drives?.name || '网盘'
+    lines.push(`🔗 ${driveName}链接: ${shareRecord.share_url}`)
     
     if (shareRecord.share_code) {
       lines.push(`🔑 密码: ${shareRecord.share_code}`)
     }
     
-    content = lines.join('\n')
+    // 其他网盘的相同文件链接
+    if (duplicateShares.length > 0) {
+      lines.push('')
+      lines.push('───────────────')
+      lines.push('📁 其他网盘同文件:')
+      
+      for (const dup of duplicateShares) {
+        const dupDriveName = dup.cloud_drives?.alias || dup.cloud_drives?.name || '网盘'
+        lines.push(`🔗 ${dupDriveName}: ${dup.share_url}`)
+        if (dup.share_code) {
+          lines.push(`   密码: ${dup.share_code}`)
+        }
+      }
+    }
+    
+    const content = lines.join('\n')
     
     return {
       title,
@@ -756,6 +888,12 @@ export class FileMonitorService {
         genres: contentInfo.genres,
         cast: contentInfo.cast,
         file_count: shareRecord.file_count,
+        resolution: contentInfo.resolution,
+        video_codec: contentInfo.video_codec,
+        audio_codec: contentInfo.audio_codec,
+        runtime: contentInfo.runtime,
+        status: contentInfo.status,
+        nextEpisode: contentInfo.nextEpisode,
       }
     }
   }

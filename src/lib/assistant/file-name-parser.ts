@@ -3,6 +3,14 @@
  * 从文件名中提取影视信息（剧名、年份、季数、集数、分辨率等）
  */
 
+// 文件质量类型
+export type FileQualityType = 
+  | 'normal'      // 正常文件
+  | 'trailer'     // 预告片
+  | 'sample'      // 样片
+  | 'bonus'       // 花絮/特典
+  | 'other'       // 其他
+
 export interface ParsedFileInfo {
   // 原始文件名
   original_name: string
@@ -54,6 +62,15 @@ export interface ParsedFileInfo {
   
   // 文件扩展名
   extension?: string
+  
+  // 文件质量类型
+  quality_type: FileQualityType
+  
+  // 是否为预告片/样片等非正片
+  is_non_main_content: boolean
+  
+  // 文件大小（字节）
+  file_size_bytes?: number
 }
 
 /**
@@ -65,6 +82,8 @@ export function parseFileName(fileName: string, fileSize?: number): ParsedFileIn
     title: '',
     content_type: 'unknown',
     type: 'unknown',
+    quality_type: 'normal',
+    is_non_main_content: false,
   }
   
   // 获取文件扩展名
@@ -75,6 +94,55 @@ export function parseFileName(fileName: string, fileSize?: number): ParsedFileIn
   
   // 清理文件名（移除扩展名）
   let cleanName = fileName.replace(/\.(mp4|mkv|avi|mov|wmv|flv|rmvb)$/i, '')
+  
+  // ==================== 文件质量检测 ====================
+  
+  // 检测预告片
+  const trailerPatterns = [
+    /预告/i, /trailer/i, /teaser/i, /先行版/i, /预告片/i,
+    /先导/i, /promo/i, /preview/i
+  ]
+  if (trailerPatterns.some(p => p.test(cleanName))) {
+    result.quality_type = 'trailer'
+    result.is_non_main_content = true
+  }
+  
+  // 检测样片
+  const samplePatterns = [
+    /sample/i, /样片/i, /试看/i, /片段/i, /clip/i
+  ]
+  if (samplePatterns.some(p => p.test(cleanName))) {
+    result.quality_type = 'sample'
+    result.is_non_main_content = true
+  }
+  
+  // 检测花絮/特典
+  const bonusPatterns = [
+    /花絮/i, /特典/i, /bonus/i, /extra/i, /featurette/i,
+    /behind.the.scenes/i, /making.of/i, /访谈/i, /interview/i,
+    /删减/i, /deleted/i, /未收录/i, /彩蛋/i
+  ]
+  if (bonusPatterns.some(p => p.test(cleanName))) {
+    result.quality_type = 'bonus'
+    result.is_non_main_content = true
+  }
+  
+  // 检测小文件（可能是样片）
+  // 视频文件小于100MB可能是样片
+  if (fileSize && fileSize < 100 * 1024 * 1024 && result.extension) {
+    // 如果还没被标记为其他类型，且文件较小，标记为可能样片
+    if (result.quality_type === 'normal') {
+      result.quality_type = 'sample'
+      result.is_non_main_content = true
+    }
+  }
+  
+  // 保存文件大小
+  if (fileSize) {
+    result.file_size_bytes = fileSize
+  }
+  
+  // ==================== 继续原有解析逻辑 ====================
   
   // 提取 TMDB ID
   const tmdbMatch = cleanName.match(/\{tmdb-(\d+)\}/i)
