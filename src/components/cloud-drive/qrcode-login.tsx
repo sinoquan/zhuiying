@@ -216,13 +216,23 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
             {/* 二维码 */}
             <div className="relative w-48 h-48 bg-white rounded-lg border mb-4 overflow-hidden">
               {qrcodeImage ? (
-                <Image
-                  src={qrcodeImage}
-                  alt="扫码登录"
-                  fill
-                  className="object-contain"
-                  unoptimized
-                />
+                qrcodeImage.startsWith('data:') ? (
+                  // base64 图片直接使用 img 标签
+                  <img
+                    src={qrcodeImage}
+                    alt="扫码登录"
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  // 外部URL使用 next/image
+                  <Image
+                    src={qrcodeImage}
+                    alt="扫码登录"
+                    fill
+                    className="object-contain"
+                    unoptimized
+                  />
+                )
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <QrCode className="h-24 w-24 text-muted-foreground/30" />

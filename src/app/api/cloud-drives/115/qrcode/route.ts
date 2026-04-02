@@ -127,7 +127,38 @@ async function getQrcode(app: string) {
     const qrcodeUrl = qrcode || `https://115.com/scan/dg-${uid}`
     
     // 二维码图片URL
-    const qrcodeImage = `${QRCODE_API}/api/1.0/${app}/1.0/qrcode?uid=${uid}`
+    const qrcodeImageUrl = `${QRCODE_API}/api/1.0/${app}/1.0/qrcode?uid=${uid}`
+    
+    // 获取二维码图片并转换为base64
+    // 某些端（如ios/android）会返回302重定向，需要后端代理获取
+    let qrcodeImageBase64 = ''
+    try {
+      const imageResponse = await fetch(qrcodeImageUrl, {
+        headers: {
+          'User-Agent': appConfig.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://115.com/',
+        },
+        redirect: 'follow'  // 跟随重定向
+      })
+      
+      if (imageResponse.ok && imageResponse.headers.get('content-type')?.includes('image')) {
+        const imageBuffer = await imageResponse.arrayBuffer()
+        const base64 = Buffer.from(imageBuffer).toString('base64')
+        qrcodeImageBase64 = `data:image/png;base64,${base64}`
+        console.log(`[115] 二维码图片获取成功, base64长度: ${qrcodeImageBase64.length}`)
+      } else {
+        console.log(`[115] 二维码图片获取失败: status=${imageResponse.status}, content-type=${imageResponse.headers.get('content-type')}`)
+      }
+    } catch (imgError) {
+      console.log(`[115] 获取二维码图片异常:`, imgError)
+    }
+    
+    // 如果无法获取图片，使用第三方服务根据扫码URL生成二维码
+    if (!qrcodeImageBase64) {
+      // 使用第三方二维码生成服务（备用方案）
+      qrcodeImageBase64 = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrcodeUrl)}`
+      console.log(`[115] 使用第三方二维码服务生成图片`)
+    }
     
     // 存储扫码会话
     qrcodeStore.set(uid, {
@@ -148,7 +179,7 @@ async function getQrcode(app: string) {
       data: {
         uid,
         qrcodeUrl,
-        qrcodeImage,
+        qrcodeImage: qrcodeImageBase64,
         app,
         appName: appConfig.name,
         expiresIn: 300 // 5分钟有效
