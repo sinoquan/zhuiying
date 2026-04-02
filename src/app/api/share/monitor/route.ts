@@ -1,28 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
+import { withRetryOrDefault } from '@/lib/db-retry'
 
 // GET - 获取所有监控任务
 export async function GET() {
-  try {
-    const client = getSupabaseClient()
-    const { data, error } = await client
-      .from('file_monitors')
-      .select(`
-        *,
-        cloud_drives (
-          name,
-          alias
-        )
-      `)
-      .order('created_at', { ascending: false })
-    
-    if (error) throw new Error(`获取监控任务失败: ${error.message}`)
-    
-    return NextResponse.json(data || [])
-  } catch (error) {
-    console.error('获取监控任务失败:', error)
-    return NextResponse.json([], { status: 200 })
-  }
+  const result = await withRetryOrDefault(
+    async () => {
+      const client = getSupabaseClient()
+      const { data, error } = await client
+        .from('file_monitors')
+        .select(`
+          *,
+          cloud_drives (
+            name,
+            alias
+          )
+        `)
+        .order('created_at', { ascending: false })
+      
+      if (error) throw new Error(`获取监控任务失败: ${error.message}`)
+      return data
+    },
+    [],
+    { retries: 3, delay: 300 }
+  )
+  
+  return NextResponse.json(result)
 }
 
 // POST - 创建监控任务

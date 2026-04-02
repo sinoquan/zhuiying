@@ -1,98 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
+import { withRetryOrDefault } from '@/lib/db-retry'
 
 /**
  * GET - 获取分享记录
  * 支持筛选、分页
  */
 export async function GET(request: NextRequest) {
-  try {
-    const client = getSupabaseClient()
-    const { searchParams } = new URL(request.url)
-    
-    // 分页参数
-    const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '20')
-    const offset = (page - 1) * pageSize
-    
-    // 筛选参数
-    const cloudDriveId = searchParams.get('cloud_drive_id')
-    const status = searchParams.get('status')
-    const source = searchParams.get('source')
-    const search = searchParams.get('search')
-    
-    // 构建查询
-    let query = client
-      .from('share_records')
-      .select(`
-        *,
-        cloud_drives (
-          id,
-          name,
-          alias
-        )
-      `, { count: 'exact' })
-    
-    // 应用筛选
-    if (cloudDriveId) {
-      query = query.eq('cloud_drive_id', parseInt(cloudDriveId))
-    }
-    if (status) {
-      query = query.eq('share_status', status)
-    }
-    if (source) {
-      query = query.eq('source', source)
-    }
-    if (search) {
-      query = query.or(`file_name.ilike.%${search}%,share_url.ilike.%${search}%`)
-    }
-    
-    // 排序和分页
-    query = query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + pageSize - 1)
-    
-    const { data, error, count } = await query
-    
-    if (error) throw new Error(`获取分享记录失败: ${error.message}`)
-    
-    // 获取每条分享记录的推送状态
-    if (data && data.length > 0) {
-      const shareIds = data.map(r => r.id)
-      const { data: pushRecords } = await client
-        .from('push_records')
-        .select('share_record_id, push_status, push_channels(channel_name, channel_type)')
-        .in('share_record_id', shareIds)
+  const { searchParams } = new URL(request.url)
+  
+  // 分页参数
+  const page = parseInt(searchParams.get('page') || '1')
+  const pageSize = parseInt(searchParams.get('pageSize') || '20')
+  const offset = (page - 1) * pageSize
+  
+  // 筛选参数
+  const cloudDriveId = searchParams.get('cloud_drive_id')
+  const status = searchParams.get('status')
+  const source = searchParams.get('source')
+  const search = searchParams.get('search')
+  
+  const result = await withRetryOrDefault(
+    async () => {
+      const client = getSupabaseClient()
       
-      // 按分享ID分组推送记录
-      const pushMap = new Map()
-      pushRecords?.forEach(pr => {
-        const sid = pr.share_record_id
-        if (!pushMap.has(sid)) {
-          pushMap.set(sid, [])
-        }
-        pushMap.get(sid).push(pr)
-      })
+      // 构建查询
+      let query = client
+        .from('share_records')
+        .select(`
+          *,
+          cloud_drives (
+            id,
+            name,
+            alias
+          )
+        `, { count: 'exact' })
       
-      // 附加推送信息到分享记录
-      data.forEach(record => {
-        (record as any).push_info = pushMap.get(record.id) || []
-      })
-    }
-    
-    return NextResponse.json({
-      data: data || [],
-      pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / pageSize)
+      // 应用筛选
+      if (cloudDriveId) {
+        query = query.eq('cloud_drive_id', parseInt(cloudDriveId))
       }
-    })
-  } catch (error) {
-    console.error('获取分享记录失败:', error)
-    return NextResponse.json({ data: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })
-  }
+      if (status) {
+        query = query.eq('share_status', status)
+      }
+      if (source) {
+        query = query.eq('source', source)
+      }
+      if (search) {
+        query = query.or(`file_name.ilike.%${search}%,share_url.ilike.%${search}%`)
+      }
+      
+      // 排序和分页
+      query = query
+        .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1)
+      
+      const { data, error, count } = await query
+      
+      if (error) throw new Error(`获取分享记录失败: ${error.message}`)
+      
+      // 获取每条分享记录的推送状态
+      if (data && data.length > 0) {
+        const shareIds = data.map(r => r.id)
+        const { data: pushRecords } = await client
+          .from('push_records')
+          .select('share_record_id, push_status, push_channels(channel_name, channel_type)')
+          .in('share_record_id', shareIds)
+        
+        // 按分享ID分组推送记录
+        const pushMap = new Map()
+        pushRecords?.forEach(pr => {
+          const sid = pr.share_record_id
+          if (!pushMap.has(sid)) {
+            pushMap.set(sid, [])
+          }
+          pushMap.get(sid).push(pr)
+        })
+        
+        // 附加推送信息到分享记录
+        data.forEach(record => {
+          (record as any).push_info = pushMap.get(record.id) || []
+        })
+      }
+      
+      return { data, count }
+    },
+    { data: [], count: 0 },
+    { retries: 3, delay: 300 }
+  )
+  
+  return NextResponse.json({
+    data: result.data || [],
+    pagination: {
+      page,
+      pageSize,
+      total: result.count || 0,
+      totalPages: Math.ceil((result.count || 0) / pageSize)
+    }
+  })
 }
 
 /**
