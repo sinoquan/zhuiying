@@ -141,52 +141,70 @@ export class Pan115Service implements ICloudDriveService {
   async listFiles(path: string, page = 1, pageSize = 50): Promise<ListResult> {
     console.log(`[115] listFiles: path=${path}, page=${page}, pageSize=${pageSize}`)
     
-    const url = `${this.baseUrl}/files?aid=1&cid=${encodeURIComponent(path)}&offset=${(page - 1) * pageSize}&limit=${pageSize}`
-    console.log(`[115] 请求URL: ${url}`)
+    // 如果path是"/"或空，则cid为0（根目录）
+    const cid = (path === '/' || path === '' || path === '0') ? '0' : path
     
-    const response = await this.rawRequest(url)
+    // 使用webapi.115.com的API（支持Cookie认证）
+    const webApiUrl = `https://webapi.115.com/files?aid=1&cid=${encodeURIComponent(cid)}&offset=${(page - 1) * pageSize}&limit=${pageSize}`
+    console.log(`[115] 请求URL: ${webApiUrl}`)
     
-    // 检查响应是否为JSON
-    const contentType = response.headers.get('content-type') || ''
+    let response = await this.rawRequest(webApiUrl)
+    let contentType = response.headers.get('content-type') || ''
+    
+    // 115网盘的API有时会返回text/html content-type，但实际内容是JSON
+    // 所以我们需要尝试解析JSON，而不是直接抛出错误
+    let data: any
+    let responseText = ''
+    
     if (!contentType.includes('application/json')) {
-      console.log(`[115] 返回非JSON响应, content-type: ${contentType}, status: ${response.status}`)
+      console.log(`[115] 返回非JSON content-type: ${contentType}, 尝试解析内容...`)
+      responseText = await response.text()
+      console.log(`[115] 响应内容前200字符: ${responseText.substring(0, 200)}`)
       
-      // 检查是否是405错误（WAF阻止）
-      if (response.status === 405) {
-        throw new Error('115网盘请求被阻止，请检查Cookie是否过期或重新登录')
+      // 尝试解析为JSON
+      try {
+        data = JSON.parse(responseText)
+        console.log(`[115] 成功解析JSON数据`)
+      } catch (e) {
+        console.log(`[115] 无法解析为JSON，可能是Cookie已过期`)
+        throw new Error('115网盘返回非JSON响应，可能是Cookie已过期')
       }
-      throw new Error('115网盘返回非JSON响应，可能是Cookie已过期')
+    } else {
+      data = await response.json()
     }
     
-    const data = await response.json()
-    console.log(`[115] 响应: state=${data.state}, errno=${data.errno}, error=${data.error || '无'}, data长度=${data.data?.length || 0}`)
-    
-    // 检查API是否返回错误
-    if (data.state !== true && data.error) {
-      throw new Error(data.error)
-    }
+    // 打印完整响应用到日志
+    const responseStr = JSON.stringify(data)
+    console.log(`[115] 完整响应: ${responseStr.substring(0, 500)}`)
+    console.log(`[115] 响应字段: state=${data.state}, errno=${data.errno}, count=${data.count}, offset=${data.offset}`)
     
     // 打印原始响应以便调试
-    if (data.data && data.data.length > 0) {
+    if (data.data && Array.isArray(data.data) && data.data.length > 0) {
       const sampleItem = data.data[0]
       console.log('[115] 文件列表示例数据:', JSON.stringify(sampleItem, null, 2))
     }
     
-    const files: CloudFile[] = (data.data || []).map((item: any) => {
-      const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
-      const size = item.s || item.size || 0
-      const fileId = isDir ? String(item.cid) : String(item.fid || item.cid)
+    // 兼容proapi和webapi两种格式
+    // proapi格式: {state: 1, data: [{fid, file_name, file_size, ...}]}
+    // webapi格式: {state: true, data: [{cid, fid, n, s, ...}]}
+    const fileList = data.data || []
+    const files: CloudFile[] = fileList.map((item: any) => {
+      // proapi使用file_name, file_size; webapi使用n, s
+      const isDir = item.is_dir === 1 || item.is_dir === true || (!item.fid && item.cid && item.cid !== '0' && item.cid !== 0)
+      const size = item.file_size || item.s || item.size || 0
+      const fileId = item.fid || String(item.cid) || item.file_id || ''
+      const name = item.file_name || item.n || item.name || ''
       
       return {
         id: fileId,
-        name: item.n || item.name || '',
-        path: isDir ? String(item.cid) : path,
+        name: name,
+        path: isDir ? String(item.cid || item.parent_id || '') : path,
         is_dir: isDir,
         size: size,
-        created_at: item.tp || new Date().toISOString(),
-        modified_at: item.t || new Date().toISOString(),
-        sha1: item.sha1,
-        md5: item.md5,
+        created_at: item.file_ctime || item.tp || item.create_time || new Date().toISOString(),
+        modified_at: item.file_mtime || item.t || item.modify_time || new Date().toISOString(),
+        sha1: item.sha1 || item.file_sha1,
+        md5: item.md5 || item.file_md5,
       }
     })
     
