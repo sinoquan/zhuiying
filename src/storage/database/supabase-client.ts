@@ -162,24 +162,7 @@ function createPgClient() {
 }
 
 function createTableClient(table: string) {
-  let queryBuilder: any = {
-    select: () => queryBuilder,
-    insert: () => queryBuilder,
-    update: () => queryBuilder,
-    delete: () => queryBuilder,
-    upsert: () => queryBuilder,
-    eq: () => queryBuilder,
-    neq: () => queryBuilder,
-    in: () => queryBuilder,
-    order: () => queryBuilder,
-    limit: () => queryBuilder,
-    offset: () => queryBuilder,
-    single: () => queryBuilder,
-    maybeSingle: () => queryBuilder,
-    select: () => queryBuilder,
-  };
-  
-  // 构建状态
+  // 构建状态（先初始化）
   let selectColumns = '*';
   let insertData: any = null;
   let updateData: any = null;
@@ -189,6 +172,9 @@ function createTableClient(table: string) {
   let limitCount: number | null = null;
   let offsetCount: number | null = null;
   let isSingle = false;
+  
+  // queryBuilder 对象（后面会添加方法）
+  const queryBuilder: any = {};
   
   const buildWhere = (values: any[]) => {
     const clauses: string[] = [];

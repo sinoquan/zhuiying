@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     let proxyEnabled = false
     let proxyUrl: string | undefined
     
-    settings?.forEach((item) => {
+    settings?.forEach((item: { setting_key: string; setting_value: any }) => {
       if (item.setting_key === 'tmdb') {
         // 嵌套格式
         const config = item.setting_value as any

@@ -57,7 +57,7 @@ export async function DELETE(
       console.error('获取分享记录失败:', shareError)
     }
     
-    const shareIds = shareRecords?.map(r => r.id) || []
+    const shareIds = shareRecords?.map((r: { id: number }) => r.id) || []
     
     // 2. 删除推送记录（依赖 share_records 和 push_channels）
     if (shareIds.length > 0) {
@@ -81,7 +81,7 @@ export async function DELETE(
       console.error('获取推送渠道失败:', channelsError)
     }
     
-    const channelIds = pushChannels?.map(c => c.id) || []
+    const channelIds = pushChannels?.map((c: { id: number }) => c.id) || []
     
     if (channelIds.length > 0) {
       // 删除这些渠道的推送记录

@@ -283,7 +283,7 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
     let language = 'zh-CN'
     let doubanCookie: string | undefined
     
-    settings?.forEach((item) => {
+    settings?.forEach((item: { setting_key: string; setting_value: any }) => {
       if (item.setting_key === 'tmdb') {
         // 嵌套格式
         const config = item.setting_value as any

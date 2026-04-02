@@ -14,7 +14,7 @@ export async function GET() {
     
     // 转换为键值对格式
     const settings: Record<string, any> = {}
-    data?.forEach((item) => {
+    data?.forEach((item: { setting_key: string; setting_value: any }) => {
       settings[item.setting_key] = item.setting_value
     })
     

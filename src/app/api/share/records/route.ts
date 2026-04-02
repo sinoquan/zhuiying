@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       
       // 获取每条分享记录的推送状态
       if (data && data.length > 0) {
-        const shareIds = data.map(r => r.id)
+        const shareIds = data.map((r: { id: number }) => r.id)
         const { data: pushRecords } = await client
           .from('push_records')
           .select('share_record_id, push_status, push_channels(channel_name, channel_type)')
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
         
         // 按分享ID分组推送记录
         const pushMap = new Map()
-        pushRecords?.forEach(pr => {
+        pushRecords?.forEach((pr: { share_record_id: number }) => {
           const sid = pr.share_record_id
           if (!pushMap.has(sid)) {
             pushMap.set(sid, [])
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
         })
         
         // 附加推送信息到分享记录
-        data.forEach(record => {
+        data.forEach((record: { id: number }) => {
           (record as any).push_info = pushMap.get(record.id) || []
         })
       }

@@ -18,7 +18,7 @@ export async function GET() {
     if (drivesError) throw new Error(`获取网盘数据失败: ${drivesError.message}`)
     
     const totalDrives = drives?.length || 0
-    const activeDrives = drives?.filter(d => d.is_active).length || 0
+    const activeDrives = drives?.filter((d: { is_active: boolean }) => d.is_active).length || 0
     
     // 获取分享统计
     const { count: totalShares, error: sharesError } = await client
@@ -103,20 +103,20 @@ export async function GET() {
     
     // 按推送次数排序
     const topFiles = (hotFiles || [])
-      .map(file => ({
+      .map((file: { id: number; file_name: string; file_size: number; cloud_drive_id: number; push_records: { count: number }[]; created_at: string }) => ({
         id: file.id,
         file_name: file.file_name,
         file_size: file.file_size,
         cloud_drive_id: file.cloud_drive_id,
-        push_count: (file.push_records as { count: number }[])?.[0]?.count || 0,
+        push_count: file.push_records?.[0]?.count || 0,
         created_at: file.created_at,
       }))
-      .sort((a, b) => b.push_count - a.push_count)
+      .sort((a: { push_count: number }, b: { push_count: number }) => b.push_count - a.push_count)
       .slice(0, 5)
     
     // 获取每个网盘今日分享和推送统计
     const driveStats = await Promise.all(
-      (drives || []).map(async (drive) => {
+      (drives || []).map(async (drive: { id: number; name: string; alias: string | null; is_active: boolean }) => {
         // 今日分享数
         const { count: driveTodayShares } = await client
           .from('share_records')
@@ -136,7 +136,7 @@ export async function GET() {
           const { count } = await client
             .from('push_records')
             .select('*', { count: 'exact', head: true })
-            .in('share_record_id', shareIds.map(s => s.id))
+            .in('share_record_id', shareIds.map((s: { id: number }) => s.id))
           driveTodayPushes = count || 0
         }
         
