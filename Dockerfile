@@ -5,6 +5,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# 安装 bash（构建脚本需要）
+RUN apk add --no-cache bash python3 git
+
 # 安装 pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
