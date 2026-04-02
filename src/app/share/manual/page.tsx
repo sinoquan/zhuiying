@@ -131,7 +131,6 @@ export default function ManualSharePage() {
   const [currentPath, setCurrentPath] = useState("/")
   const [files, setFiles] = useState<CloudFile[]>([])
   const [loading, setLoading] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [pathHistory, setPathHistory] = useState<{ path: string; name: string }[]>([{ path: "/", name: "根目录" }])
   const [shareResult, setShareResult] = useState<{
@@ -142,8 +141,11 @@ export default function ManualSharePage() {
   
   // 搜索和分页状态
   const [searchKeyword, setSearchKeyword] = useState<string>("")
+  const [isSearching, setIsSearching] = useState<boolean>(false)
   const [currentPage, setCurrentPage] = useState<number>(1)
+  const [pageSize, setPageSize] = useState<number>(15)
   const [hasMore, setHasMore] = useState<boolean>(false)
+  const [totalCount, setTotalCount] = useState<number>(0)
   
   // 使用 ref 存储选择状态，避免 React Strict Mode 双重调用问题
   const selectedFilesRef = useRef<Set<string>>(new Set())
@@ -171,7 +173,7 @@ export default function ManualSharePage() {
 
   useEffect(() => {
     if (selectedDrive) {
-      fetchFiles("/")
+      fetchFiles("/", 1)
     }
   }, [selectedDrive])
 
@@ -185,20 +187,25 @@ export default function ManualSharePage() {
     }
   }
 
-  const fetchFiles = async (path: string, page = 1, append = false) => {
+  const fetchFiles = async (path: string, page = 1, keyword = "") => {
     if (!selectedDrive) return
     
-    if (append) {
-      setLoadingMore(true)
-    } else {
-      setLoading(true)
-      // 清空选择
-      clearSelection()
-    }
+    setLoading(true)
+    clearSelection()
     
     try {
+      const params = new URLSearchParams({
+        path: path,
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      })
+      
+      if (keyword.trim()) {
+        params.set('keyword', keyword.trim())
+      }
+      
       const response = await fetch(
-        `/api/cloud-drives/${selectedDrive}/files?path=${encodeURIComponent(path)}&page=${page}`
+        `/api/cloud-drives/${selectedDrive}/files?${params}`
       )
       
       if (!response.ok) {
@@ -206,32 +213,68 @@ export default function ManualSharePage() {
         throw new Error(error.error || "获取文件列表失败")
       }
       
-      const data: ListResult = await response.json()
+      const data: ListResult & { total?: number; is_search?: boolean } = await response.json()
       
-      if (append) {
-        // 追加文件列表
-        setFiles(prev => [...prev, ...(data.files || [])])
-      } else {
-        setFiles(data.files || [])
-      }
-      
+      setFiles(data.files || [])
       setHasMore(data.has_more || false)
+      setTotalCount(data.total || 0)
+      setIsSearching(data.is_search || false)
       setCurrentPage(page)
       setCurrentPath(path)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "获取文件列表失败")
       setFiles([])
       setHasMore(false)
+      setTotalCount(0)
     } finally {
       setLoading(false)
-      setLoadingMore(false)
     }
   }
 
-  // 加载更多
-  const loadMore = async () => {
-    if (!hasMore || loadingMore) return
-    await fetchFiles(currentPath, currentPage + 1, true)
+  // 执行搜索
+  const handleSearch = useCallback(() => {
+    if (!searchKeyword.trim()) {
+      // 如果搜索词为空，重新加载当前目录
+      fetchFiles(currentPath, 1, "")
+    } else {
+      fetchFiles(currentPath, 1, searchKeyword)
+    }
+  }, [searchKeyword, currentPath, selectedDrive, pageSize])
+
+  // 清除搜索
+  const clearSearch = useCallback(() => {
+    setSearchKeyword("")
+    setIsSearching(false)
+    fetchFiles(currentPath, 1, "")
+  }, [currentPath, selectedDrive, pageSize])
+
+  // 翻页
+  const goToPage = (page: number) => {
+    fetchFiles(currentPath, page, searchKeyword)
+  }
+
+  // 上一页
+  const prevPage = () => {
+    if (currentPage > 1) {
+      goToPage(currentPage - 1)
+    }
+  }
+
+  // 下一页
+  const nextPage = () => {
+    if (hasMore) {
+      goToPage(currentPage + 1)
+    }
+  }
+
+  // 修改每页条数
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize)
+    setCurrentPage(1)
+    // 需要等状态更新后再请求
+    setTimeout(() => {
+      fetchFiles(currentPath, 1, searchKeyword)
+    }, 0)
   }
 
   const handleDriveChange = (driveId: string) => {
@@ -242,8 +285,10 @@ export default function ManualSharePage() {
     setPathHistory([{ path: "/", name: "根目录" }])
     setShareResult(null)
     setSearchKeyword("") // 重置搜索
+    setIsSearching(false) // 重置搜索状态
     setCurrentPage(1) // 重置页码
     setHasMore(false) // 重置分页状态
+    setTotalCount(0) // 重置总数
     // 设置默认有效期
     const driveType = drive?.name || 'default'
     const options = EXPIRE_OPTIONS[driveType] || EXPIRE_OPTIONS['default']
@@ -257,8 +302,9 @@ export default function ManualSharePage() {
       setPathHistory([...pathHistory, { path: newPath, name: file.name }])
       clearSelection()
       setSearchKeyword("") // 重置搜索
+      setIsSearching(false) // 重置搜索状态
       setCurrentPage(1) // 重置页码
-      fetchFiles(newPath)
+      fetchFiles(newPath, 1, "")
     }
   }
 
@@ -269,9 +315,10 @@ export default function ManualSharePage() {
       setPathHistory(newHistory)
       clearSelection()
       setSearchKeyword("") // 重置搜索
+      setIsSearching(false) // 重置搜索状态
       setCurrentPage(1) // 重置页码
       const previousPath = newHistory[newHistory.length - 1]
-      fetchFiles(previousPath.path)
+      fetchFiles(previousPath.path, 1, "")
     }
   }
 
@@ -280,8 +327,9 @@ export default function ManualSharePage() {
     setPathHistory([{ path: "/", name: "根目录" }])
     clearSelection()
     setSearchKeyword("") // 重置搜索
+    setIsSearching(false) // 重置搜索状态
     setCurrentPage(1) // 重置页码
-    fetchFiles("/")
+    fetchFiles("/", 1, "")
   }
 
   // 点击路径跳转
@@ -291,8 +339,9 @@ export default function ManualSharePage() {
       setPathHistory(newHistory)
       clearSelection()
       setSearchKeyword("") // 重置搜索
+      setIsSearching(false) // 重置搜索状态
       setCurrentPage(1) // 重置页码
-      fetchFiles(newHistory[index].path)
+      fetchFiles(newHistory[index].path, 1, "")
     }
   }
 
@@ -317,27 +366,16 @@ export default function ManualSharePage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  // 根据搜索关键词过滤文件
-  const getFilteredFiles = useCallback(() => {
-    if (!searchKeyword.trim()) return files
-    const keyword = searchKeyword.toLowerCase()
-    return files.filter(file => file.name.toLowerCase().includes(keyword))
-  }, [files, searchKeyword])
-
-  const filteredFiles = getFilteredFiles()
-
   // 全选/取消全选
   const selectAll = useCallback(() => {
     const currentSelection = selectedFilesRef.current
-    // 全选时只选择当前过滤后的文件
-    const targetFiles = filteredFiles.length > 0 ? filteredFiles : files
     if (currentSelection.size > 0) {
       selectedFilesRef.current = new Set()
     } else {
-      selectedFilesRef.current = new Set(targetFiles.map(f => f.id))
+      selectedFilesRef.current = new Set(files.map(f => f.id))
     }
     forceUpdate(n => n + 1)
-  }, [files, filteredFiles])
+  }, [files])
 
   const handleShare = async () => {
     const currentSelection = getSelectedFiles()
@@ -508,14 +546,53 @@ export default function ManualSharePage() {
 
               {/* 搜索框 */}
               {selectedDrive && (
-                <div className="mb-4 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="搜索文件名..."
-                    value={searchKeyword}
-                    onChange={(e) => setSearchKeyword(e.target.value)}
-                    className="pl-10"
-                  />
+                <div className="mb-4 flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="搜索文件名（服务器端搜索）..."
+                      value={searchKeyword}
+                      onChange={(e) => setSearchKeyword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleSearch()
+                        }
+                      }}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Button onClick={handleSearch} disabled={loading}>
+                    搜索
+                  </Button>
+                  {isSearching && (
+                    <Button variant="outline" onClick={clearSearch}>
+                      清除
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* 每页条数选择 */}
+              {selectedDrive && (
+                <div className="mb-4 flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">每页显示：</span>
+                  <Select value={pageSize.toString()} onValueChange={(v) => handlePageSizeChange(parseInt(v))}>
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5条</SelectItem>
+                      <SelectItem value="10">10条</SelectItem>
+                      <SelectItem value="15">15条</SelectItem>
+                      <SelectItem value="50">50条</SelectItem>
+                      <SelectItem value="100">100条</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {totalCount > 0 && isSearching && (
+                    <span className="text-muted-foreground ml-2">
+                      共找到 {totalCount} 个文件
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -528,11 +605,10 @@ export default function ManualSharePage() {
                       type="checkbox"
                       ref={(el) => {
                         if (el) {
-                          const targetFiles = filteredFiles.length > 0 || searchKeyword ? filteredFiles : files
                           const currentSize = getSelectedFiles().size
-                          const selectedInFilter = targetFiles.filter(f => getSelectedFiles().has(f.id)).length
-                          el.indeterminate = selectedInFilter > 0 && selectedInFilter < targetFiles.length
-                          el.checked = targetFiles.length > 0 && selectedInFilter === targetFiles.length
+                          const selectedInCurrent = files.filter(f => getSelectedFiles().has(f.id)).length
+                          el.indeterminate = selectedInCurrent > 0 && selectedInCurrent < files.length
+                          el.checked = files.length > 0 && selectedInCurrent === files.length
                         }
                       }}
                       className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
@@ -554,13 +630,13 @@ export default function ManualSharePage() {
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                       加载中...
                     </div>
-                  ) : filteredFiles.length === 0 ? (
+                  ) : files.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground">
-                      {selectedDrive ? (searchKeyword ? "未找到匹配的文件" : "此目录为空") : "请先选择网盘"}
+                      {selectedDrive ? (isSearching ? "未找到匹配的文件" : "此目录为空") : "请先选择网盘"}
                     </div>
                   ) : (
-                    <div className="max-h-[400px] overflow-y-auto">
-                      {filteredFiles.map((file) => {
+                    <div className="max-h-[600px] overflow-y-auto">
+                      {files.map((file) => {
                         const isSelected = getSelectedFiles().has(file.id)
                         return (
                         <div
@@ -617,32 +693,36 @@ export default function ManualSharePage() {
                         </div>
                         )
                       })}
-                      
-                      {/* 加载更多按钮 */}
-                      {hasMore && !searchKeyword && (
-                        <div className="p-3 border-t">
-                          <Button
-                            variant="outline"
-                            className="w-full"
-                            onClick={loadMore}
-                            disabled={loadingMore}
-                          >
-                            {loadingMore ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                加载中...
-                              </>
-                            ) : (
-                              <>
-                                加载更多
-                                <Badge variant="secondary" className="ml-2">
-                                  第 {currentPage} 页
-                                </Badge>
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      )}
+                    </div>
+                  )}
+                  
+                  {/* 分页导航 */}
+                  {files.length > 0 && (
+                    <div className="p-3 border-t flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        第 {currentPage} 页
+                        {totalCount > 0 && isSearching && ` / 共 ${Math.ceil(totalCount / pageSize)} 页`}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={prevPage}
+                          disabled={currentPage <= 1 || loading}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          上一页
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={nextPage}
+                          disabled={!hasMore || loading}
+                        >
+                          下一页
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
