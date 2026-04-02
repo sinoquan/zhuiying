@@ -922,27 +922,82 @@ export class FileMonitorService {
         totalEpisodes: contentInfo.totalEpisodes,
         poster_url: contentInfo.poster_url,
         isCompleted: shareRecord.is_completed,
+        tmdbId: contentInfo.tmdbId,
+        rating: contentInfo.rating,
+        genres: contentInfo.genres,
+        cast: contentInfo.cast,
+        file_count: shareRecord.file_count,
+        resolution: contentInfo.resolution,
+        video_codec: contentInfo.video_codec,
+        audio_codec: contentInfo.audio_codec,
+        runtime: contentInfo.runtime,
+        status: contentInfo.status,
+        nextEpisode: contentInfo.nextEpisode,
       }
     }
   }
 
   private renderTemplate(template: string, contentInfo: any, shareRecord: any): string {
+    // 构建进度条
+    let progressBar = ''
+    if (contentInfo.type === 'tv' && contentInfo.totalEpisodes) {
+      const currentEp = contentInfo.episode || 1
+      const total = contentInfo.totalEpisodes
+      const progress = Math.round((currentEp / total) * 100)
+      const filled = Math.floor(progress / 10)
+      const empty = 10 - filled
+      progressBar = `${'█'.repeat(filled)}${'░'.repeat(empty)} ${progress}%`
+    }
+    
+    // 构建画质信息
+    const qualityParts: string[] = []
+    if (contentInfo.resolution) qualityParts.push(contentInfo.resolution)
+    if (contentInfo.video_codec) qualityParts.push(contentInfo.video_codec)
+    if (contentInfo.audio_codec) qualityParts.push(contentInfo.audio_codec)
+    const qualityInfo = qualityParts.join(' | ')
+    
+    // 构建时长信息
+    let runtimeStr = ''
+    if (contentInfo.runtime) {
+      const hours = Math.floor(contentInfo.runtime / 60)
+      const mins = contentInfo.runtime % 60
+      runtimeStr = hours > 0 ? `${hours}小时${mins}分钟` : `${mins}分钟`
+    }
+    
     return template
+      // 基本信息
       .replace(/\{title\}/g, contentInfo.title || shareRecord.file_name)
       .replace(/\{file_name\}/g, shareRecord.file_name)
       .replace(/\{share_url\}/g, shareRecord.share_url)
       .replace(/\{share_code\}/g, shareRecord.share_code || '')
       .replace(/\{file_size\}/g, shareRecord.file_size || '')
+      
+      // 影视信息
       .replace(/\{year\}/g, String(contentInfo.year || ''))
-      .replace(/\{season\}/g, String(contentInfo.season || ''))
-      .replace(/\{episode\}/g, String(contentInfo.episode || ''))
+      .replace(/\{season\}/g, contentInfo.season ? String(contentInfo.season).padStart(2, '0') : '')
+      .replace(/\{episode\}/g, contentInfo.episode ? String(contentInfo.episode).padStart(2, '0') : '')
       .replace(/\{total_episodes\}/g, String(contentInfo.totalEpisodes || ''))
       .replace(/\{overview\}/g, contentInfo.overview || '')
-      .replace(/\{rating\}/g, String(contentInfo.rating || ''))
-      .replace(/\{genres\}/g, (contentInfo.genres || []).join(', '))
-      .replace(/\{cast\}/g, (contentInfo.cast || []).join(', '))
+      .replace(/\{rating\}/g, contentInfo.rating ? `${contentInfo.rating}/10` : '')
+      .replace(/\{genres\}/g, (contentInfo.genres || []).slice(0, 3).join(', '))
+      .replace(/\{cast\}/g, (contentInfo.cast || []).slice(0, 5).join(', '))
       .replace(/\{tmdb_id\}/g, String(contentInfo.tmdbId || ''))
       .replace(/\{is_completed\}/g, shareRecord.is_completed ? '完结' : '追更中')
+      
+      // 新增字段
+      .replace(/\{progress_bar\}/g, progressBar)
+      .replace(/\{progress_percent\}/g, progressBar ? progressBar.split(' ')[1] : '')
+      .replace(/\{quality\}/g, qualityInfo)
+      .replace(/\{resolution\}/g, contentInfo.resolution || '')
+      .replace(/\{video_codec\}/g, contentInfo.video_codec || '')
+      .replace(/\{audio_codec\}/g, contentInfo.audio_codec || '')
+      .replace(/\{runtime\}/g, runtimeStr)
+      .replace(/\{status\}/g, contentInfo.status || '')
+      .replace(/\{next_episode\}/g, contentInfo.nextEpisode || '')
+      
+      // 类型标识
+      .replace(/\{type_icon\}/g, contentInfo.type === 'tv' ? '📺' : contentInfo.type === 'movie' ? '🎬' : '📁')
+      .replace(/\{type_name\}/g, contentInfo.type === 'tv' ? '电视剧' : contentInfo.type === 'movie' ? '电影' : '文件')
   }
 
   // ==================== 重试机制 ====================

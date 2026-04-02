@@ -174,6 +174,38 @@
 - **样片**：文件名包含"Sample"、"样片"，或视频文件小于100MB
 - **花絮**：文件名包含"花絮"、"特典"、"Bonus"等
 
+### 推送模板变量
+在推送模板中可使用以下变量：
+
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `{title}` | 影视名称 | 白日提灯 |
+| `{year}` | 年份 | 2024 |
+| `{season}` | 季数（两位） | 01 |
+| `{episode}` | 集数（两位） | 15 |
+| `{total_episodes}` | 总集数 | 20 |
+| `{rating}` | 评分 | 8.5/10 |
+| `{genres}` | 类型 | 剧情, 悬疑 |
+| `{cast}` | 主演 | 张三, 李四 |
+| `{overview}` | 简介 | 这是一个... |
+| `{tmdb_id}` | TMDB ID | 123456 |
+| `{is_completed}` | 完结状态 | 完结/追更中 |
+| `{progress_bar}` | 进度条 | ████████░░ 80% |
+| `{progress_percent}` | 进度百分比 | 80% |
+| `{quality}` | 画质信息 | 1080p \| H.265 \| DTS |
+| `{resolution}` | 分辨率 | 1080p |
+| `{video_codec}` | 视频编码 | H.265 |
+| `{audio_codec}` | 音频编码 | DTS |
+| `{runtime}` | 时长 | 2小时30分钟 |
+| `{status}` | 状态 | Ended/Returning |
+| `{next_episode}` | 下一集时间 | 2024-04-15 |
+| `{type_icon}` | 类型图标 | 📺/🎬/📁 |
+| `{type_name}` | 类型名称 | 电视剧/电影/文件 |
+| `{file_name}` | 文件名 | video.mkv |
+| `{file_size}` | 文件大小 | 2.5 GB |
+| `{share_url}` | 分享链接 | https://... |
+| `{share_code}` | 提取码 | abc123 |
+
 ## 数据库表结构
 
 - **cloud_drives** - 网盘账号表
