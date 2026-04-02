@@ -4,6 +4,7 @@
  */
 
 import { Pool } from 'pg';
+import { addDevLog } from '@/app/api/dev-logs/route';
 
 let pool: Pool | null = null;
 let supabaseClient: any = null;
@@ -340,9 +341,9 @@ function createTableClient(table: string) {
           
           sql += ` WHERE ${clauses.join(' AND ')}`;
           
-          console.log('[DELETE SQL]', sql, whereValues);
+          addDevLog('SQL', `${sql} | 参数: ${JSON.stringify(whereValues)}`);
           const rows = await query(sql, whereValues);
-          console.log('[DELETE RESULT]', rows.length, 'rows deleted');
+          addDevLog('RESULT', `删除了 ${rows.length} 行: ${JSON.stringify(rows)}`);
           const data = isSingle ? (rows[0] || null) : rows;
           
           return { data, error: null };
