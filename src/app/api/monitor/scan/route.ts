@@ -5,13 +5,21 @@ import { fileMonitorService } from '@/lib/monitor/service'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { monitor_id } = body
+    const { monitor_id, retry_failed } = body
     
-    // 如果指定了monitor_id，只扫描该任务
-    // 否则扫描所有启用的任务
+    // 如果是重试失败推送
+    if (retry_failed) {
+      const count = await fileMonitorService.retryFailedPushes()
+      return NextResponse.json({ 
+        success: true, 
+        message: `重试完成，成功 ${count} 条` 
+      })
+    }
+    
+    // 执行扫描
     const results = await fileMonitorService.runScan()
     
-    // 如果指定了monitor_id，返回对应结果
+    // 如果指定了 monitor_id，返回对应结果
     if (monitor_id) {
       const result = results.find(r => r.monitor_id === monitor_id)
       if (!result) {

@@ -50,10 +50,10 @@ export const shareRecords = pgTable(
     file_name: varchar("file_name", { length: 500 }).notNull(),
     file_size: varchar("file_size", { length: 50 }), // 文件大小
     file_type: varchar("file_type", { length: 50 }), // 文件类型
-    content_type: varchar("content_type", { length: 50 }), // 内容类型 (video/audio/image/document/archive/folder/other)
+    content_type: varchar("content_type", { length: 50 }), // 内容类型 (movie/tv/unknown)
     share_url: varchar("share_url", { length: 1000 }),
     share_code: varchar("share_code", { length: 50 }), // 提取码
-    share_status: varchar("share_status", { length: 20 }).default("pending").notNull(), // pending/success/failed
+    share_status: varchar("share_status", { length: 20 }).default("pending").notNull(), // pending/success/failed/cancelled
     source: varchar("source", { length: 20 }).default("manual").notNull(), // manual/monitor/assistant
     error_message: text("error_message"), // 错误信息
     expire_at: timestamp("expire_at", { withTimezone: true }), // 过期时间
@@ -62,8 +62,13 @@ export const shareRecords = pgTable(
     tags: text("tags").array(), // 标签
     tmdb_id: integer("tmdb_id"), // TMDB ID
     tmdb_title: varchar("tmdb_title", { length: 500 }), // TMDB 标题
+    tmdb_info: jsonb("tmdb_info"), // TMDB 完整信息
+    is_completed: boolean("is_completed").default(false), // 是否完结
+    file_count: integer("file_count"), // 文件数量（打包分享时）
+    cancelled_reason: varchar("cancelled_reason", { length: 200 }), // 取消原因
     file_created_at: timestamp("file_created_at", { withTimezone: true }), // 文件创建时间
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
   },
   (table) => [
     index("share_records_cloud_drive_id_idx").on(table.cloud_drive_id),
@@ -98,8 +103,10 @@ export const pushRules = pgTable(
     id: serial().primaryKey(),
     cloud_drive_id: integer("cloud_drive_id").notNull().references(() => cloudDrives.id),
     name: varchar("name", { length: 100 }).notNull(),
-    content_type: varchar("content_type", { length: 20 }).notNull(), // tv_series/movie/completed
+    content_type: varchar("content_type", { length: 20 }).notNull(), // tv/movie/all
     keyword_filter: text("keyword_filter"), // 关键词过滤（JSON数组）
+    only_completed: boolean("only_completed").default(false), // 仅完结时推送
+    min_size: integer("min_size"), // 最小文件大小（字节）
     is_active: boolean("is_active").default(true).notNull(),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -140,10 +147,12 @@ export const pushRecords = pgTable(
     push_rule_id: integer("push_rule_id").references(() => pushRules.id),
     push_template_id: integer("push_template_id").references(() => pushTemplates.id),
     content: text("content"), // 推送内容
-    push_status: varchar("push_status", { length: 20 }).default("pending").notNull(), // pending/success/failed
+    push_status: varchar("push_status", { length: 20 }).default("pending").notNull(), // pending/success/failed/retrying
     error_message: text("error_message"), // 错误信息
+    retry_count: integer("retry_count").default(0), // 重试次数
     pushed_at: timestamp("pushed_at", { withTimezone: true }), // 推送时间
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
   },
   (table) => [
     index("push_records_share_record_id_idx").on(table.share_record_id),

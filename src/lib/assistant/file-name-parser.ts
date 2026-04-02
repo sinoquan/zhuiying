@@ -44,6 +44,9 @@ export interface ParsedFileInfo {
   is_completed?: boolean
   
   // 内容类型
+  type: 'movie' | 'tv' | 'unknown'
+  
+  // 内容类型（兼容字段）
   content_type: 'movie' | 'tv_series' | 'unknown'
   
   // 文件大小（格式化）
@@ -61,6 +64,7 @@ export function parseFileName(fileName: string, fileSize?: number): ParsedFileIn
     original_name: fileName,
     title: '',
     content_type: 'unknown',
+    type: 'unknown',
   }
   
   // 获取文件扩展名
@@ -205,6 +209,10 @@ export function parseFileName(fileName: string, fileSize?: number): ParsedFileIn
   if (fileSize) {
     result.size_formatted = formatFileSize(fileSize)
   }
+  
+  // 添加 type 字段（与 content_type 对应）
+  result.type = result.content_type === 'tv_series' ? 'tv' : 
+                result.content_type === 'movie' ? 'movie' : 'unknown'
   
   return result
 }
