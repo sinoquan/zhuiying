@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -104,6 +104,9 @@ export default function FileMonitorPage() {
   
   // 多选目录
   const [selectedFolders, setSelectedFolders] = useState<{ path: string; name: string }[]>([])
+  
+  // 使用 ref 防止 React Strict Mode 双重调用
+  const lastToggleRef = useRef<{ path: string; timestamp: number } | null>(null)
   
   // 文件浏览状态
   const [browsingFiles, setBrowsingFiles] = useState<CloudFile[]>([])
@@ -268,9 +271,21 @@ export default function FileMonitorPage() {
     }
   }
 
-  // 切换文件夹选择
-  const toggleFolderSelection = (file: CloudFile) => {
+  // 切换文件夹选择 - 使用 ref 防止双重调用
+  const toggleFolderSelection = useCallback((file: CloudFile) => {
     const folderPath = file.path || file.id
+    const now = Date.now()
+    const lastAction = lastToggleRef.current
+    
+    // 如果在 100ms 内对同一个文件夹执行了操作，跳过
+    if (lastAction && 
+        lastAction.path === folderPath && 
+        now - lastAction.timestamp < 100) {
+      return
+    }
+    
+    lastToggleRef.current = { path: folderPath, timestamp: now }
+    
     setSelectedFolders(prev => {
       const exists = prev.some(f => f.path === folderPath)
       if (exists) {
@@ -279,7 +294,7 @@ export default function FileMonitorPage() {
         return [...prev, { path: folderPath, name: file.name }]
       }
     })
-  }
+  }, [])
 
   // 移除选中的文件夹
   const removeSelectedFolder = (path: string) => {

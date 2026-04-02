@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -140,6 +140,9 @@ export default function ManualSharePage() {
   const [expireDays, setExpireDays] = useState<number>(0) // 默认永久
   const [debugLogs, setDebugLogs] = useState<string[]>([])
   
+  // 使用 ref 追踪上一次的选择状态，避免 React Strict Mode 双重调用问题
+  const lastActionRef = useRef<{ fileId: string; timestamp: number } | null>(null)
+  
   // 调试日志函数
   const addLog = (msg: string) => {
     const time = new Date().toLocaleTimeString()
@@ -245,33 +248,51 @@ export default function ManualSharePage() {
     }
   }
 
-  // 切换文件选中状态
-  const toggleFileSelection = (file: CloudFile) => {
-    addLog(`toggleFileSelection: ${file.name}`)
+  // 切换文件选中状态 - 使用 ref 防止 React Strict Mode 双重调用
+  const toggleFileSelection = useCallback((file: CloudFile) => {
+    const now = Date.now()
+    const lastAction = lastActionRef.current
+    
+    // 如果在 100ms 内对同一个文件执行了相同操作，跳过（防止双重调用）
+    if (lastAction && 
+        lastAction.fileId === file.id && 
+        now - lastAction.timestamp < 100) {
+      return
+    }
+    
+    // 记录本次操作
+    lastActionRef.current = { fileId: file.id, timestamp: now }
+    
     setSelectedFiles(prev => {
       const newSelection = new Set(prev)
       if (newSelection.has(file.id)) {
         newSelection.delete(file.id)
-        addLog(`  -> 删除, 新size: ${newSelection.size}`)
       } else {
         newSelection.add(file.id)
-        addLog(`  -> 添加, 新size: ${newSelection.size}`)
       }
       return newSelection
     })
-  }
+  }, [])
 
-  // 全选/取消全选
-  const selectAll = () => {
-    addLog(`selectAll: size=${selectedFiles.size}, files=${files.length}`)
+  // 全选/取消全选 - 使用 ref 防止 React Strict Mode 双重调用
+  const selectAllRef = useRef<{ timestamp: number } | null>(null)
+  const selectAll = useCallback(() => {
+    const now = Date.now()
+    const lastAction = selectAllRef.current
+    
+    // 如果在 100ms 内重复调用，跳过
+    if (lastAction && now - lastAction.timestamp < 100) {
+      return
+    }
+    
+    selectAllRef.current = { timestamp: now }
+    
     if (selectedFiles.size > 0) {
       setSelectedFiles(new Set())
-      addLog('  -> 清空')
     } else {
       setSelectedFiles(new Set(files.map(f => f.id)))
-      addLog('  -> 全选')
     }
-  }
+  }, [selectedFiles.size, files])
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 B"
@@ -499,14 +520,10 @@ export default function ManualSharePage() {
                             className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
                             checked={selectedFiles.has(file.id)}
                             onChange={(e) => {
-                              addLog(`input onChange: ${file.name}`)
                               e.stopPropagation()
                               toggleFileSelection(file)
                             }}
-                            onClick={(e) => {
-                              addLog(`input onClick: ${file.name}`)
-                              e.stopPropagation()
-                            }}
+                            onClick={(e) => e.stopPropagation()}
                           />
                           
                           {/* 文件名 */}
