@@ -340,7 +340,9 @@ function createTableClient(table: string) {
           
           sql += ` WHERE ${clauses.join(' AND ')}`;
           
+          console.log('[DELETE SQL]', sql, whereValues);
           const rows = await query(sql, whereValues);
+          console.log('[DELETE RESULT]', rows.length, 'rows deleted');
           const data = isSingle ? (rows[0] || null) : rows;
           
           return { data, error: null };
