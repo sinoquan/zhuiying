@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, QrCode, CheckCircle2, XCircle, Smartphone, RefreshCw } from "lucide-react"
 import Image from "next/image"
 import { toast } from "sonner"
@@ -14,6 +16,12 @@ interface QRCodeLoginProps {
 
 type LoginStatus = 'idle' | 'loading' | 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'canceled' | 'error'
 
+// 支持的端类型
+interface AppType {
+  id: string
+  name: string
+}
+
 export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
   const [status, setStatus] = useState<LoginStatus>('idle')
   const [qrcodeUrl, setQrcodeUrl] = useState<string>('')
@@ -22,14 +30,35 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [pollTimer, setPollTimer] = useState<NodeJS.Timeout | null>(null)
   const [expiresIn, setExpiresIn] = useState(300)
+  
+  // 端选择相关
+  const [appTypes, setAppTypes] = useState<AppType[]>([])
+  const [selectedApp, setSelectedApp] = useState<string>('alipaymini')
+  const [appName, setAppName] = useState<string>('')
+  
+  // 加载支持的端类型
+  useEffect(() => {
+    const loadAppTypes = async () => {
+      try {
+        const response = await fetch('/api/cloud-drives/115/qrcode?action=apps')
+        const data = await response.json()
+        if (data.success) {
+          setAppTypes(data.data)
+        }
+      } catch (error) {
+        console.error('加载端类型失败:', error)
+      }
+    }
+    loadAppTypes()
+  }, [])
 
   // 获取二维码
-  const fetchQRCode = async () => {
+  const fetchQRCode = useCallback(async () => {
     setStatus('loading')
     setErrorMessage('')
     
     try {
-      const response = await fetch('/api/cloud-drives/115/qrcode')
+      const response = await fetch(`/api/cloud-drives/115/qrcode?app=${selectedApp}`)
       const data = await response.json()
       
       if (!data.success) {
@@ -39,6 +68,7 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
       setQrcodeUrl(data.data.qrcodeUrl)
       setQrcodeImage(data.data.qrcodeImage)
       setUid(data.data.uid)
+      setAppName(data.data.appName || '')
       setExpiresIn(data.data.expiresIn || 300)
       setStatus('waiting')
       
@@ -46,7 +76,7 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
       setStatus('error')
       setErrorMessage(error instanceof Error ? error.message : '获取二维码失败')
     }
-  }
+  }, [selectedApp])
 
   // 检查扫码状态
   const checkStatus = useCallback(async () => {
@@ -139,10 +169,22 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
     }
   }, [pollTimer])
 
-  // 自动获取二维码
+  // 选择端后自动获取二维码
   useEffect(() => {
-    fetchQRCode()
-  }, [])
+    if (appTypes.length > 0) {
+      fetchQRCode()
+    }
+  }, [appTypes.length, fetchQRCode])
+
+  // 端切换时重新获取二维码
+  const handleAppChange = (app: string) => {
+    setSelectedApp(app)
+    // 清理旧的轮询
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      setPollTimer(null)
+    }
+  }
 
   const renderContent = () => {
     switch (status) {
@@ -188,6 +230,11 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
               <p className="text-sm font-medium">
                 {status === 'scanned' ? '已扫码，请在手机上确认' : '请使用115网盘APP扫码登录'}
               </p>
+              {appName && (
+                <p className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  登录端: {appName}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 二维码有效期：{Math.floor(expiresIn / 60)}:{(expiresIn % 60).toString().padStart(2, '0')}
               </p>
@@ -278,6 +325,26 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
   return (
     <Card>
       <CardContent className="py-4">
+        {/* 端选择器 */}
+        <div className="mb-4">
+          <Label className="text-sm font-medium mb-2 block">登录端选择</Label>
+          <Select value={selectedApp} onValueChange={handleAppChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="选择登录端" />
+            </SelectTrigger>
+            <SelectContent>
+              {appTypes.map(app => (
+                <SelectItem key={app.id} value={app.id}>
+                  {app.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            推荐使用"支付宝小程序"端，稳定性最高
+          </p>
+        </div>
+        
         {renderContent()}
       </CardContent>
     </Card>
