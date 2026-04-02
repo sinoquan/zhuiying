@@ -1,0 +1,11 @@
+# 排除不需要的文件
+node_modules
+.next
+.git
+.gitignore
+*.md
+.env*
+.vscode
+.idea
+*.log
+.DS_Store

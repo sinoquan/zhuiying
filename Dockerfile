@@ -1,5 +1,4 @@
 # 追影 - 生产环境 Dockerfile
-# 构建完成后直接运行，无需在容器内构建
 
 # ============ 构建阶段 ============
 FROM node:20-alpine AS builder
@@ -10,10 +9,10 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # 复制依赖文件
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml* ./
 
-# 安装所有依赖（包括 devDependencies）
-RUN pnpm install --frozen-lockfile
+# 安装所有依赖
+RUN pnpm install
 
 # 复制源代码
 COPY . .
@@ -41,7 +40,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./
-COPY --from=builder /app/pnpm-lock.yaml ./
+COPY --from=builder /app/pnpm-lock.yaml* ./
 COPY --from=builder /app/drizzle.config.ts ./
 COPY --from=builder /app/src/storage/database ./src/storage/database
 
