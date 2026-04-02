@@ -264,12 +264,15 @@ async function checkStatus(uid: string) {
       const resultData = await resultResponse.json()
       console.log(`[115] 登录结果:`, JSON.stringify(resultData).substring(0, 500))
       
-      if (resultData.state === true || resultData.errno === 0) {
+      // state 可能是 1 或 true
+      if (resultData.state === 1 || resultData.state === true || resultData.errno === 0) {
         // 提取cookie
         const cookies = extractCookies(resultData)
         
         qrData.status = 'confirmed'
         qrData.cookies = cookies
+        
+        console.log(`[115] 登录成功, 用户: ${resultData.data?.user_name || resultData.user_name}, cookie长度: ${cookies.length}`)
         
         return NextResponse.json({
           success: true,
@@ -339,9 +342,20 @@ async function checkStatus(uid: string) {
 function extractCookies(resultData: any): string {
   const data = resultData.data || resultData
   
-  // 直接返回cookie字符串
+  // cookie 可能是字符串或对象
   if (data.cookie) {
-    return data.cookie
+    if (typeof data.cookie === 'string') {
+      return data.cookie
+    }
+    
+    // 如果是对象，拼接成字符串
+    if (typeof data.cookie === 'object') {
+      const cookieParts: string[] = []
+      for (const [key, value] of Object.entries(data.cookie)) {
+        cookieParts.push(`${key}=${value}`)
+      }
+      return cookieParts.join('; ')
+    }
   }
   
   // 拼接各个cookie字段
