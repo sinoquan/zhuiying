@@ -102,11 +102,19 @@ export default function FileMonitorPage() {
     cron_expression: "*/10 7-23 * * *",
   })
   
-  // 多选目录
-  const [selectedFolders, setSelectedFolders] = useState<{ path: string; name: string }[]>([])
+  // 使用 ref 存储选择状态，避免 React Strict Mode 双重调用
+  const selectedFoldersRef = useRef<{ path: string; name: string }[]>([])
+  // 强制重新渲染
+  const [, forceUpdate] = useState(0)
   
-  // 使用 ref 防止 React Strict Mode 双重调用
-  const lastToggleRef = useRef<{ path: string; timestamp: number } | null>(null)
+  // 获取当前选择
+  const getSelectedFolders = () => selectedFoldersRef.current
+  
+  // 清空选择
+  const clearSelectedFolders = useCallback(() => {
+    selectedFoldersRef.current = []
+    forceUpdate(n => n + 1)
+  }, [])
   
   // 文件浏览状态
   const [browsingFiles, setBrowsingFiles] = useState<CloudFile[]>([])
@@ -173,7 +181,8 @@ export default function FileMonitorPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (selectedFolders.length === 0) {
+    const currentSelection = getSelectedFolders()
+    if (currentSelection.length === 0) {
       toast.error("请至少选择一个监控目录")
       return
     }
@@ -182,7 +191,7 @@ export default function FileMonitorPage() {
 
     try {
       // 为每个选中的目录创建监控任务
-      for (const folder of selectedFolders) {
+      for (const folder of currentSelection) {
         const response = await fetch("/api/share/monitor", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -196,7 +205,7 @@ export default function FileMonitorPage() {
         if (!response.ok) throw new Error("创建失败")
       }
 
-      toast.success(`成功创建 ${selectedFolders.length} 个监控任务`)
+      toast.success(`成功创建 ${currentSelection.length} 个监控任务`)
       setDialogOpen(false)
       resetForm()
       fetchData()
@@ -241,7 +250,8 @@ export default function FileMonitorPage() {
     setBrowsingFiles([])
     setBrowsingPath("/")
     setPathHistory([{ path: "/", name: "根目录" }])
-    setSelectedFolders([])
+    selectedFoldersRef.current = []
+    forceUpdate(n => n + 1)
     setCronPreset("*/10 7-23 * * *")
     setCustomCron("")
   }
@@ -252,7 +262,8 @@ export default function FileMonitorPage() {
       cloud_drive_id: monitor.cloud_drive_id.toString(),
       cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
     })
-    setSelectedFolders([{ path: monitor.path, name: monitor.path_name || monitor.path.split('/').pop() || monitor.path }])
+    selectedFoldersRef.current = [{ path: monitor.path, name: monitor.path_name || monitor.path.split('/').pop() || monitor.path }]
+    forceUpdate(n => n + 1)
     setCronPreset(monitor.cron_expression || "*/10 7-23 * * *")
     setDialogOpen(true)
   }
@@ -271,35 +282,25 @@ export default function FileMonitorPage() {
     }
   }
 
-  // 切换文件夹选择 - 使用 ref 防止双重调用
+  // 切换文件夹选择
   const toggleFolderSelection = useCallback((file: CloudFile) => {
     const folderPath = file.path || file.id
-    const now = Date.now()
-    const lastAction = lastToggleRef.current
+    const current = selectedFoldersRef.current
+    const exists = current.some(f => f.path === folderPath)
     
-    // 如果在 100ms 内对同一个文件夹执行了操作，跳过
-    if (lastAction && 
-        lastAction.path === folderPath && 
-        now - lastAction.timestamp < 100) {
-      return
+    if (exists) {
+      selectedFoldersRef.current = current.filter(f => f.path !== folderPath)
+    } else {
+      selectedFoldersRef.current = [...current, { path: folderPath, name: file.name }]
     }
-    
-    lastToggleRef.current = { path: folderPath, timestamp: now }
-    
-    setSelectedFolders(prev => {
-      const exists = prev.some(f => f.path === folderPath)
-      if (exists) {
-        return prev.filter(f => f.path !== folderPath)
-      } else {
-        return [...prev, { path: folderPath, name: file.name }]
-      }
-    })
+    forceUpdate(n => n + 1)
   }, [])
 
   // 移除选中的文件夹
-  const removeSelectedFolder = (path: string) => {
-    setSelectedFolders(prev => prev.filter(f => f.path !== path))
-  }
+  const removeSelectedFolder = useCallback((path: string) => {
+    selectedFoldersRef.current = selectedFoldersRef.current.filter(f => f.path !== path)
+    forceUpdate(n => n + 1)
+  }, [])
 
   // 返回上一级
   const navigateBack = () => {
@@ -487,7 +488,8 @@ export default function FileMonitorPage() {
                   value={formData.cloud_drive_id}
                   onValueChange={(value) => {
                     setFormData({ ...formData, cloud_drive_id: value })
-                    setSelectedFolders([])
+                    selectedFoldersRef.current = []
+                    forceUpdate(n => n + 1)
                     setPathHistory([{ path: "/", name: "根目录" }])
                   }}
                   disabled={!!editingMonitor}
@@ -558,9 +560,9 @@ export default function FileMonitorPage() {
                   <Label>选择监控目录（可多选）</Label>
                   
                   {/* 已选择的文件夹列表 */}
-                  {selectedFolders.length > 0 && (
+                  {getSelectedFolders().length > 0 && (
                     <div className="flex flex-wrap gap-2 p-2 bg-green-50 dark:bg-green-950 rounded-lg">
-                      {selectedFolders.map((folder) => (
+                      {getSelectedFolders().map((folder) => (
                         <Badge 
                           key={folder.path} 
                           variant="outline" 
@@ -644,7 +646,7 @@ export default function FileMonitorPage() {
                       </div>
                     ) : (
                       browsingFiles.filter(f => f.is_dir).map((file) => {
-                        const isSelected = selectedFolders.some(f => f.path === (file.path || file.id))
+                        const isSelected = getSelectedFolders().some(f => f.path === (file.path || file.id))
                         return (
                           <div
                             key={file.id}
@@ -691,9 +693,9 @@ export default function FileMonitorPage() {
               </Button>
               <Button 
                 type="submit" 
-                disabled={!formData.cloud_drive_id || selectedFolders.length === 0}
+                disabled={!formData.cloud_drive_id || getSelectedFolders().length === 0}
               >
-                {editingMonitor ? "保存" : `创建 ${selectedFolders.length > 0 ? `(${selectedFolders.length}个目录)` : ''}`}
+                {editingMonitor ? "保存" : `创建 ${getSelectedFolders().length > 0 ? `(${getSelectedFolders().length}个目录)` : ''}`}
               </Button>
             </DialogFooter>
           </form>

@@ -129,7 +129,6 @@ export default function ManualSharePage() {
   const [selectedDriveName, setSelectedDriveName] = useState<string>("")
   const [currentPath, setCurrentPath] = useState("/")
   const [files, setFiles] = useState<CloudFile[]>([])
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [pathHistory, setPathHistory] = useState<{ path: string; name: string }[]>([{ path: "/", name: "根目录" }])
@@ -138,17 +137,26 @@ export default function ManualSharePage() {
     share_code: string
   } | null>(null)
   const [expireDays, setExpireDays] = useState<number>(0) // 默认永久
-  const [debugLogs, setDebugLogs] = useState<string[]>([])
   
-  // 使用 ref 追踪上一次的选择状态，避免 React Strict Mode 双重调用问题
-  const lastActionRef = useRef<{ fileId: string; timestamp: number } | null>(null)
+  // 使用 ref 存储选择状态，避免 React Strict Mode 双重调用问题
+  const selectedFilesRef = useRef<Set<string>>(new Set())
+  // 强制重新渲染的计数器
+  const [, forceUpdate] = useState(0)
   
-  // 调试日志函数
-  const addLog = (msg: string) => {
-    const time = new Date().toLocaleTimeString()
-    setDebugLogs(prev => [...prev.slice(-9), `[${time}] ${msg}`])
-    console.log(msg)
-  }
+  // 获取当前选择状态的副本
+  const getSelectedFiles = () => selectedFilesRef.current
+  
+  // 清空选择
+  const clearSelection = useCallback(() => {
+    selectedFilesRef.current = new Set()
+    forceUpdate(n => n + 1)
+  }, [])
+  
+  // 设置选择
+  const setSelectedFilesRef = useCallback((files: Set<string>) => {
+    selectedFilesRef.current = files
+    forceUpdate(n => n + 1)
+  }, [])
 
   useEffect(() => {
     fetchDrives()
@@ -174,8 +182,8 @@ export default function ManualSharePage() {
     if (!selectedDrive) return
     
     setLoading(true)
-    // 清空选择，避免切换目录时保留旧选择
-    setSelectedFiles(new Set())
+    // 清空选择
+    clearSelection()
     try {
       const response = await fetch(
         `/api/cloud-drives/${selectedDrive}/files?path=${encodeURIComponent(path)}`
@@ -201,7 +209,7 @@ export default function ManualSharePage() {
     const drive = drives.find(d => d.id.toString() === driveId)
     setSelectedDrive(driveId)
     setSelectedDriveName(drive?.name || "")
-    setSelectedFiles(new Set())
+    clearSelection()
     setPathHistory([{ path: "/", name: "根目录" }])
     setShareResult(null)
     // 设置默认有效期
@@ -215,7 +223,7 @@ export default function ManualSharePage() {
     if (file.is_dir) {
       const newPath = file.path || file.id
       setPathHistory([...pathHistory, { path: newPath, name: file.name }])
-      setSelectedFiles(new Set())
+      clearSelection()
       fetchFiles(newPath)
     }
   }
@@ -225,7 +233,7 @@ export default function ManualSharePage() {
     if (pathHistory.length > 1) {
       const newHistory = pathHistory.slice(0, -1)
       setPathHistory(newHistory)
-      setSelectedFiles(new Set())  // 清空选择
+      clearSelection()
       const previousPath = newHistory[newHistory.length - 1]
       fetchFiles(previousPath.path)
     }
@@ -234,7 +242,7 @@ export default function ManualSharePage() {
   // 返回根目录
   const navigateToRoot = () => {
     setPathHistory([{ path: "/", name: "根目录" }])
-    setSelectedFiles(new Set())
+    clearSelection()
     fetchFiles("/")
   }
 
@@ -243,56 +251,34 @@ export default function ManualSharePage() {
     if (index < pathHistory.length - 1) {
       const newHistory = pathHistory.slice(0, index + 1)
       setPathHistory(newHistory)
-      setSelectedFiles(new Set())  // 清空选择
+      clearSelection()
       fetchFiles(newHistory[index].path)
     }
   }
 
-  // 切换文件选中状态 - 使用 ref 防止 React Strict Mode 双重调用
+  // 切换文件选中状态
   const toggleFileSelection = useCallback((file: CloudFile) => {
-    const now = Date.now()
-    const lastAction = lastActionRef.current
-    
-    // 如果在 100ms 内对同一个文件执行了相同操作，跳过（防止双重调用）
-    if (lastAction && 
-        lastAction.fileId === file.id && 
-        now - lastAction.timestamp < 100) {
-      return
+    const currentSelection = selectedFilesRef.current
+    const newSelection = new Set(currentSelection)
+    if (newSelection.has(file.id)) {
+      newSelection.delete(file.id)
+    } else {
+      newSelection.add(file.id)
     }
-    
-    // 记录本次操作
-    lastActionRef.current = { fileId: file.id, timestamp: now }
-    
-    setSelectedFiles(prev => {
-      const newSelection = new Set(prev)
-      if (newSelection.has(file.id)) {
-        newSelection.delete(file.id)
-      } else {
-        newSelection.add(file.id)
-      }
-      return newSelection
-    })
+    selectedFilesRef.current = newSelection
+    forceUpdate(n => n + 1)
   }, [])
 
-  // 全选/取消全选 - 使用 ref 防止 React Strict Mode 双重调用
-  const selectAllRef = useRef<{ timestamp: number } | null>(null)
+  // 全选/取消全选
   const selectAll = useCallback(() => {
-    const now = Date.now()
-    const lastAction = selectAllRef.current
-    
-    // 如果在 100ms 内重复调用，跳过
-    if (lastAction && now - lastAction.timestamp < 100) {
-      return
-    }
-    
-    selectAllRef.current = { timestamp: now }
-    
-    if (selectedFiles.size > 0) {
-      setSelectedFiles(new Set())
+    const currentSelection = selectedFilesRef.current
+    if (currentSelection.size > 0) {
+      selectedFilesRef.current = new Set()
     } else {
-      setSelectedFiles(new Set(files.map(f => f.id)))
+      selectedFilesRef.current = new Set(files.map(f => f.id))
     }
-  }, [selectedFiles.size, files])
+    forceUpdate(n => n + 1)
+  }, [files])
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 B"
@@ -303,7 +289,8 @@ export default function ManualSharePage() {
   }
 
   const handleShare = async () => {
-    if (selectedFiles.size === 0) {
+    const currentSelection = getSelectedFiles()
+    if (currentSelection.size === 0) {
       toast.error("请选择要分享的文件")
       return
     }
@@ -311,7 +298,7 @@ export default function ManualSharePage() {
     setSharing(true)
     try {
       // 获取选中文件的详细信息
-      const selectedFilesList = files.filter(f => selectedFiles.has(f.id))
+      const selectedFilesList = files.filter(f => currentSelection.has(f.id))
       const fileNames = selectedFilesList.map(f => f.name)
       const filePaths = selectedFilesList.map(f => f.path || currentPath)
       const fileSizes = selectedFilesList.map(f => f.size || 0)
@@ -336,7 +323,7 @@ export default function ManualSharePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          file_ids: Array.from(selectedFiles),
+          file_ids: Array.from(currentSelection),
           file_names: fileNames,
           file_paths: filePaths,
           file_sizes: fileSizes,
@@ -362,7 +349,7 @@ export default function ManualSharePage() {
 
   // 获取选中文件的详情
   const getSelectedFileDetails = () => {
-    return files.filter(f => selectedFiles.has(f.id))
+    return files.filter(f => getSelectedFiles().has(f.id))
   }
 
   // 获取当前网盘的有效期选项
@@ -477,11 +464,12 @@ export default function ManualSharePage() {
                       type="checkbox"
                       ref={(el) => {
                         if (el) {
-                          el.indeterminate = selectedFiles.size > 0 && selectedFiles.size < files.length
+                          const currentSize = getSelectedFiles().size
+                          el.indeterminate = currentSize > 0 && currentSize < files.length
+                          el.checked = currentSize === files.length && files.length > 0
                         }
                       }}
                       className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
-                      checked={selectedFiles.size === files.length && files.length > 0}
                       onChange={(e) => {
                         e.stopPropagation()
                         selectAll()
@@ -506,11 +494,13 @@ export default function ManualSharePage() {
                     </div>
                   ) : (
                     <div className="max-h-[400px] overflow-y-auto">
-                      {files.map((file) => (
+                      {files.map((file) => {
+                        const isSelected = getSelectedFiles().has(file.id)
+                        return (
                         <div
                           key={file.id}
                           className={`flex items-center gap-3 p-3 border-b last:border-b-0 hover:bg-muted/30 ${
-                            selectedFiles.has(file.id) ? "bg-primary/10" : ""
+                            isSelected ? "bg-primary/10" : ""
                           }`}
                           onDoubleClick={() => handleDoubleClick(file)}
                         >
@@ -518,7 +508,7 @@ export default function ManualSharePage() {
                           <input
                             type="checkbox"
                             className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
-                            checked={selectedFiles.has(file.id)}
+                            checked={isSelected}
                             onChange={(e) => {
                               e.stopPropagation()
                               toggleFileSelection(file)
@@ -559,7 +549,8 @@ export default function ManualSharePage() {
                             )}
                           </div>
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -574,13 +565,13 @@ export default function ManualSharePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CheckSquare className="h-5 w-5" />
-                已选择 ({selectedFiles.size})
+                已选择 ({getSelectedFiles().size})
               </CardTitle>
             </CardHeader>
             <CardContent>
               {/* 选中的文件列表 */}
               <div className="mb-4 max-h-[200px] overflow-y-auto">
-                {selectedFiles.size === 0 ? (
+                {getSelectedFiles().size === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-4">
                     点击文件左侧的复选框选择
                   </div>
@@ -633,7 +624,7 @@ export default function ManualSharePage() {
               <Button
                 className="w-full"
                 onClick={handleShare}
-                disabled={selectedFiles.size === 0 || sharing}
+                disabled={getSelectedFiles().size === 0 || sharing}
               >
                 {sharing ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -718,26 +709,6 @@ export default function ManualSharePage() {
               )}
             </CardContent>
           </Card>
-        </div>
-      </div>
-      
-      {/* 调试面板 */}
-      <div className="mt-8 p-4 bg-gray-100 dark:bg-gray-900 rounded-lg">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-bold text-sm">调试日志</h3>
-          <Button variant="outline" size="sm" onClick={() => setDebugLogs([])}>
-            清空
-          </Button>
-        </div>
-        <div className="bg-black text-green-400 p-3 rounded font-mono text-xs h-40 overflow-y-auto">
-          {debugLogs.length === 0 ? (
-            <div className="text-gray-500">点击复选框查看日志...</div>
-          ) : (
-            debugLogs.map((log, i) => <div key={i}>{log}</div>)
-          )}
-        </div>
-        <div className="mt-2 text-xs text-muted-foreground">
-          状态: selectedFiles.size = {selectedFiles.size}, files.length = {files.length}
         </div>
       </div>
     </div>
