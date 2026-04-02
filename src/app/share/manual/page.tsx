@@ -439,18 +439,21 @@ export default function ManualSharePage() {
                 <div className="border rounded-lg">
                   {/* 表头 */}
                   <div className="flex items-center gap-3 p-3 border-b bg-muted/50">
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        checked={
-                          selectedFiles.size === 0 
-                            ? false 
-                            : selectedFiles.size === files.length 
-                              ? true 
-                              : "indeterminate"
+                    <input
+                      type="checkbox"
+                      ref={(el) => {
+                        if (el) {
+                          el.indeterminate = selectedFiles.size > 0 && selectedFiles.size < files.length
                         }
-                        onCheckedChange={selectAll}
-                      />
-                    </div>
+                      }}
+                      className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
+                      checked={selectedFiles.size === files.length && files.length > 0}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        selectAll()
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                     <span className="text-sm text-muted-foreground flex-1">文件名</span>
                     <span className="text-sm text-muted-foreground w-24 text-right">大小</span>
                     <span className="text-sm text-muted-foreground w-32 text-right">修改时间</span>
@@ -478,19 +481,16 @@ export default function ManualSharePage() {
                           onDoubleClick={() => handleDoubleClick(file)}
                         >
                           {/* 复选框 */}
-                          <div 
-                            className="cursor-pointer"
-                            onClick={(e) => {
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
+                            checked={selectedFiles.has(file.id)}
+                            onChange={(e) => {
                               e.stopPropagation()
-                              e.nativeEvent.stopImmediatePropagation()
                               toggleFileSelection(file)
                             }}
-                          >
-                            <Checkbox
-                              checked={selectedFiles.has(file.id)}
-                              // 不使用 onCheckedChange，改用外层 onClick
-                            />
-                          </div>
+                            onClick={(e) => e.stopPropagation()}
+                          />
                           
                           {/* 文件名 */}
                           <div className="flex items-center gap-2 flex-1 min-w-0">

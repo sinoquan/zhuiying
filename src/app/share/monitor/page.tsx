@@ -638,19 +638,16 @@ export default function FileMonitorPage() {
                             }`}
                             onDoubleClick={() => handleDoubleClick(file)}
                           >
-                            <div 
-                              className="cursor-pointer"
-                              onClick={(e) => {
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
+                              checked={isSelected}
+                              onChange={(e) => {
                                 e.stopPropagation()
-                                e.nativeEvent.stopImmediatePropagation()
                                 toggleFolderSelection(file)
                               }}
-                            >
-                              <Checkbox
-                                checked={isSelected}
-                                // 不使用 onCheckedChange，改用外层 onClick
-                              />
-                            </div>
+                              onClick={(e) => e.stopPropagation()}
+                            />
                             <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
                             <span className="flex-1 truncate">{file.name}</span>
                             <Button
