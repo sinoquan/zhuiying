@@ -138,6 +138,14 @@ export default function ManualSharePage() {
     share_code: string
   } | null>(null)
   const [expireDays, setExpireDays] = useState<number>(0) // 默认永久
+  const [debugLogs, setDebugLogs] = useState<string[]>([])
+  
+  // 调试日志函数
+  const addLog = (msg: string) => {
+    const time = new Date().toLocaleTimeString()
+    setDebugLogs(prev => [...prev.slice(-9), `[${time}] ${msg}`])
+    console.log(msg)
+  }
 
   useEffect(() => {
     fetchDrives()
@@ -239,16 +247,15 @@ export default function ManualSharePage() {
 
   // 切换文件选中状态
   const toggleFileSelection = (file: CloudFile) => {
-    console.log('[toggleFileSelection] 被调用, file:', file.name, 'id:', file.id)
+    addLog(`toggleFileSelection: ${file.name}`)
     setSelectedFiles(prev => {
-      console.log('[toggleFileSelection] prev size:', prev.size, 'has id:', prev.has(file.id))
       const newSelection = new Set(prev)
       if (newSelection.has(file.id)) {
         newSelection.delete(file.id)
-        console.log('[toggleFileSelection] 删除, 新 size:', newSelection.size)
+        addLog(`  -> 删除, 新size: ${newSelection.size}`)
       } else {
         newSelection.add(file.id)
-        console.log('[toggleFileSelection] 添加, 新 size:', newSelection.size)
+        addLog(`  -> 添加, 新size: ${newSelection.size}`)
       }
       return newSelection
     })
@@ -256,14 +263,13 @@ export default function ManualSharePage() {
 
   // 全选/取消全选
   const selectAll = () => {
-    console.log('[selectAll] 被调用, 当前 selectedFiles.size:', selectedFiles.size, 'files.length:', files.length)
-    // 如果当前有选中，则清空；否则全选
+    addLog(`selectAll: size=${selectedFiles.size}, files=${files.length}`)
     if (selectedFiles.size > 0) {
-      console.log('[selectAll] 清空选择')
       setSelectedFiles(new Set())
+      addLog('  -> 清空')
     } else {
-      console.log('[selectAll] 全选, 文件IDs:', files.map(f => f.id))
       setSelectedFiles(new Set(files.map(f => f.id)))
+      addLog('  -> 全选')
     }
   }
 
@@ -493,12 +499,12 @@ export default function ManualSharePage() {
                             className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
                             checked={selectedFiles.has(file.id)}
                             onChange={(e) => {
-                              console.log('[input onChange] file:', file.name, 'checked:', e.target.checked)
+                              addLog(`input onChange: ${file.name}`)
                               e.stopPropagation()
                               toggleFileSelection(file)
                             }}
                             onClick={(e) => {
-                              console.log('[input onClick] file:', file.name)
+                              addLog(`input onClick: ${file.name}`)
                               e.stopPropagation()
                             }}
                           />
@@ -695,6 +701,26 @@ export default function ManualSharePage() {
               )}
             </CardContent>
           </Card>
+        </div>
+      </div>
+      
+      {/* 调试面板 */}
+      <div className="mt-8 p-4 bg-gray-100 dark:bg-gray-900 rounded-lg">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-bold text-sm">调试日志</h3>
+          <Button variant="outline" size="sm" onClick={() => setDebugLogs([])}>
+            清空
+          </Button>
+        </div>
+        <div className="bg-black text-green-400 p-3 rounded font-mono text-xs h-40 overflow-y-auto">
+          {debugLogs.length === 0 ? (
+            <div className="text-gray-500">点击复选框查看日志...</div>
+          ) : (
+            debugLogs.map((log, i) => <div key={i}>{log}</div>)
+          )}
+        </div>
+        <div className="mt-2 text-xs text-muted-foreground">
+          状态: selectedFiles.size = {selectedFiles.size}, files.length = {files.length}
         </div>
       </div>
     </div>
