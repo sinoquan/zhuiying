@@ -187,17 +187,19 @@ export default function ManualSharePage() {
     }
   }
 
-  const fetchFiles = async (path: string, page = 1, keyword = "") => {
+  const fetchFiles = async (path: string, page = 1, keyword = "", newPageSize?: number) => {
     if (!selectedDrive) return
     
     setLoading(true)
     clearSelection()
     
+    const actualPageSize = newPageSize || pageSize
+    
     try {
       const params = new URLSearchParams({
         path: path,
         page: page.toString(),
-        pageSize: pageSize.toString(),
+        pageSize: actualPageSize.toString(),
       })
       
       if (keyword.trim()) {
@@ -271,10 +273,7 @@ export default function ManualSharePage() {
   const handlePageSizeChange = (newSize: number) => {
     setPageSize(newSize)
     setCurrentPage(1)
-    // 需要等状态更新后再请求
-    setTimeout(() => {
-      fetchFiles(currentPath, 1, searchKeyword)
-    }, 0)
+    fetchFiles(currentPath, 1, searchKeyword, newSize)
   }
 
   const handleDriveChange = (driveId: string) => {
@@ -569,27 +568,8 @@ export default function ManualSharePage() {
                       清除
                     </Button>
                   )}
-                </div>
-              )}
-
-              {/* 每页条数选择 */}
-              {selectedDrive && (
-                <div className="mb-4 flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">每页显示：</span>
-                  <Select value={pageSize.toString()} onValueChange={(v) => handlePageSizeChange(parseInt(v))}>
-                    <SelectTrigger className="w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5条</SelectItem>
-                      <SelectItem value="10">10条</SelectItem>
-                      <SelectItem value="15">15条</SelectItem>
-                      <SelectItem value="50">50条</SelectItem>
-                      <SelectItem value="100">100条</SelectItem>
-                    </SelectContent>
-                  </Select>
                   {totalCount > 0 && isSearching && (
-                    <span className="text-muted-foreground ml-2">
+                    <span className="text-sm text-muted-foreground">
                       共找到 {totalCount} 个文件
                     </span>
                   )}
@@ -698,31 +678,50 @@ export default function ManualSharePage() {
                   
                   {/* 分页导航 */}
                   {files.length > 0 && (
-                    <div className="p-3 border-t flex items-center justify-between">
-                      <div className="text-sm text-muted-foreground">
-                        第 {currentPage} 页
-                        {totalCount > 0 && isSearching && ` / 共 ${Math.ceil(totalCount / pageSize)} 页`}
+                    <div className="p-3 border-t flex items-center justify-center gap-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={prevPage}
+                        disabled={currentPage <= 1 || loading}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        上一页
+                      </Button>
+                      
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">第 {currentPage} 页</span>
+                        {totalCount > 0 && isSearching && (
+                          <span className="text-muted-foreground">/ 共 {Math.ceil(totalCount / pageSize)} 页</span>
+                        )}
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={prevPage}
-                          disabled={currentPage <= 1 || loading}
-                        >
-                          <ChevronLeft className="h-4 w-4 mr-1" />
-                          上一页
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={nextPage}
-                          disabled={!hasMore || loading}
-                        >
-                          下一页
-                          <ChevronRight className="h-4 w-4 ml-1" />
-                        </Button>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">每页</span>
+                        <Select value={pageSize.toString()} onValueChange={(v) => handlePageSizeChange(parseInt(v))}>
+                          <SelectTrigger className="w-16 h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">5</SelectItem>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="15">15</SelectItem>
+                            <SelectItem value="50">50</SelectItem>
+                            <SelectItem value="100">100</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">条</span>
                       </div>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={nextPage}
+                        disabled={!hasMore || loading}
+                      >
+                        下一页
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
                     </div>
                   )}
                 </div>

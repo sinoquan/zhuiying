@@ -663,24 +663,49 @@ export class Pan115Service implements ICloudDriveService {
 
   async searchFiles(keyword: string, path?: string): Promise<CloudFile[]> {
     try {
-      const data = await this.request(
-        `/files/search?keyword=${encodeURIComponent(keyword)}${path ? `&cid=${path}` : ''}`
-      )
+      console.log(`[115] 搜索文件: keyword=${keyword}, path=${path}`)
       
-      return (data.data || []).map((item: any) => {
-        const isDir = item.pc === undefined
-        const fileId = isDir ? item.cid : (item.fid || item.cid)
-        return {
-          id: fileId,
-          name: item.n || item.name,
-          path: item.pc || '',
-          is_dir: isDir,
-          size: item.s || 0,
-          created_at: item.tp || new Date().toISOString(),
-          modified_at: item.t || new Date().toISOString(),
+      // 尝试多个搜索API端点
+      const endpoints = [
+        // 端点1: 使用搜索参数在文件列表中搜索
+        `/files?aid=1&cid=0&offset=0&limit=200&search=${encodeURIComponent(keyword)}`,
+        // 端点2: 搜索API
+        `/files/search?keyword=${encodeURIComponent(keyword)}`,
+      ]
+      
+      for (const endpoint of endpoints) {
+        try {
+          const data = await this.request(endpoint)
+          console.log(`[115] 搜索端点 ${endpoint} 响应:`, data.state, data.errno)
+          
+          if (data.state === true || data.errno === 0) {
+            const items = data.data || []
+            if (items.length > 0) {
+              console.log(`[115] 搜索成功，找到 ${items.length} 个文件`)
+              return items.map((item: any) => {
+                const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
+                const fileId = isDir ? item.cid : (item.fid || item.cid)
+                return {
+                  id: fileId,
+                  name: item.n || item.name,
+                  path: isDir ? item.cid : (item.pc || ''),
+                  is_dir: isDir,
+                  size: item.s || 0,
+                  created_at: item.tp || new Date().toISOString(),
+                  modified_at: item.t || new Date().toISOString(),
+                }
+              })
+            }
+          }
+        } catch (e) {
+          console.log(`[115] 搜索端点 ${endpoint} 失败:`, e)
         }
-      })
+      }
+      
+      console.log('[115] 所有搜索端点都失败')
+      return []
     } catch (error) {
+      console.error('[115] 搜索文件失败:', error)
       return []
     }
   }
