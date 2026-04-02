@@ -15,6 +15,8 @@ export async function GET(
     const pageSize = parseInt(searchParams.get('pageSize') || '15')
     const keyword = searchParams.get('keyword') || ''
     
+    console.log('[文件API] 请求参数:', { id, path, page, pageSize, keyword })
+    
     const client = getSupabaseClient()
     
     // 获取网盘配置
@@ -34,18 +36,31 @@ export async function GET(
       (drive.config as Record<string, any>) || {}
     )
     
-    // 如果有搜索关键词，使用搜索接口
+    // 如果有搜索关键词，使用搜索接口（从根目录搜索整个网盘）
     if (keyword.trim()) {
-      const searchResults = await service.searchFiles(keyword, path === '/' ? undefined : path)
+      console.log('[文件API] 执行搜索:', keyword)
+      const searchResults = await service.searchFiles(keyword)
+      console.log('[文件API] 搜索结果数量:', searchResults.length)
+      
+      if (searchResults.length > 0) {
+        console.log('[文件API] 第一个结果:', JSON.stringify(searchResults[0]))
+      }
+      
       // 搜索结果也需要分页
       const startIndex = (page - 1) * pageSize
       const paginatedResults = searchResults.slice(startIndex, startIndex + pageSize)
-      return NextResponse.json({
+      
+      console.log('[文件API] 分页结果:', { startIndex, pageSize, resultCount: paginatedResults.length })
+      
+      const response = {
         files: paginatedResults,
         has_more: startIndex + pageSize < searchResults.length,
         total: searchResults.length,
         is_search: true,
-      })
+      }
+      console.log('[文件API] 返回响应:', JSON.stringify(response).substring(0, 300))
+      
+      return NextResponse.json(response)
     }
     
     // 列出文件

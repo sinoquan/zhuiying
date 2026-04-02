@@ -191,13 +191,16 @@ export default function ManualSharePage() {
     if (!selectedDrive) return
     
     setLoading(true)
-    clearSelection()
+    // 搜索时不清空选择
+    if (!keyword) {
+      clearSelection()
+    }
     
     const actualPageSize = newPageSize || pageSize
     
     try {
       const params = new URLSearchParams({
-        path: path,
+        path: keyword ? '/' : path, // 搜索时从根目录搜索
         page: page.toString(),
         pageSize: actualPageSize.toString(),
       })
@@ -205,6 +208,8 @@ export default function ManualSharePage() {
       if (keyword.trim()) {
         params.set('keyword', keyword.trim())
       }
+      
+      console.log('[前端] fetchFiles请求:', { path, keyword, page, pageSize: actualPageSize })
       
       const response = await fetch(
         `/api/cloud-drives/${selectedDrive}/files?${params}`
@@ -216,13 +221,24 @@ export default function ManualSharePage() {
       }
       
       const data: ListResult & { total?: number; is_search?: boolean } = await response.json()
+      console.log('[前端] fetchFiles响应:', { 
+        filesCount: data.files?.length, 
+        hasMore: data.has_more, 
+        total: data.total, 
+        isSearch: data.is_search 
+      })
       
       setFiles(data.files || [])
       setHasMore(data.has_more || false)
       setTotalCount(data.total || 0)
       setIsSearching(data.is_search || false)
-      setCurrentPage(page)
-      setCurrentPath(path)
+      // 搜索时不改变当前路径
+      if (!keyword) {
+        setCurrentPage(page)
+        setCurrentPath(path)
+      } else {
+        setCurrentPage(page)
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "获取文件列表失败")
       setFiles([])
@@ -235,10 +251,14 @@ export default function ManualSharePage() {
 
   // 执行搜索
   const handleSearch = useCallback(() => {
+    console.log('[前端] handleSearch:', { searchKeyword, currentPath, selectedDrive })
+    
     if (!searchKeyword.trim()) {
       // 如果搜索词为空，重新加载当前目录
+      setIsSearching(false)
       fetchFiles(currentPath, 1, "")
     } else {
+      setIsSearching(true)
       fetchFiles(currentPath, 1, searchKeyword)
     }
   }, [searchKeyword, currentPath, selectedDrive, pageSize])
@@ -554,13 +574,17 @@ export default function ManualSharePage() {
                       onChange={(e) => setSearchKeyword(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
+                          e.preventDefault() // 防止表单提交
                           handleSearch()
                         }
                       }}
                       className="pl-10"
                     />
                   </div>
-                  <Button onClick={handleSearch} disabled={loading}>
+                  <Button onClick={(e) => {
+                    e.preventDefault()
+                    handleSearch()
+                  }} disabled={loading}>
                     搜索
                   </Button>
                   {isSearching && (

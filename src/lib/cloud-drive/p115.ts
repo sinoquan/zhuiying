@@ -663,47 +663,76 @@ export class Pan115Service implements ICloudDriveService {
 
   async searchFiles(keyword: string, path?: string): Promise<CloudFile[]> {
     try {
-      console.log(`[115] 搜索文件: keyword=${keyword}, path=${path}`)
+      console.log(`[115] 搜索文件: keyword=${keyword}`)
       
-      // 尝试多个搜索API端点
-      const endpoints = [
-        // 端点1: 使用搜索参数在文件列表中搜索
-        `/files?aid=1&cid=0&offset=0&limit=200&search=${encodeURIComponent(keyword)}`,
-        // 端点2: 搜索API
-        `/files/search?keyword=${encodeURIComponent(keyword)}`,
-      ]
+      // 115网盘的搜索API需要VIP权限，这里改用递归遍历搜索
+      const allFiles: CloudFile[] = []
+      const keywordLower = keyword.toLowerCase()
       
-      for (const endpoint of endpoints) {
+      // 递归搜索函数
+      const searchInFolder = async (folderId: string, depth: number = 0): Promise<void> => {
+        // 限制搜索深度和数量
+        if (depth > 4 || allFiles.length >= 500) return
+        
         try {
-          const data = await this.request(endpoint)
-          console.log(`[115] 搜索端点 ${endpoint} 响应:`, data.state, data.errno)
+          // 直接使用fetch，更灵活地处理响应
+          const url = `${this.baseUrl}/files?aid=1&cid=${folderId}&offset=0&limit=500`
+          const response = await fetch(url, {
+            headers: {
+              'Cookie': this.cookie,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          })
           
-          if (data.state === true || data.errno === 0) {
-            const items = data.data || []
-            if (items.length > 0) {
-              console.log(`[115] 搜索成功，找到 ${items.length} 个文件`)
-              return items.map((item: any) => {
-                const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
+          // 检查响应是否为JSON
+          const contentType = response.headers.get('content-type') || ''
+          if (!contentType.includes('application/json')) {
+            console.log(`[115] 搜索文件夹 ${folderId} 返回非JSON响应`)
+            return
+          }
+          
+          const data = await response.json()
+          
+          // 宽松检查：只要有data字段就继续处理
+          if (data.data && Array.isArray(data.data)) {
+            console.log(`[115] 搜索文件夹 ${folderId}, 深度 ${depth}, 找到 ${data.data.length} 个项目`)
+            
+            for (const item of data.data) {
+              const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
+              const name = item.n || item.name || ''
+              
+              // 检查文件名是否匹配关键词
+              if (name.toLowerCase().includes(keywordLower)) {
                 const fileId = isDir ? item.cid : (item.fid || item.cid)
-                return {
+                allFiles.push({
                   id: fileId,
-                  name: item.n || item.name,
-                  path: isDir ? item.cid : (item.pc || ''),
+                  name: name,
+                  path: isDir ? item.cid : (item.pc || folderId),
                   is_dir: isDir,
                   size: item.s || 0,
                   created_at: item.tp || new Date().toISOString(),
                   modified_at: item.t || new Date().toISOString(),
-                }
-              })
+                })
+              }
+              
+              // 如果是文件夹，递归搜索
+              if (isDir && allFiles.length < 500) {
+                await searchInFolder(String(item.cid), depth + 1)
+              }
             }
+          } else {
+            console.log(`[115] 搜索文件夹 ${folderId} 无数据, state=${data.state}, error=${data.error || '无'}`)
           }
         } catch (e) {
-          console.log(`[115] 搜索端点 ${endpoint} 失败:`, e)
+          console.log(`[115] 搜索文件夹 ${folderId} 异常:`, e instanceof Error ? e.message : e)
         }
       }
       
-      console.log('[115] 所有搜索端点都失败')
-      return []
+      // 从根目录开始搜索
+      await searchInFolder('0')
+      
+      console.log(`[115] 本地搜索完成，找到 ${allFiles.length} 个匹配文件`)
+      return allFiles
     } catch (error) {
       console.error('[115] 搜索文件失败:', error)
       return []
