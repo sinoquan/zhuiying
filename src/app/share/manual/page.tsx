@@ -12,10 +12,11 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { 
   Hand, Loader2, FolderOpen, File, ChevronRight, ChevronLeft, 
   RefreshCw, CheckSquare, Square, Share2, Home, Film, Music, 
-  Image, FileText, FileArchive, FileVideo
+  Image, FileText, FileArchive, FileVideo, Search
 } from "lucide-react"
 import { toast } from "sonner"
 import { getCloudDriveIcon } from "@/lib/icons"
@@ -130,6 +131,7 @@ export default function ManualSharePage() {
   const [currentPath, setCurrentPath] = useState("/")
   const [files, setFiles] = useState<CloudFile[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [pathHistory, setPathHistory] = useState<{ path: string; name: string }[]>([{ path: "/", name: "根目录" }])
   const [shareResult, setShareResult] = useState<{
@@ -137,6 +139,11 @@ export default function ManualSharePage() {
     share_code: string
   } | null>(null)
   const [expireDays, setExpireDays] = useState<number>(0) // 默认永久
+  
+  // 搜索和分页状态
+  const [searchKeyword, setSearchKeyword] = useState<string>("")
+  const [currentPage, setCurrentPage] = useState<number>(1)
+  const [hasMore, setHasMore] = useState<boolean>(false)
   
   // 使用 ref 存储选择状态，避免 React Strict Mode 双重调用问题
   const selectedFilesRef = useRef<Set<string>>(new Set())
@@ -178,15 +185,20 @@ export default function ManualSharePage() {
     }
   }
 
-  const fetchFiles = async (path: string) => {
+  const fetchFiles = async (path: string, page = 1, append = false) => {
     if (!selectedDrive) return
     
-    setLoading(true)
-    // 清空选择
-    clearSelection()
+    if (append) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+      // 清空选择
+      clearSelection()
+    }
+    
     try {
       const response = await fetch(
-        `/api/cloud-drives/${selectedDrive}/files?path=${encodeURIComponent(path)}`
+        `/api/cloud-drives/${selectedDrive}/files?path=${encodeURIComponent(path)}&page=${page}`
       )
       
       if (!response.ok) {
@@ -195,14 +207,31 @@ export default function ManualSharePage() {
       }
       
       const data: ListResult = await response.json()
-      setFiles(data.files || [])
+      
+      if (append) {
+        // 追加文件列表
+        setFiles(prev => [...prev, ...(data.files || [])])
+      } else {
+        setFiles(data.files || [])
+      }
+      
+      setHasMore(data.has_more || false)
+      setCurrentPage(page)
       setCurrentPath(path)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "获取文件列表失败")
       setFiles([])
+      setHasMore(false)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
+  }
+
+  // 加载更多
+  const loadMore = async () => {
+    if (!hasMore || loadingMore) return
+    await fetchFiles(currentPath, currentPage + 1, true)
   }
 
   const handleDriveChange = (driveId: string) => {
@@ -212,6 +241,9 @@ export default function ManualSharePage() {
     clearSelection()
     setPathHistory([{ path: "/", name: "根目录" }])
     setShareResult(null)
+    setSearchKeyword("") // 重置搜索
+    setCurrentPage(1) // 重置页码
+    setHasMore(false) // 重置分页状态
     // 设置默认有效期
     const driveType = drive?.name || 'default'
     const options = EXPIRE_OPTIONS[driveType] || EXPIRE_OPTIONS['default']
@@ -224,6 +256,8 @@ export default function ManualSharePage() {
       const newPath = file.path || file.id
       setPathHistory([...pathHistory, { path: newPath, name: file.name }])
       clearSelection()
+      setSearchKeyword("") // 重置搜索
+      setCurrentPage(1) // 重置页码
       fetchFiles(newPath)
     }
   }
@@ -234,6 +268,8 @@ export default function ManualSharePage() {
       const newHistory = pathHistory.slice(0, -1)
       setPathHistory(newHistory)
       clearSelection()
+      setSearchKeyword("") // 重置搜索
+      setCurrentPage(1) // 重置页码
       const previousPath = newHistory[newHistory.length - 1]
       fetchFiles(previousPath.path)
     }
@@ -243,6 +279,8 @@ export default function ManualSharePage() {
   const navigateToRoot = () => {
     setPathHistory([{ path: "/", name: "根目录" }])
     clearSelection()
+    setSearchKeyword("") // 重置搜索
+    setCurrentPage(1) // 重置页码
     fetchFiles("/")
   }
 
@@ -252,6 +290,8 @@ export default function ManualSharePage() {
       const newHistory = pathHistory.slice(0, index + 1)
       setPathHistory(newHistory)
       clearSelection()
+      setSearchKeyword("") // 重置搜索
+      setCurrentPage(1) // 重置页码
       fetchFiles(newHistory[index].path)
     }
   }
@@ -269,17 +309,6 @@ export default function ManualSharePage() {
     forceUpdate(n => n + 1)
   }, [])
 
-  // 全选/取消全选
-  const selectAll = useCallback(() => {
-    const currentSelection = selectedFilesRef.current
-    if (currentSelection.size > 0) {
-      selectedFilesRef.current = new Set()
-    } else {
-      selectedFilesRef.current = new Set(files.map(f => f.id))
-    }
-    forceUpdate(n => n + 1)
-  }, [files])
-
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 B"
     const k = 1024
@@ -287,6 +316,28 @@ export default function ManualSharePage() {
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
+
+  // 根据搜索关键词过滤文件
+  const getFilteredFiles = useCallback(() => {
+    if (!searchKeyword.trim()) return files
+    const keyword = searchKeyword.toLowerCase()
+    return files.filter(file => file.name.toLowerCase().includes(keyword))
+  }, [files, searchKeyword])
+
+  const filteredFiles = getFilteredFiles()
+
+  // 全选/取消全选
+  const selectAll = useCallback(() => {
+    const currentSelection = selectedFilesRef.current
+    // 全选时只选择当前过滤后的文件
+    const targetFiles = filteredFiles.length > 0 ? filteredFiles : files
+    if (currentSelection.size > 0) {
+      selectedFilesRef.current = new Set()
+    } else {
+      selectedFilesRef.current = new Set(targetFiles.map(f => f.id))
+    }
+    forceUpdate(n => n + 1)
+  }, [files, filteredFiles])
 
   const handleShare = async () => {
     const currentSelection = getSelectedFiles()
@@ -455,6 +506,19 @@ export default function ManualSharePage() {
                 </div>
               )}
 
+              {/* 搜索框 */}
+              {selectedDrive && (
+                <div className="mb-4 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="搜索文件名..."
+                    value={searchKeyword}
+                    onChange={(e) => setSearchKeyword(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              )}
+
               {/* 文件列表 */}
               {selectedDrive && (
                 <div className="border rounded-lg">
@@ -464,9 +528,11 @@ export default function ManualSharePage() {
                       type="checkbox"
                       ref={(el) => {
                         if (el) {
+                          const targetFiles = filteredFiles.length > 0 || searchKeyword ? filteredFiles : files
                           const currentSize = getSelectedFiles().size
-                          el.indeterminate = currentSize > 0 && currentSize < files.length
-                          el.checked = currentSize === files.length && files.length > 0
+                          const selectedInFilter = targetFiles.filter(f => getSelectedFiles().has(f.id)).length
+                          el.indeterminate = selectedInFilter > 0 && selectedInFilter < targetFiles.length
+                          el.checked = targetFiles.length > 0 && selectedInFilter === targetFiles.length
                         }
                       }}
                       className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
@@ -488,13 +554,13 @@ export default function ManualSharePage() {
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                       加载中...
                     </div>
-                  ) : files.length === 0 ? (
+                  ) : filteredFiles.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground">
-                      {selectedDrive ? "此目录为空" : "请先选择网盘"}
+                      {selectedDrive ? (searchKeyword ? "未找到匹配的文件" : "此目录为空") : "请先选择网盘"}
                     </div>
                   ) : (
                     <div className="max-h-[400px] overflow-y-auto">
-                      {files.map((file) => {
+                      {filteredFiles.map((file) => {
                         const isSelected = getSelectedFiles().has(file.id)
                         return (
                         <div
@@ -551,6 +617,32 @@ export default function ManualSharePage() {
                         </div>
                         )
                       })}
+                      
+                      {/* 加载更多按钮 */}
+                      {hasMore && !searchKeyword && (
+                        <div className="p-3 border-t">
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={loadMore}
+                            disabled={loadingMore}
+                          >
+                            {loadingMore ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                加载中...
+                              </>
+                            ) : (
+                              <>
+                                加载更多
+                                <Badge variant="secondary" className="ml-2">
+                                  第 {currentPage} 页
+                                </Badge>
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
