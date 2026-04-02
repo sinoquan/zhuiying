@@ -176,8 +176,15 @@ export class Pan115Service implements ICloudDriveService {
         const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
         const size = item.s || item.size || 0
         console.log(`[115] 文件: ${item.n || item.name}, 大小: ${size}, 原始s: ${item.s}`)
+        
+        // 重要：对于文件，应该用 fid；对于文件夹，应该用 cid
+        // 不能用 cid || fid，因为文件的 cid 可能是父目录ID
+        const fileId = isDir ? item.cid : (item.fid || item.cid)
+        
+        console.log(`[115] 文件ID: ${fileId}, fid: ${item.fid}, cid: ${item.cid}, isDir: ${isDir}`)
+        
         return {
-          id: item.cid || item.fid,
+          id: fileId,
           name: item.n || item.name,
           // 文件夹的path应该是它自己的cid，这样双击进入时可以正确导航
           path: isDir ? item.cid : path,
@@ -631,15 +638,19 @@ export class Pan115Service implements ICloudDriveService {
         `/files/search?keyword=${encodeURIComponent(keyword)}${path ? `&cid=${path}` : ''}`
       )
       
-      return (data.data || []).map((item: any) => ({
-        id: item.cid || item.fid,
-        name: item.n || item.name,
-        path: item.pc || '',
-        is_dir: item.pc === undefined,
-        size: item.s || 0,
-        created_at: item.tp || new Date().toISOString(),
-        modified_at: item.t || new Date().toISOString(),
-      }))
+      return (data.data || []).map((item: any) => {
+        const isDir = item.pc === undefined
+        const fileId = isDir ? item.cid : (item.fid || item.cid)
+        return {
+          id: fileId,
+          name: item.n || item.name,
+          path: item.pc || '',
+          is_dir: isDir,
+          size: item.s || 0,
+          created_at: item.tp || new Date().toISOString(),
+          modified_at: item.t || new Date().toISOString(),
+        }
+      })
     } catch (error) {
       return []
     }

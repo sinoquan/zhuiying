@@ -258,38 +258,23 @@ export default function ManualSharePage() {
 
   // 切换文件选中状态
   const toggleFileSelection = useCallback((file: CloudFile) => {
-    console.log('=== toggleFileSelection 被调用 ===')
-    console.log('文件:', file.name, 'ID:', file.id)
     const currentSelection = selectedFilesRef.current
-    console.log('当前选择 size:', currentSelection.size)
-    console.log('当前选择内容:', Array.from(currentSelection))
-    
     const newSelection = new Set(currentSelection)
     if (newSelection.has(file.id)) {
-      console.log('操作: 删除')
       newSelection.delete(file.id)
     } else {
-      console.log('操作: 添加')
       newSelection.add(file.id)
     }
-    console.log('新选择 size:', newSelection.size)
-    console.log('新选择内容:', Array.from(newSelection))
-    
     selectedFilesRef.current = newSelection
     forceUpdate(n => n + 1)
   }, [])
 
   // 全选/取消全选
   const selectAll = useCallback(() => {
-    console.log('=== selectAll 被调用 ===')
     const currentSelection = selectedFilesRef.current
-    console.log('当前选择 size:', currentSelection.size)
-    
     if (currentSelection.size > 0) {
-      console.log('操作: 清空')
       selectedFilesRef.current = new Set()
     } else {
-      console.log('操作: 全选, 文件数:', files.length)
       selectedFilesRef.current = new Set(files.map(f => f.id))
     }
     forceUpdate(n => n + 1)
@@ -724,23 +709,6 @@ export default function ManualSharePage() {
               )}
             </CardContent>
           </Card>
-        </div>
-      </div>
-      
-      {/* 调试面板 */}
-      <div className="mt-8 p-4 bg-red-50 dark:bg-red-950 rounded-lg border-2 border-red-300">
-        <h3 className="font-bold text-red-700 mb-2">调试信息（用于排查问题）</h3>
-        <div className="bg-white dark:bg-black p-3 rounded font-mono text-sm">
-          <div>selectedFilesRef.current.size = {selectedFilesRef.current.size}</div>
-          <div>files.length = {files.length}</div>
-          <div className="mt-2">选中的文件ID:</div>
-          <div className="text-xs break-all">
-            {Array.from(selectedFilesRef.current).join(', ') || '(无)'}
-          </div>
-          <div className="mt-2">文件列表ID:</div>
-          <div className="text-xs break-all">
-            {files.map(f => f.id).join(', ')}
-          </div>
         </div>
       </div>
     </div>
