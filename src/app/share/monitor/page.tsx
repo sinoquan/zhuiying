@@ -638,10 +638,17 @@ export default function FileMonitorPage() {
                             }`}
                             onDoubleClick={() => handleDoubleClick(file)}
                           >
-                            <div onClick={(e) => e.stopPropagation()}>
+                            <div 
+                              className="cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                e.nativeEvent.stopImmediatePropagation()
+                                toggleFolderSelection(file)
+                              }}
+                            >
                               <Checkbox
                                 checked={isSelected}
-                                onCheckedChange={() => toggleFolderSelection(file)}
+                                // 不使用 onCheckedChange，改用外层 onClick
                               />
                             </div>
                             <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />

@@ -439,16 +439,18 @@ export default function ManualSharePage() {
                 <div className="border rounded-lg">
                   {/* 表头 */}
                   <div className="flex items-center gap-3 p-3 border-b bg-muted/50">
-                    <Checkbox
-                      checked={
-                        selectedFiles.size === 0 
-                          ? false 
-                          : selectedFiles.size === files.length 
-                            ? true 
-                            : "indeterminate"
-                      }
-                      onCheckedChange={selectAll}
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={
+                          selectedFiles.size === 0 
+                            ? false 
+                            : selectedFiles.size === files.length 
+                              ? true 
+                              : "indeterminate"
+                        }
+                        onCheckedChange={selectAll}
+                      />
+                    </div>
                     <span className="text-sm text-muted-foreground flex-1">文件名</span>
                     <span className="text-sm text-muted-foreground w-24 text-right">大小</span>
                     <span className="text-sm text-muted-foreground w-32 text-right">修改时间</span>
@@ -476,10 +478,17 @@ export default function ManualSharePage() {
                           onDoubleClick={() => handleDoubleClick(file)}
                         >
                           {/* 复选框 */}
-                          <div onClick={(e) => e.stopPropagation()}>
+                          <div 
+                            className="cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              e.nativeEvent.stopImmediatePropagation()
+                              toggleFileSelection(file)
+                            }}
+                          >
                             <Checkbox
                               checked={selectedFiles.has(file.id)}
-                              onCheckedChange={() => toggleFileSelection(file)}
+                              // 不使用 onCheckedChange，改用外层 onClick
                             />
                           </div>
                           
