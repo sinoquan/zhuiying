@@ -837,20 +837,19 @@ export default function ManualSharePage() {
                   </div>
                   <div className="space-y-2">
                     {selectedDriveName === '115' && shareResult.share_code ? (
-                      // 115网盘：显示完整链接
+                      // 115网盘：share_url已包含password参数，直接显示
                       <div>
                         <span className="text-xs text-muted-foreground">分享链接:</span>
                         <div className="flex items-center gap-2">
                           <code className="text-xs bg-background p-1 rounded flex-1 break-all">
-                            {shareResult.share_url}?password={shareResult.share_code}
+                            {shareResult.share_url}
                           </code>
                           <Button
                             variant="ghost"
                             size="sm"
                             className="shrink-0"
                             onClick={() => {
-                              const fullUrl = `${shareResult.share_url}?password=${shareResult.share_code}`
-                              navigator.clipboard.writeText(fullUrl)
+                              navigator.clipboard.writeText(shareResult.share_url)
                               toast.success("链接已复制")
                             }}
                           >

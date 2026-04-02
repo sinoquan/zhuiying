@@ -580,15 +580,15 @@ export default function ShareRecordsPage() {
                         {record.share_url ? (
                           <div className="flex items-center gap-2">
                             {record.cloud_drives?.name === '115' && record.share_code ? (
-                              // 115网盘带提取码：显示完整链接
+                              // 115网盘：share_url已包含password参数，直接使用
                               <a 
-                                href={`${record.share_url}?password=${record.share_code}`}
+                                href={record.share_url}
                                 target="_blank" 
                                 rel="noopener noreferrer"
                                 className="text-primary hover:underline text-sm"
-                                title={`${record.share_url}?password=${record.share_code}`}
+                                title={record.share_url}
                               >
-                                115cdn.com/s/{record.share_url.split('/').pop()}?password={record.share_code}
+                                {record.share_url.replace(/^https?:\/\//, '')}
                               </a>
                             ) : (
                               <>
