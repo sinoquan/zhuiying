@@ -331,6 +331,10 @@ function createTableClient(table: string) {
               clauses.push(`${cond.column} = $${paramIndex}`);
               whereValues.push(cond.value);
               paramIndex++;
+            } else if (cond.op === 'in') {
+              const placeholders = cond.value.map(() => `$${paramIndex++}`);
+              clauses.push(`${cond.column} IN (${placeholders.join(', ')})`);
+              whereValues.push(...cond.value);
             }
           }
           
