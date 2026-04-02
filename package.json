@@ -1,6 +1,7 @@
 {
-  "name": "projects",
+  "name": "zhuiying",
   "version": "0.1.0",
+  "description": "追影 - NAS网盘推送系统",
   "private": true,
   "scripts": {
     "build": "bash ./scripts/build.sh",
@@ -8,7 +9,11 @@
     "preinstall": "npx only-allow pnpm",
     "lint": "eslint",
     "start": "bash ./scripts/start.sh",
-    "ts-check": "tsc -p tsconfig.json"
+    "ts-check": "tsc -p tsconfig.json",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.958.0",

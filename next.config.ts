@@ -1,7 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // outputFileTracingRoot: path.resolve(__dirname, '../../'),  // Uncomment and add 'import path from "path"' if needed
+  // 生产环境输出独立部署包
+  output: 'standalone',
+  
   /* config options here */
   allowedDevOrigins: ['*.dev.coze.site'],
   images: {

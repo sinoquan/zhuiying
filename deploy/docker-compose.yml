@@ -1,0 +1,134 @@
+# 追影 - NAS网盘推送系统
+# Docker Compose 部署配置
+# 
+# 部署方式：
+# 方式一（推荐）：代码挂载 + 容器内构建
+#   - 适合开发环境，代码修改立即生效
+#   - 使用 node:20-alpine 镜像
+#
+# 方式二：使用预构建镜像
+#   - 适合生产环境，启动更快
+#   - 需要先构建镜像：docker build -t zhuiying:latest .
+
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: zhuiying-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zhuiying
+      POSTGRES_PASSWORD: zhuiying_secret_2024
+      POSTGRES_DB: zhuiying
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - /vol2/1000/Docker/zhuiying/postgres:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zhuiying -d zhuiying"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zhuiying-network
+
+  # 追影应用 - 方式一：代码挂载模式（推荐）
+  app:
+    image: node:20-alpine
+    container_name: zhuiying-app
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      # 数据库配置（使用内部网络连接）
+      DATABASE_URL: postgresql://zhuiying:zhuiying_secret_2024@postgres:5432/zhuiying
+      
+      # 系统配置
+      DEPLOY_RUN_PORT: 35588
+      COZE_PROJECT_ENV: PROD
+      
+      # TMDB API（请修改为你的Key）
+      TMDB_API_KEY: your_tmdb_api_key_here
+      
+      # 系统密码（请修改）
+      SYSTEM_PASSWORD: admin123
+      
+      # 可选：禁用认证（开发环境）
+      # DISABLE_AUTH: true
+      
+      # 可选：代理配置
+      # HTTPS_PROXY: http://127.0.0.1:7890
+      
+      # Node.js 优化
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=2048
+    volumes:
+      # 挂载代码目录
+      - /vol2/1000/Docker/zhuiying/zhuiying_os:/app
+      # pnpm 缓存
+      - pnpm-cache:/root/.local/share/pnpm
+    ports:
+      - "35588:35588"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # 启动命令：安装依赖 -> 初始化数据库 -> 启动服务
+    command: sh -c "
+      echo '🚀 启动追影服务...' &&
+      apk add --no-cache git python3 &&
+      corepack enable &&
+      if [ ! -d /app/node_modules ]; then
+        echo '📦 安装依赖...' &&
+        pnpm install --frozen-lockfile
+      fi &&
+      echo '🔄 初始化数据库...' &&
+      pnpm run db:push || true &&
+      echo '🌟 启动应用...' &&
+      pnpm run build &&
+      pnpm run start
+    "
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:35588/api/auth"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - zhuiying-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========================================
+  # 方式二：预构建镜像模式（取消注释使用）
+  # ========================================
+  # app-prod:
+  #   image: zhuiying:latest
+  #   container_name: zhuiying-app
+  #   restart: unless-stopped
+  #   environment:
+  #     DATABASE_URL: postgresql://zhuiying:zhuiying_secret_2024@postgres:5432/zhuiying
+  #     DEPLOY_RUN_PORT: 35588
+  #     COZE_PROJECT_ENV: PROD
+  #     TMDB_API_KEY: your_tmdb_api_key_here
+  #     SYSTEM_PASSWORD: admin123
+  #     NODE_ENV: production
+  #     NODE_OPTIONS: --max-old-space-size=2048
+  #   ports:
+  #     - "35588:35588"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - zhuiying-network
+
+networks:
+  zhuiying-network:
+    driver: bridge
+
+volumes:
+  pnpm-cache:
