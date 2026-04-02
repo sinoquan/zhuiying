@@ -21,14 +21,21 @@ export function getPool(): Pool {
     throw new Error('DATABASE_URL is not set. Please set DATABASE_URL or Supabase environment variables.');
   }
 
+  // 判断是否是本地/内网连接，不需要 SSL
+  const isLocalConnection = 
+    databaseUrl.includes('localhost') || 
+    databaseUrl.includes('127.0.0.1') ||
+    databaseUrl.includes('192.168.') ||
+    databaseUrl.includes('10.') ||
+    databaseUrl.includes('172.');
+
   pool = new Pool({
     connectionString: databaseUrl,
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
-    ssl: {
-      rejectUnauthorized: false
-    }
+    // 本地连接不使用 SSL，云数据库使用 SSL
+    ssl: isLocalConnection ? false : { rejectUnauthorized: false }
   });
 
   pool.on('error', (err) => {
