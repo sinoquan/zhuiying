@@ -269,12 +269,16 @@ export default function FileMonitorPage() {
   }
 
   // 切换文件夹选择
-  const toggleFolderSelection = (file: CloudFile, checked: boolean | string) => {
-    if (checked === true) {
-      setSelectedFolders(prev => [...prev, { path: file.path || file.id, name: file.name }])
-    } else {
-      setSelectedFolders(prev => prev.filter(f => f.path !== (file.path || file.id)))
-    }
+  const toggleFolderSelection = (file: CloudFile) => {
+    const folderPath = file.path || file.id
+    setSelectedFolders(prev => {
+      const exists = prev.some(f => f.path === folderPath)
+      if (exists) {
+        return prev.filter(f => f.path !== folderPath)
+      } else {
+        return [...prev, { path: folderPath, name: file.name }]
+      }
+    })
   }
 
   // 移除选中的文件夹
@@ -637,7 +641,7 @@ export default function FileMonitorPage() {
                             <div onClick={(e) => e.stopPropagation()}>
                               <Checkbox
                                 checked={isSelected}
-                                onCheckedChange={(checked) => toggleFolderSelection(file, checked)}
+                                onCheckedChange={() => toggleFolderSelection(file)}
                               />
                             </div>
                             <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
