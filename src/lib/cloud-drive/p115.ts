@@ -16,32 +16,25 @@ import {
 export class Pan115Service implements ICloudDriveService {
   private cookie: string
   private baseUrl = 'https://webapi.115.com'
+  private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
   constructor(config: CloudDriveConfig) {
     this.cookie = config.cookie || ''
   }
 
-  private async request(endpoint: string, options: RequestInit = {}) {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+  // 通用的请求方法，返回原始响应数据
+  private async rawRequest(url: string, options: RequestInit = {}): Promise<Response> {
+    return fetch(url, {
       ...options,
       headers: {
         'Cookie': this.cookie,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': this.userAgent,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Referer': 'https://115.com/',
         ...options.headers,
       },
     })
-    
-    const data = await response.json()
-    
-    // 115网盘API：state=true 表示成功，或者 errno=0 且没有 error 字段
-    // 某些接口可能返回 state=false 但 errno=0，这时需要检查是否有 data 字段
-    const isSuccess = data.state === true || (data.errno === 0 && !data.error)
-    
-    if (!isSuccess) {
-      throw new Error(data.error || '请求失败')
-    }
-    
-    return data
   }
 
   async getUserInfo(): Promise<{ name: string; avatar?: string; vip?: boolean }> {
@@ -54,13 +47,7 @@ export class Pan115Service implements ICloudDriveService {
       
       for (const endpoint of endpoints) {
         try {
-          const response = await fetch(`${this.baseUrl}${endpoint}`, {
-            headers: {
-              'Cookie': this.cookie,
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-          })
-          
+          const response = await this.rawRequest(`${this.baseUrl}${endpoint}`)
           const data = await response.json()
           
           if (data.state === true) {
@@ -101,13 +88,7 @@ export class Pan115Service implements ICloudDriveService {
     
     for (const endpoint of endpoints) {
       try {
-        const response = await fetch(`${this.baseUrl}${endpoint}`, {
-          headers: {
-            'Cookie': this.cookie,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          },
-        })
-        
+        const response = await this.rawRequest(`${this.baseUrl}${endpoint}`)
         const data = await response.json()
         console.log(`[115] API ${endpoint} response:`, JSON.stringify(data).substring(0, 500))
         
@@ -158,81 +139,83 @@ export class Pan115Service implements ICloudDriveService {
   }
 
   async listFiles(path: string, page = 1, pageSize = 50): Promise<ListResult> {
-    try {
-      const data = await this.request(
-        `/files?aid=1&cid=${encodeURIComponent(path)}&offset=${(page - 1) * pageSize}&limit=${pageSize}`
-      )
+    console.log(`[115] listFiles: path=${path}, page=${page}, pageSize=${pageSize}`)
+    
+    const url = `${this.baseUrl}/files?aid=1&cid=${encodeURIComponent(path)}&offset=${(page - 1) * pageSize}&limit=${pageSize}`
+    console.log(`[115] 请求URL: ${url}`)
+    
+    const response = await this.rawRequest(url)
+    
+    // 检查响应是否为JSON
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      console.log(`[115] 返回非JSON响应, content-type: ${contentType}, status: ${response.status}`)
       
-      // 打印原始响应以便调试
-      if (data.data && data.data.length > 0) {
-        const sampleItem = data.data[0]
-        console.log('[115] 文件列表示例数据:', JSON.stringify(sampleItem, null, 2))
-        // 特别检查文件夹的大小字段
-        if (sampleItem.cid && sampleItem.cid !== '0' && sampleItem.cid !== 0 && !sampleItem.fid) {
-          console.log('[115] 文件夹字段:', {
-            name: sampleItem.n || sampleItem.name,
-            cid: sampleItem.cid,
-            fid: sampleItem.fid,
-            s: sampleItem.s,
-            size: sampleItem.size,
-            fs: sampleItem.fs,  // 可能的文件夹大小字段
-            total_size: sampleItem.total_size,
-            file_count: sampleItem.file_count,
-            fc: sampleItem.fc,
-            allKeys: Object.keys(sampleItem)
-          })
-        }
+      // 检查是否是405错误（WAF阻止）
+      if (response.status === 405) {
+        throw new Error('115网盘请求被阻止，请检查Cookie是否过期或重新登录')
       }
-      
-      const files: CloudFile[] = (data.data || []).map((item: any) => {
-        // 115网盘判断文件夹的方式：
-        // 1. 有cid字段且不是0表示是文件夹
-        // 2. 有fid字段表示是文件
-        // 3. pc字段存在表示是文件（parent category）
-        const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
-        const size = item.s || item.size || 0
-        console.log(`[115] 文件: ${item.n || item.name}, 大小: ${size}, 原始s: ${item.s}`)
-        
-        // 重要：对于文件，应该用 fid；对于文件夹，应该用 cid
-        // 不能用 cid || fid，因为文件的 cid 可能是父目录ID
-        const fileId = isDir ? item.cid : (item.fid || item.cid)
-        
-        console.log(`[115] 文件ID: ${fileId}, fid: ${item.fid}, cid: ${item.cid}, isDir: ${isDir}`)
-        
-        return {
-          id: fileId,
-          name: item.n || item.name,
-          // 文件夹的path应该是它自己的cid，这样双击进入时可以正确导航
-          path: isDir ? item.cid : path,
-          is_dir: isDir,
-          size: size,
-          created_at: item.tp || new Date().toISOString(),
-          modified_at: item.t || new Date().toISOString(),
-          sha1: item.sha1,
-          md5: item.md5,
-        }
-      })
+      throw new Error('115网盘返回非JSON响应，可能是Cookie已过期')
+    }
+    
+    const data = await response.json()
+    console.log(`[115] 响应: state=${data.state}, errno=${data.errno}, error=${data.error || '无'}, data长度=${data.data?.length || 0}`)
+    
+    // 检查API是否返回错误
+    if (data.state !== true && data.error) {
+      throw new Error(data.error)
+    }
+    
+    // 打印原始响应以便调试
+    if (data.data && data.data.length > 0) {
+      const sampleItem = data.data[0]
+      console.log('[115] 文件列表示例数据:', JSON.stringify(sampleItem, null, 2))
+    }
+    
+    const files: CloudFile[] = (data.data || []).map((item: any) => {
+      const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
+      const size = item.s || item.size || 0
+      const fileId = isDir ? String(item.cid) : String(item.fid || item.cid)
       
       return {
-        files,
-        has_more: files.length === pageSize,
+        id: fileId,
+        name: item.n || item.name || '',
+        path: isDir ? String(item.cid) : path,
+        is_dir: isDir,
+        size: size,
+        created_at: item.tp || new Date().toISOString(),
+        modified_at: item.t || new Date().toISOString(),
+        sha1: item.sha1,
+        md5: item.md5,
       }
-    } catch (error) {
-      return { files: [], has_more: false }
+    })
+    
+    console.log(`[115] 返回 ${files.length} 个文件`)
+    return {
+      files,
+      has_more: files.length === pageSize,
     }
   }
 
   async getFileInfo(fileId: string): Promise<CloudFile> {
-    const data = await this.request(`/files/file?fid=${fileId}`)
+    const url = `${this.baseUrl}/files/file?fid=${fileId}`
+    const response = await this.rawRequest(url)
+    const data = await response.json()
+    
+    if (data.state !== true && data.error) {
+      throw new Error(data.error)
+    }
+    
+    const item = data.data
     return {
-      id: data.data.fid,
-      name: data.data.n,
-      path: data.data.pc,
+      id: item.fid,
+      name: item.n,
+      path: item.pc,
       is_dir: false,
-      size: data.data.s,
-      created_at: data.data.tp,
-      modified_at: data.data.t,
-      sha1: data.data.sha1,
+      size: item.s,
+      created_at: item.tp,
+      modified_at: item.t,
+      sha1: item.sha1,
     }
   }
 
@@ -665,74 +648,56 @@ export class Pan115Service implements ICloudDriveService {
     try {
       console.log(`[115] 搜索文件: keyword=${keyword}`)
       
-      // 115网盘的搜索API需要VIP权限，这里改用递归遍历搜索
-      const allFiles: CloudFile[] = []
-      const keywordLower = keyword.toLowerCase()
+      // 根据 p115client 文档，使用正确的搜索 API
+      // GET https://webapi.115.com/files/search
+      const params = new URLSearchParams({
+        aid: '1',
+        cid: path || '0',  // 目录 ID，0 表示搜索整个网盘
+        search_value: keyword,
+        limit: '100',  // 最多返回 100 条
+        offset: '0',
+        show_dir: '1',  // 显示目录
+      })
       
-      // 递归搜索函数
-      const searchInFolder = async (folderId: string, depth: number = 0): Promise<void> => {
-        // 限制搜索深度和数量
-        if (depth > 4 || allFiles.length >= 500) return
-        
-        try {
-          // 直接使用fetch，更灵活地处理响应
-          const url = `${this.baseUrl}/files?aid=1&cid=${folderId}&offset=0&limit=500`
-          const response = await fetch(url, {
-            headers: {
-              'Cookie': this.cookie,
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-          })
-          
-          // 检查响应是否为JSON
-          const contentType = response.headers.get('content-type') || ''
-          if (!contentType.includes('application/json')) {
-            console.log(`[115] 搜索文件夹 ${folderId} 返回非JSON响应`)
-            return
-          }
-          
-          const data = await response.json()
-          
-          // 宽松检查：只要有data字段就继续处理
-          if (data.data && Array.isArray(data.data)) {
-            console.log(`[115] 搜索文件夹 ${folderId}, 深度 ${depth}, 找到 ${data.data.length} 个项目`)
-            
-            for (const item of data.data) {
-              const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
-              const name = item.n || item.name || ''
-              
-              // 检查文件名是否匹配关键词
-              if (name.toLowerCase().includes(keywordLower)) {
-                const fileId = isDir ? item.cid : (item.fid || item.cid)
-                allFiles.push({
-                  id: fileId,
-                  name: name,
-                  path: isDir ? item.cid : (item.pc || folderId),
-                  is_dir: isDir,
-                  size: item.s || 0,
-                  created_at: item.tp || new Date().toISOString(),
-                  modified_at: item.t || new Date().toISOString(),
-                })
-              }
-              
-              // 如果是文件夹，递归搜索
-              if (isDir && allFiles.length < 500) {
-                await searchInFolder(String(item.cid), depth + 1)
-              }
-            }
-          } else {
-            console.log(`[115] 搜索文件夹 ${folderId} 无数据, state=${data.state}, error=${data.error || '无'}`)
-          }
-        } catch (e) {
-          console.log(`[115] 搜索文件夹 ${folderId} 异常:`, e instanceof Error ? e.message : e)
-        }
+      const url = `${this.baseUrl}/files/search?${params.toString()}`
+      console.log(`[115] 搜索请求: ${url}`)
+      
+      const response = await this.rawRequest(url)
+      
+      // 检查响应是否为JSON
+      const contentType = response.headers.get('content-type') || ''
+      if (!contentType.includes('application/json')) {
+        console.log(`[115] 搜索返回非JSON响应, content-type: ${contentType}`)
+        return []
       }
       
-      // 从根目录开始搜索
-      await searchInFolder('0')
+      const data = await response.json()
+      console.log(`[115] 搜索响应: state=${data.state}, count=${data.count}, data长度=${data.data?.length || 0}`)
       
-      console.log(`[115] 本地搜索完成，找到 ${allFiles.length} 个匹配文件`)
-      return allFiles
+      if (!data.data || !Array.isArray(data.data)) {
+        console.log(`[115] 搜索无数据, state=${data.state}, error=${data.error || '无'}`)
+        return []
+      }
+      
+      const files: CloudFile[] = data.data.map((item: any) => {
+        const isDir = !!(item.cid && item.cid !== '0' && item.cid !== 0) && !item.fid
+        const fileId = isDir ? String(item.cid) : String(item.fid || item.cid)
+        const size = item.s || item.size || 0
+        
+        return {
+          id: fileId,
+          name: item.n || item.name || '',
+          path: isDir ? String(item.cid) : (item.pc || path || '0'),
+          is_dir: isDir,
+          size: size,
+          created_at: item.tp || new Date().toISOString(),
+          modified_at: item.t || new Date().toISOString(),
+          sha1: item.sha1,
+        }
+      })
+      
+      console.log(`[115] 搜索完成，找到 ${files.length} 个文件`)
+      return files
     } catch (error) {
       console.error('[115] 搜索文件失败:', error)
       return []
@@ -750,13 +715,7 @@ export class Pan115Service implements ICloudDriveService {
     
     // 备用方式：尝试获取文件列表
     try {
-      const response = await fetch(`${this.baseUrl}/files?aid=1&cid=0&offset=0&limit=1`, {
-        headers: {
-          'Cookie': this.cookie,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      })
-      
+      const response = await this.rawRequest(`${this.baseUrl}/files?aid=1&cid=0&offset=0&limit=1`)
       const data = await response.json()
       return data.state === true || data.data !== undefined
     } catch {
