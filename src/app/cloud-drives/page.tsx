@@ -28,7 +28,8 @@ import {
   Power,
   HardDrive,
   ExternalLink,
-  QrCode
+  QrCode,
+  Phone
 } from "lucide-react"
 import { toast } from "sonner"
 import { driveTypeOptions } from "@/lib/icons"
@@ -40,6 +41,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { QRCodeLogin } from "@/components/cloud-drive/qrcode-login"
+import { PhonePasswordLogin } from "@/components/cloud-drive/phone-password-login"
 
 // 网盘配置字段定义
 const DRIVE_CONFIG_FIELDS: Record<string, { 
@@ -273,6 +275,35 @@ export default function CloudDrivesPage() {
         name: '115',
         alias: formData.alias || null,
         config: { cookie },
+      }
+
+      const response = await fetch("/api/cloud-drives", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "创建失败")
+      }
+      
+      toast.success("网盘添加成功")
+      setDialogOpen(false)
+      setFormData({ name: "", alias: "" })
+      fetchDrives()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "添加网盘失败")
+    }
+  }
+
+  // 123网盘登录成功后自动提交
+  const handleSubmitWithToken = async (token: string) => {
+    try {
+      const payload = {
+        name: '123',
+        alias: formData.alias || null,
+        config: { token },
       }
 
       const response = await fetch("/api/cloud-drives", {
@@ -680,6 +711,71 @@ export default function CloudDrivesPage() {
                             value={formData[field.key] || ""}
                             onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
                             placeholder={field.placeholder}
+                          />
+                          <p className="text-xs text-muted-foreground">{field.help}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <DialogFooter className="mt-4">
+                      <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button type="submit">添加</Button>
+                    </DialogFooter>
+                  </form>
+                </TabsContent>
+              </Tabs>
+            </div>
+          ) : formData.name === '123' && !editingDrive ? (
+            // 123网盘特殊处理：支持手机号密码登录
+            <div className="py-4">
+              <Tabs defaultValue="login" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="login" className="flex items-center gap-2">
+                    <Phone className="h-4 w-4" />
+                    手机号登录
+                  </TabsTrigger>
+                  <TabsTrigger value="token">Token登录</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="login" className="mt-4">
+                  <PhonePasswordLogin
+                    onSuccess={(token) => {
+                      // 自动填充token并提交
+                      setFormData(prev => ({ ...prev, token }))
+                      // 延迟提交，让用户看到成功状态
+                      setTimeout(() => {
+                        handleSubmitWithToken(token)
+                      }, 500)
+                    }}
+                    onCancel={() => setDialogOpen(false)}
+                  />
+                </TabsContent>
+                
+                <TabsContent value="token" className="mt-4">
+                  <form onSubmit={handleSubmit}>
+                    <div className="grid gap-4">
+                      {/* 账号别名 */}
+                      <div className="grid gap-2">
+                        <Label htmlFor="alias">账号别名</Label>
+                        <Input
+                          id="alias"
+                          value={formData.alias || ""}
+                          onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
+                          placeholder="为网盘起一个易于识别的名字"
+                        />
+                      </div>
+                      
+                      {/* Token输入 */}
+                      {DRIVE_CONFIG_FIELDS[formData.name]?.map((field) => (
+                        <div key={field.key} className="grid gap-2">
+                          <Label htmlFor={field.key}>{field.label}</Label>
+                          <Input
+                            id={field.key}
+                            value={formData[field.key] || ""}
+                            onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                            placeholder={field.placeholder}
+                            className="font-mono text-sm"
                           />
                           <p className="text-xs text-muted-foreground">{field.help}</p>
                         </div>
