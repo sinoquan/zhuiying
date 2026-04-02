@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Image from "next/image"
 import { 
   Plus, 
@@ -26,7 +27,8 @@ import {
   AlertTriangle,
   Power,
   HardDrive,
-  ExternalLink
+  ExternalLink,
+  QrCode
 } from "lucide-react"
 import { toast } from "sonner"
 import { driveTypeOptions } from "@/lib/icons"
@@ -37,6 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { QRCodeLogin } from "@/components/cloud-drive/qrcode-login"
 
 // 网盘配置字段定义
 const DRIVE_CONFIG_FIELDS: Record<string, { 
@@ -260,6 +263,35 @@ export default function CloudDrivesPage() {
       fetchDrives()
     } catch (error) {
       toast.error(editingDrive ? "更新网盘失败" : "添加网盘失败")
+    }
+  }
+
+  // 扫码登录成功后自动提交
+  const handleSubmitWithCookie = async (cookie: string) => {
+    try {
+      const payload = {
+        name: '115',
+        alias: formData.alias || null,
+        config: { cookie },
+      }
+
+      const response = await fetch("/api/cloud-drives", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "创建失败")
+      }
+      
+      toast.success("网盘添加成功")
+      setDialogOpen(false)
+      setFormData({ name: "", alias: "" })
+      fetchDrives()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "添加网盘失败")
     }
   }
 
@@ -597,65 +629,133 @@ export default function CloudDrivesPage() {
               配置网盘账号认证信息
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              {/* 账号别名 */}
-              <div className="grid gap-2">
-                <Label htmlFor="alias">账号别名</Label>
-                <Input
-                  id="alias"
-                  value={formData.alias || ""}
-                  onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
-                  placeholder="为网盘起一个易于识别的名字"
-                />
-              </div>
-              
-              {/* 网盘专用配置字段 */}
-              {DRIVE_CONFIG_FIELDS[formData.name]?.map((field) => (
-                <div key={field.key} className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor={field.key}>{field.label}</Label>
-                    {field.helpUrl && (
-                      <a
-                        href={field.helpUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline flex items-center gap-1"
-                      >
-                        获取方式 <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
-                  </div>
-                  {field.type === 'textarea' ? (
-                    <textarea
-                      id={field.key}
-                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
-                      value={formData[field.key] || ""}
-                      onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
-                      placeholder={field.placeholder}
-                    />
-                  ) : (
-                    <Input
-                      id={field.key}
-                      value={formData[field.key] || ""}
-                      onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
-                      placeholder={field.placeholder}
-                      className="font-mono text-sm"
-                    />
-                  )}
-                  <p className="text-xs text-muted-foreground">{field.help}</p>
-                </div>
-              ))}
+          
+          {/* 115网盘特殊处理：支持扫码登录 */}
+          {formData.name === '115' && !editingDrive ? (
+            <div className="py-4">
+              <Tabs defaultValue="qrcode" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="qrcode" className="flex items-center gap-2">
+                    <QrCode className="h-4 w-4" />
+                    扫码登录
+                  </TabsTrigger>
+                  <TabsTrigger value="cookie">Cookie登录</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="qrcode" className="mt-4">
+                  <QRCodeLogin
+                    onSuccess={(cookies) => {
+                      // 自动填充cookie并提交
+                      setFormData(prev => ({ ...prev, cookie: cookies }))
+                      // 延迟提交，让用户看到成功状态
+                      setTimeout(() => {
+                        handleSubmitWithCookie(cookies)
+                      }, 500)
+                    }}
+                    onCancel={() => setDialogOpen(false)}
+                  />
+                </TabsContent>
+                
+                <TabsContent value="cookie" className="mt-4">
+                  <form onSubmit={handleSubmit}>
+                    <div className="grid gap-4">
+                      {/* 账号别名 */}
+                      <div className="grid gap-2">
+                        <Label htmlFor="alias">账号别名</Label>
+                        <Input
+                          id="alias"
+                          value={formData.alias || ""}
+                          onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
+                          placeholder="为网盘起一个易于识别的名字"
+                        />
+                      </div>
+                      
+                      {/* Cookie输入 */}
+                      {DRIVE_CONFIG_FIELDS[formData.name]?.map((field) => (
+                        <div key={field.key} className="grid gap-2">
+                          <Label htmlFor={field.key}>{field.label}</Label>
+                          <textarea
+                            id={field.key}
+                            className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                            value={formData[field.key] || ""}
+                            onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                            placeholder={field.placeholder}
+                          />
+                          <p className="text-xs text-muted-foreground">{field.help}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <DialogFooter className="mt-4">
+                      <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button type="submit">添加</Button>
+                    </DialogFooter>
+                  </form>
+                </TabsContent>
+              </Tabs>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                取消
-              </Button>
-              <Button type="submit">
-                {editingDrive ? "保存" : "添加"}
-              </Button>
-            </DialogFooter>
-          </form>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              <div className="grid gap-4 py-4">
+                {/* 账号别名 */}
+                <div className="grid gap-2">
+                  <Label htmlFor="alias">账号别名</Label>
+                  <Input
+                    id="alias"
+                    value={formData.alias || ""}
+                    onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
+                    placeholder="为网盘起一个易于识别的名字"
+                  />
+                </div>
+                
+                {/* 网盘专用配置字段 */}
+                {DRIVE_CONFIG_FIELDS[formData.name]?.map((field) => (
+                  <div key={field.key} className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor={field.key}>{field.label}</Label>
+                      {field.helpUrl && (
+                        <a
+                          href={field.helpUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          获取方式 <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                    {field.type === 'textarea' ? (
+                      <textarea
+                        id={field.key}
+                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                        value={formData[field.key] || ""}
+                        onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                        placeholder={field.placeholder}
+                      />
+                    ) : (
+                      <Input
+                        id={field.key}
+                        value={formData[field.key] || ""}
+                        onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                        placeholder={field.placeholder}
+                        className="font-mono text-sm"
+                      />
+                    )}
+                    <p className="text-xs text-muted-foreground">{field.help}</p>
+                  </div>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                  取消
+                </Button>
+                <Button type="submit">
+                  {editingDrive ? "保存" : "添加"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>
