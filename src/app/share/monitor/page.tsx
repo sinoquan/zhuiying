@@ -933,7 +933,7 @@ export default function FileMonitorPage() {
 
       {/* 创建/编辑对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-[1200px] w-[95vw] max-h-[92vh] flex flex-col p-0 gap-0">
+        <DialogContent className="max-w-[1400px] w-[98vw] h-[90vh] flex flex-col p-0 gap-0">
           {/* 标题区域 */}
           <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
             <DialogTitle className="text-lg font-semibold">
@@ -947,9 +947,9 @@ export default function FileMonitorPage() {
           </DialogHeader>
           
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-            <div className="flex gap-4 flex-1 min-h-[400px] overflow-hidden p-6">
+            <div className="flex gap-4 flex-1 min-h-0 overflow-hidden p-6">
               {/* 左侧：配置区域 */}
-              <div className="w-[280px] flex-shrink-0 space-y-4 overflow-y-auto pr-2">
+              <div className="w-[300px] flex-shrink-0 space-y-4 overflow-y-auto pr-2">
                 {/* 网盘选择 */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium flex items-center gap-2">
@@ -1148,7 +1148,7 @@ export default function FileMonitorPage() {
               <div className="w-px bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
               
               {/* 右侧：目录选择 */}
-              <div className="flex-1 flex flex-col min-h-[350px]">
+              <div className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium flex items-center gap-2">
                     <span className="w-5 h-5 rounded bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center text-xs text-cyan-600 dark:text-cyan-400">5</span>
@@ -1245,7 +1245,7 @@ export default function FileMonitorPage() {
                       </div>
                       
                       {/* 文件列表 */}
-                      <div className="flex-1 overflow-y-auto min-h-[300px]">
+                      <div className="flex-1 overflow-y-auto min-h-0">
                         {loadingFiles ? (
                           <div className="flex items-center justify-center py-16">
                             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
