@@ -1,49 +1,105 @@
 /**
  * Telegram 推送服务实现
  * 支持发送文本、富文本和图片消息
+ * 支持通过代理访问 Telegram API
  */
 
 import { IPushService, PushMessage, PushResult, PushChannelConfig } from './types'
+import { fetchWithProxy } from '@/lib/proxy'
+import { getSupabaseClient } from '@/storage/database/supabase-client'
 
 export class TelegramPushService implements IPushService {
   private botToken: string
   private chatId: string
   private apiUrl: string
+  private proxyUrl?: string
 
   constructor(config: PushChannelConfig) {
     this.botToken = config.bot_token || ''
     this.chatId = config.chat_id || ''
     this.apiUrl = `https://api.telegram.org/bot${this.botToken}`
+    // 从配置获取代理URL
+    if (typeof config.proxy_url === 'string') {
+      this.proxyUrl = config.proxy_url
+    }
+  }
+
+  /**
+   * 获取代理URL（优先级：构造函数配置 > 系统设置）
+   */
+  private async getProxyUrl(): Promise<string | undefined> {
+    if (this.proxyUrl) return this.proxyUrl
+    
+    try {
+      const client = getSupabaseClient()
+      const { data: setting } = await client
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'proxy_url')
+        .single()
+      
+      const value = setting?.setting_value
+      if (typeof value === 'string') return value
+      return undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * 发送 API 请求（自动选择直连或代理）
+   */
+  private async sendRequest(method: string, params?: Record<string, unknown>): Promise<PushResult> {
+    const url = `${this.apiUrl}/${method}`
+    const body = params ? JSON.stringify(params) : undefined
+    
+    const proxyUrl = await this.getProxyUrl()
+    
+    let response: Response
+    
+    if (proxyUrl) {
+      // 使用代理
+      console.log(`[Telegram] 使用代理访问 API: ${method}`)
+      response = await fetchWithProxy(url, proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      })
+    } else {
+      // 直连
+      console.log(`[Telegram] 直连访问 API: ${method}`)
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      })
+    }
+    
+    const data = await response.json()
+    
+    if (!data.ok) {
+      return {
+        success: false,
+        error: data.description || '发送失败',
+      }
+    }
+    
+    return {
+      success: true,
+      message_id: data.result?.message_id?.toString(),
+    }
   }
 
   async send(message: PushMessage): Promise<PushResult> {
     try {
       const text = this.formatMessage(message)
       
-      const response = await fetch(`${this.apiUrl}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: this.chatId,
-          text: text,
-          parse_mode: 'HTML',
-          disable_web_page_preview: false,
-        }),
+      return await this.sendRequest('sendMessage', {
+        chat_id: this.chatId,
+        text: text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: false,
       })
-      
-      const data = await response.json()
-      
-      if (!data.ok) {
-        return {
-          success: false,
-          error: data.description || '发送失败',
-        }
-      }
-      
-      return {
-        success: true,
-        message_id: data.result?.message_id?.toString(),
-      }
     } catch (error) {
       return {
         success: false,
@@ -63,28 +119,19 @@ export class TelegramPushService implements IPushService {
           ? caption.substring(0, 1000) + '...' 
           : caption
         
-        const response = await fetch(`${this.apiUrl}/sendPhoto`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: this.chatId,
-            photo: imageUrl,
-            caption: truncatedCaption,
-            parse_mode: 'HTML',
-          }),
+        const result = await this.sendRequest('sendPhoto', {
+          chat_id: this.chatId,
+          photo: imageUrl,
+          caption: truncatedCaption,
+          parse_mode: 'HTML',
         })
         
-        const data = await response.json()
-        
-        if (data.ok) {
-          return {
-            success: true,
-            message_id: data.result?.message_id?.toString(),
-          }
+        if (result.success) {
+          return result
         }
         
         // 如果图片发送失败（可能是URL无效），降级为纯文本
-        console.warn('Telegram photo send failed, falling back to text:', data.description)
+        console.warn('Telegram photo send failed, falling back to text:', result.error)
       }
       
       // 没有图片或图片发送失败，发送纯文本
@@ -99,9 +146,8 @@ export class TelegramPushService implements IPushService {
 
   async testConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.apiUrl}/getMe`)
-      const data = await response.json()
-      return data.ok === true
+      const result = await this.sendRequest('getMe')
+      return result.success
     } catch {
       return false
     }

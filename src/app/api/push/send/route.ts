@@ -8,6 +8,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { channel_id, title, content, url, code, extra, push_record_id } = body
     
+    console.log('[Push Send] Received request:', { channel_id, title, content: content?.substring(0, 100) })
+    
     // 支持两种模式：
     // 1. 通过 push_record_id 手动推送（更新现有记录）
     // 2. 通过 channel_id + title + content 新建推送
@@ -67,8 +69,11 @@ export async function POST(request: NextRequest) {
       .eq('id', pushChannelId)
       .single()
     
+    console.log('[Push Send] Query result:', { channel: channel?.id, error })
+    
     if (error || !channel) {
-      return NextResponse.json({ error: '推送渠道不存在' }, { status: 404 })
+      console.error('[Push Send] Channel not found:', error)
+      return NextResponse.json({ error: '推送渠道不存在', details: error?.message }, { status: 404 })
     }
     
     if (!channel.is_active) {
@@ -76,12 +81,14 @@ export async function POST(request: NextRequest) {
     }
     
     // 创建推送服务
+    console.log('[Push Send] Creating push service:', { type: channel.channel_type, config: channel.config })
     const pushService = createPushService(
       channel.channel_type as PushChannelType,
       (channel.config as PushChannelConfig) || {}
     )
     
     // 发送消息
+    console.log('[Push Send] Sending message...')
     const result = await pushService.send({
       title: pushTitle,
       content: pushContent,
@@ -89,6 +96,8 @@ export async function POST(request: NextRequest) {
       code: code,
       extra: extra,
     })
+    
+    console.log('[Push Send] Send result:', result)
     
     // 更新或创建推送记录
     if (push_record_id) {
