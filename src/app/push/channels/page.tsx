@@ -646,6 +646,58 @@ export default function PushChannelsPage() {
             </CardContent>
           </Card>
 
+          {/* 分组管理 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Folder className="h-4 w-4" />
+                    分组管理
+                  </CardTitle>
+                  <CardDescription>对推送目标进行分组，方便管理和选择</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={openAddGroupDialog}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  创建分组
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {currentGroups.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Folder className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>暂无分组</p>
+                  <p className="text-xs">创建分组可以更好地管理推送目标</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {currentGroups.map(group => (
+                    <div key={group.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex items-center gap-3">
+                        <Folder className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{group.group_name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {group.channel_count || 0} 个目标
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => openEditGroupDialog(group)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteGroup(group)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* 推送目标列表 */}
           <Card>
             <CardHeader>
@@ -777,6 +829,58 @@ export default function PushChannelsPage() {
 
         {/* QQ 配置 */}
         <TabsContent value="qq" className="space-y-4">
+          {/* 分组管理 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Folder className="h-4 w-4" />
+                    分组管理
+                  </CardTitle>
+                  <CardDescription>对推送目标进行分组，方便管理和选择</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={openAddGroupDialog}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  创建分组
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {currentGroups.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Folder className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>暂无分组</p>
+                  <p className="text-xs">创建分组可以更好地管理推送目标</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {currentGroups.map(group => (
+                    <div key={group.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex items-center gap-3">
+                        <Folder className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{group.group_name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {group.channel_count || 0} 个目标
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => openEditGroupDialog(group)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteGroup(group)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -865,6 +969,58 @@ export default function PushChannelsPage() {
 
         {/* 微信配置 */}
         <TabsContent value="wechat" className="space-y-4">
+          {/* 分组管理 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Folder className="h-4 w-4" />
+                    分组管理
+                  </CardTitle>
+                  <CardDescription>对推送目标进行分组，方便管理和选择</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={openAddGroupDialog}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  创建分组
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {currentGroups.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Folder className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>暂无分组</p>
+                  <p className="text-xs">创建分组可以更好地管理推送目标</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {currentGroups.map(group => (
+                    <div key={group.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex items-center gap-3">
+                        <Folder className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{group.group_name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {group.channel_count || 0} 个目标
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => openEditGroupDialog(group)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteGroup(group)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -953,6 +1109,58 @@ export default function PushChannelsPage() {
 
         {/* 钉钉配置 */}
         <TabsContent value="dingtalk" className="space-y-4">
+          {/* 分组管理 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Folder className="h-4 w-4" />
+                    分组管理
+                  </CardTitle>
+                  <CardDescription>对推送目标进行分组，方便管理和选择</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={openAddGroupDialog}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  创建分组
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {currentGroups.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Folder className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>暂无分组</p>
+                  <p className="text-xs">创建分组可以更好地管理推送目标</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {currentGroups.map(group => (
+                    <div key={group.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex items-center gap-3">
+                        <Folder className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{group.group_name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {group.channel_count || 0} 个目标
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => openEditGroupDialog(group)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteGroup(group)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1021,6 +1229,58 @@ export default function PushChannelsPage() {
 
         {/* 飞书配置 */}
         <TabsContent value="feishu" className="space-y-4">
+          {/* 分组管理 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Folder className="h-4 w-4" />
+                    分组管理
+                  </CardTitle>
+                  <CardDescription>对推送目标进行分组，方便管理和选择</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={openAddGroupDialog}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  创建分组
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {currentGroups.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Folder className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>暂无分组</p>
+                  <p className="text-xs">创建分组可以更好地管理推送目标</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {currentGroups.map(group => (
+                    <div key={group.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex items-center gap-3">
+                        <Folder className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{group.group_name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {group.channel_count || 0} 个目标
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => openEditGroupDialog(group)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteGroup(group)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1089,6 +1349,58 @@ export default function PushChannelsPage() {
 
         {/* Bark配置 */}
         <TabsContent value="bark" className="space-y-4">
+          {/* 分组管理 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Folder className="h-4 w-4" />
+                    分组管理
+                  </CardTitle>
+                  <CardDescription>对推送目标进行分组，方便管理和选择</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={openAddGroupDialog}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  创建分组
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {currentGroups.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Folder className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>暂无分组</p>
+                  <p className="text-xs">创建分组可以更好地管理推送目标</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {currentGroups.map(group => (
+                    <div key={group.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex items-center gap-3">
+                        <Folder className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{group.group_name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {group.channel_count || 0} 个目标
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => openEditGroupDialog(group)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteGroup(group)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1157,6 +1469,58 @@ export default function PushChannelsPage() {
 
         {/* Server酱配置 */}
         <TabsContent value="serverchan" className="space-y-4">
+          {/* 分组管理 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Folder className="h-4 w-4" />
+                    分组管理
+                  </CardTitle>
+                  <CardDescription>对推送目标进行分组，方便管理和选择</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={openAddGroupDialog}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  创建分组
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {currentGroups.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Folder className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>暂无分组</p>
+                  <p className="text-xs">创建分组可以更好地管理推送目标</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {currentGroups.map(group => (
+                    <div key={group.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex items-center gap-3">
+                        <Folder className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{group.group_name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {group.channel_count || 0} 个目标
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => openEditGroupDialog(group)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteGroup(group)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
