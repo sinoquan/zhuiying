@@ -330,8 +330,18 @@ export async function POST(request: NextRequest) {
           templateType = 'tv_series'
         }
         
-        // 获取模板
-        const template = DEFAULT_TEMPLATES[channelType]?.[templateType] || ''
+        // 从数据库获取自定义模板，如果没有则使用默认模板
+        const { data: customTemplate } = await client
+          .from('push_templates')
+          .select('template_content')
+          .eq('channel_type', channelType)
+          .eq('content_type', templateType)
+          .eq('is_active', true)
+          .single()
+        
+        const template = customTemplate?.template_content || DEFAULT_TEMPLATES[channelType]?.[templateType] || ''
+        
+        console.log('[Push] 使用模板:', customTemplate ? '自定义模板' : '默认模板')
         
         // 渲染消息
         const platform = channelType === 'qq' ? 'qq' : channelType === 'dingtalk' ? 'dingtalk' : 'telegram'

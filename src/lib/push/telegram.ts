@@ -250,20 +250,11 @@ export class TelegramPushService implements IPushService {
   }
 
   private formatMessage(message: PushMessage): string {
-    // buildDefaultMessage 已经生成了完整的格式化消息
-    // title 已经包含了类型图标（📺/🎬），content 包含所有详细信息
+    // 如果 content 已经是完整的格式化消息（包含多行），直接使用
+    // 模板渲染器已经生成了完整消息，不需要再添加 title
     if (message.content && message.content.includes('\n')) {
-      // 直接使用 title 和 content，保持格式
-      const lines: string[] = []
-      
-      // 标题（加粗）- title 已经包含类型图标
-      lines.push(`<b>${this.escapeHtml(message.title)}</b>`)
-      lines.push('')
-      
-      // 添加完整内容（已包含所有详细信息）
-      lines.push(this.escapeHtml(message.content))
-      
-      return lines.join('\n')
+      // 直接返回 content，不再重复添加 title
+      return this.escapeHtml(message.content)
     }
     
     // 简化格式（用于无详细内容的场景）
