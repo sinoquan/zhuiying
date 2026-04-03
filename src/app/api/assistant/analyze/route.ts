@@ -281,12 +281,13 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
     const { data: settings } = await client
       .from('system_settings')
       .select('setting_key, setting_value')
-      .in('setting_key', ['tmdb', 'tmdb_api_key', 'tmdb_language', 'douban_cookie'])
+      .in('setting_key', ['tmdb', 'tmdb_api_key', 'tmdb_language', 'douban_cookie', 'proxy_url'])
     
     // 解析配置
     let apiKey: string | undefined
     let language = 'zh-CN'
     let doubanCookie: string | undefined
+    let proxyUrl: string | undefined
     
     settings?.forEach((item: { setting_key: string; setting_value: any }) => {
       if (item.setting_key === 'tmdb') {
@@ -301,6 +302,8 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
         language = (item.setting_value as string) || language
       } else if (item.setting_key === 'douban_cookie') {
         doubanCookie = item.setting_value as string
+      } else if (item.setting_key === 'proxy_url') {
+        proxyUrl = item.setting_value as string
       }
     })
     
@@ -313,6 +316,7 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
         const tmdbService = new TMDBService({
           apiKey,
           language,
+          proxyUrl,  // 传递代理配置
         })
         
         const tmdbResult = await tmdbService.identifyFromFileName(

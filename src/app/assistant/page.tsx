@@ -112,6 +112,8 @@ export default function AssistantPage() {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [manualFileName, setManualFileName] = useState("")
+  const [manualLoading, setManualLoading] = useState(false)
 
   useEffect(() => {
     fetchChannels()
@@ -203,6 +205,49 @@ export default function AssistantPage() {
       toast.error(error instanceof Error ? error.message : "识别失败")
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 手动输入文件名后重新识别
+  const handleManualIdentify = async () => {
+    if (!manualFileName.trim()) {
+      toast.error("请输入文件名")
+      return
+    }
+
+    if (!analyzeResult?.link) {
+      toast.error("请先识别链接")
+      return
+    }
+
+    setManualLoading(true)
+    try {
+      // 将文件名附加到输入文本中，重新识别
+      const newText = `${inputText}\n${manualFileName}`
+      const response = await fetch("/api/assistant/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: newText }),
+      })
+
+      const data: AnalyzeResult = await response.json()
+      
+      if (!data.success) {
+        toast.error(data.error || "识别失败")
+        return
+      }
+
+      setAnalyzeResult(data)
+      setManualFileName("")
+      
+      // 获取预览
+      fetchPreview(data)
+      
+      toast.success("识别成功")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "识别失败")
+    } finally {
+      setManualLoading(false)
     }
   }
 
@@ -375,6 +420,43 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                             <p className="font-medium text-amber-800 dark:text-amber-200">提示</p>
                             <p className="text-amber-700 dark:text-amber-300 mt-1 whitespace-pre-wrap">
                               {analyzeResult.warning}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* 手动输入文件名 */}
+                    {!analyzeResult.file?.name && (
+                      <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <FileText className="h-4 w-4 text-blue-600 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                              无法获取文件信息，请手动输入文件名
+                            </p>
+                            <div className="flex gap-2">
+                              <Input
+                                value={manualFileName}
+                                onChange={(e) => setManualFileName(e.target.value)}
+                                placeholder="例如: 剧名.S01E01.1080p.WEB-DL.mp4"
+                                className="flex-1"
+                                onKeyDown={(e) => e.key === 'Enter' && handleManualIdentify()}
+                              />
+                              <Button 
+                                onClick={handleManualIdentify}
+                                disabled={manualLoading || !manualFileName.trim()}
+                                size="sm"
+                              >
+                                {manualLoading ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Sparkles className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                              支持格式: 剧名.S01E01.1080p.mp4 或 电影名.2024.4K.mkv
                             </p>
                           </div>
                         </div>
