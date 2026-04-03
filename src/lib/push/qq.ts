@@ -12,9 +12,9 @@ export class QQPushService implements IPushService {
   private pushType: 'private' | 'group'
 
   constructor(config: PushChannelConfig) {
-    this.webhookUrl = config.webhook_url || ''
-    this.qqNumber = config.chat_id || config.qq_number || ''
-    this.groupId = config.group_id || ''
+    this.webhookUrl = (config.webhook_url as string) || ''
+    this.qqNumber = (config.chat_id as string) || (config.qq_number as string) || ''
+    this.groupId = (config.group_id as string) || ''
     this.pushType = this.groupId ? 'group' : 'private'
   }
 

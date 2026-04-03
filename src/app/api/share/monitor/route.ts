@@ -15,6 +15,11 @@ export async function GET() {
             id,
             name,
             alias
+          ),
+          push_channels (
+            id,
+            channel_name,
+            channel_type
           )
         `)
         .order('created_at', { ascending: false })
@@ -23,7 +28,7 @@ export async function GET() {
       
       // 获取每个监控任务的最近扫描记录
       if (data && data.length > 0) {
-        const monitorIds = data.map((m: any) => m.id)
+        const monitorIds = data.map((m: Record<string, unknown>) => m.id)
         
         // 从operation_logs获取最近扫描记录
         const { data: logs } = await client
@@ -50,14 +55,14 @@ export async function GET() {
                 lastScanStatus: log.status
               })
             }
-          } catch (e) {
+          } catch {
             // 忽略解析错误
           }
         }
         
         // 附加统计信息
-        data.forEach((monitor: any) => {
-          const stats = monitorStats.get(monitor.id)
+        data.forEach((monitor: Record<string, unknown>) => {
+          const stats = monitorStats.get(monitor.id as number)
           monitor.scan_stats = stats || {
             shared: 0,
             pushed: 0,
@@ -90,6 +95,8 @@ export async function POST(request: NextRequest) {
         path_name: body.path_name || body.path.split('/').pop() || body.path,
         enabled: true,
         cron_expression: body.cron_expression || '*/10 7-23 * * *',
+        push_channel_id: body.push_channel_id || null,
+        push_template_type: body.push_template_type || 'tv',
       })
       .select()
       .single()

@@ -16,12 +16,20 @@ interface MonitorTask {
   path: string
   enabled: boolean
   created_at: string
+  push_channel_id?: number | null
+  push_template_type?: 'movie' | 'tv' | 'completed' | null
   cloud_drives?: {
     id: number
     name: string
     alias: string | null
-    config: any
+    config: Record<string, unknown>
   }
+  push_channels?: {
+    id: number
+    channel_name: string
+    channel_type: string
+    config: Record<string, unknown>
+  } | null
 }
 
 // 扫描结果
@@ -131,6 +139,12 @@ export class FileMonitorService {
           name,
           alias,
           config
+        ),
+        push_channels (
+          id,
+          channel_name,
+          channel_type,
+          config
         )
       `)
       .eq('enabled', true)
@@ -199,7 +213,7 @@ export class FileMonitorService {
               result.shared_files += files.length
               
               // 推送
-              if (await this.autoPush(monitor.cloud_drive_id, shareRecord)) {
+              if (await this.autoPush(monitor, shareRecord)) {
                 result.pushed_files++
               }
             }
@@ -232,7 +246,7 @@ export class FileMonitorService {
                 result.shared_files++
                 
                 // 推送
-                if (await this.autoPush(monitor.cloud_drive_id, shareRecord)) {
+                if (await this.autoPush(monitor, shareRecord)) {
                   result.pushed_files++
                 }
               }
@@ -612,70 +626,63 @@ export class FileMonitorService {
     return data || []
   }
   
-  private async autoPush(cloudDriveId: number, shareRecord: any): Promise<boolean> {
+  private async autoPush(monitor: MonitorTask, shareRecord: Record<string, unknown>): Promise<boolean> {
     try {
-      // 获取该网盘的推送渠道
-      const { data: channels } = await this.client
-        .from('push_channels')
-        .select('*')
-        .eq('cloud_drive_id', cloudDriveId)
-        .eq('is_active', true)
-      
-      if (!channels || channels.length === 0) {
+      // 如果监控任务没有配置推送渠道，跳过
+      if (!monitor.push_channel_id || !monitor.push_channels) {
+        console.log(`[Monitor] 监控任务 ${monitor.id} 未配置推送渠道，跳过推送`)
         return false
       }
       
-      // 获取推送规则和模板
-      const { data: rules } = await this.client
-        .from('push_rules')
-        .select('*')
-        .eq('cloud_drive_id', cloudDriveId)
-        .eq('is_active', true)
+      const channel = monitor.push_channels
       
+      // 获取推送模板
+      let templateType: 'movie' | 'tv' | 'completed' = monitor.push_template_type || 'tv'
+      
+      // 从分享记录获取 TMDB 信息判断是否完结
+      const tmdbInfo = shareRecord.tmdb_info as Record<string, unknown> | null
+      const isCompleted = tmdbInfo?.isCompleted || 
+        (tmdbInfo?.status === 'Ended' && tmdbInfo?.episode === tmdbInfo?.totalEpisodes)
+      
+      // 如果是剧集模板且已完结，自动切换到完结模板
+      if (templateType === 'tv' && isCompleted) {
+        templateType = 'completed'
+      }
+      
+      // 查找对应类型的模板
       const { data: templates } = await this.client
         .from('push_templates')
         .select('*')
-        .eq('cloud_drive_id', cloudDriveId)
+        .eq('cloud_drive_id', monitor.cloud_drive_id)
         .eq('is_active', true)
-      
-      // 检查推送规则
-      if (rules && rules.length > 0) {
-        const shouldPush = this.checkPushRules(shareRecord, rules)
-        if (!shouldPush) return false
-      }
+        .or(`template_type.eq.${templateType},template_type.is.null`)
+        .limit(1)
       
       // 构建推送消息
       const message = await this.buildPushMessage(shareRecord, templates)
       
-      // 对每个渠道推送
-      let anySuccess = false
-      for (const channel of channels) {
-        const pushService = createPushService(
-          channel.channel_type as PushChannelType,
-          (channel.config as PushChannelConfig) || {}
-        )
-        
-        const pushResult = await pushService.send(message)
-        
-        // 记录推送结果
-        await this.client.from('push_records').insert({
-          share_record_id: shareRecord.id,
-          push_channel_id: channel.id,
-          push_rule_id: rules?.[0]?.id || null,
-          push_template_id: templates?.[0]?.id || null,
-          content: JSON.stringify(message),
-          push_status: pushResult.success ? 'success' : 'failed',
-          error_message: pushResult.error,
-          retry_count: 0,
-          pushed_at: pushResult.success ? new Date().toISOString() : null,
-        })
-        
-        if (pushResult.success) {
-          anySuccess = true
-        }
-      }
+      // 推送
+      const pushService = createPushService(
+        channel.channel_type as PushChannelType,
+        (channel.config as PushChannelConfig) || {}
+      )
       
-      return anySuccess
+      const pushResult = await pushService.send(message)
+      
+      // 记录推送结果
+      await this.client.from('push_records').insert({
+        share_record_id: shareRecord.id as number,
+        push_channel_id: channel.id,
+        push_rule_id: null,
+        push_template_id: templates?.[0]?.id || null,
+        content: JSON.stringify(message),
+        push_status: pushResult.success ? 'success' : 'failed',
+        error_message: pushResult.error,
+        retry_count: 0,
+        pushed_at: pushResult.success ? new Date().toISOString() : null,
+      })
+      
+      return pushResult.success
     } catch (error) {
       console.error('自动推送失败:', error)
       return false
@@ -709,18 +716,18 @@ export class FileMonitorService {
   }
 
   private async buildPushMessage(
-    shareRecord: any,
-    templates: any[] | null
+    shareRecord: Record<string, unknown>,
+    templates: Record<string, unknown>[] | null
   ): Promise<PushMessage> {
     const contentInfo = typeof shareRecord.tmdb_info === 'string' 
-      ? JSON.parse(shareRecord.tmdb_info) 
-      : shareRecord.tmdb_info || { type: 'unknown', title: shareRecord.file_name }
+      ? JSON.parse(shareRecord.tmdb_info as string) 
+      : shareRecord.tmdb_info as Record<string, unknown> || { type: 'unknown', title: shareRecord.file_name }
     
     // 查找其他网盘的相同文件分享记录
     const duplicateShares = await this.findDuplicateShares(
-      shareRecord.file_name,
-      shareRecord.file_size,
-      shareRecord.id
+      shareRecord.file_name as string,
+      shareRecord.file_size as string,
+      shareRecord.id as number
     )
     
     // 使用模板

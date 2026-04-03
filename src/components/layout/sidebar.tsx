@@ -14,7 +14,6 @@ import {
   FileText,
   Send,
   Radio,
-  ScrollText,
   FileCode,
   Bell,
   Terminal,
@@ -56,7 +55,6 @@ const menuItems = [
     icon: Send,
     children: [
       { title: "推送渠道", href: "/push/channels", icon: Radio },
-      { title: "推送规则", href: "/push/rules", icon: ScrollText },
       { title: "推送模板", href: "/push/templates", icon: FileCode },
       { title: "推送记录", href: "/push/records", icon: Bell },
     ],

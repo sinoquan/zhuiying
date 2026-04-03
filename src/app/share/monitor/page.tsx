@@ -44,7 +44,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
-import { getDriveIcon } from "@/lib/icons"
+import { getDriveIcon, pushChannelIcons } from "@/lib/icons"
+import Image from "next/image"
 
 interface ScanStats {
   shared: number
@@ -60,11 +61,18 @@ interface FileMonitor {
   path_name?: string
   enabled: boolean
   cron_expression?: string
+  push_channel_id?: number
+  push_template_type?: string
   created_at: string
   cloud_drives?: {
     id: number
     name: string
     alias: string | null
+  }
+  push_channels?: {
+    id: number
+    channel_name: string
+    channel_type: string
   }
   scan_stats?: ScanStats
 }
@@ -74,6 +82,12 @@ interface CloudDrive {
   name: string
   alias: string | null
   is_active?: boolean
+}
+
+interface PushChannel {
+  id: number
+  channel_name: string
+  channel_type: string
 }
 
 interface CloudFile {
@@ -104,12 +118,15 @@ const CRON_PRESETS = [
 export default function FileMonitorPage() {
   const [monitors, setMonitors] = useState<FileMonitor[]>([])
   const [drives, setDrives] = useState<CloudDrive[]>([])
+  const [channels, setChannels] = useState<PushChannel[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingMonitor, setEditingMonitor] = useState<FileMonitor | null>(null)
   const [formData, setFormData] = useState({
     cloud_drive_id: "",
     cron_expression: "*/10 7-23 * * *",
+    push_channel_id: "",
+    push_template_type: "tv",
   })
   
   // 使用 ref 存储选择状态，避免 React Strict Mode 双重调用
@@ -149,15 +166,18 @@ export default function FileMonitorPage() {
 
   const fetchData = async () => {
     try {
-      const [monitorsRes, drivesRes] = await Promise.all([
+      const [monitorsRes, drivesRes, channelsRes] = await Promise.all([
         fetch("/api/share/monitor"),
         fetch("/api/cloud-drives"),
+        fetch("/api/push/channels"),
       ])
       const monitorsData = await monitorsRes.json()
       const drivesData = await drivesRes.json()
+      const channelsData = await channelsRes.json()
       setMonitors(monitorsData)
       setDrives(drivesData.filter((d: CloudDrive) => d.is_active))
-    } catch (error) {
+      setChannels(channelsData || [])
+    } catch {
       toast.error("获取数据失败")
     } finally {
       setLoading(false)
@@ -210,6 +230,8 @@ export default function FileMonitorPage() {
             path: folder.path,
             path_name: folder.name,
             cron_expression: cronExpr,
+            push_channel_id: formData.push_channel_id ? parseInt(formData.push_channel_id) : null,
+            push_template_type: formData.push_template_type,
           }),
         })
         if (!response.ok) throw new Error("创建失败")
@@ -219,8 +241,8 @@ export default function FileMonitorPage() {
       setDialogOpen(false)
       resetForm()
       fetchData()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "操作失败")
+    } catch {
+      toast.error("操作失败")
     }
   }
 
@@ -234,7 +256,7 @@ export default function FileMonitorPage() {
       if (!response.ok) throw new Error("更新失败")
       toast.success(monitor.enabled ? "已暂停监控" : "已启动监控")
       fetchData()
-    } catch (error) {
+    } catch {
       toast.error("操作失败")
     }
   }
@@ -249,13 +271,18 @@ export default function FileMonitorPage() {
       if (!response.ok) throw new Error("删除失败")
       toast.success("删除成功")
       fetchData()
-    } catch (error) {
+    } catch {
       toast.error("删除失败")
     }
   }
 
   const resetForm = () => {
-    setFormData({ cloud_drive_id: "", cron_expression: "*/10 7-23 * * *" })
+    setFormData({ 
+      cloud_drive_id: "", 
+      cron_expression: "*/10 7-23 * * *",
+      push_channel_id: "",
+      push_template_type: "tv",
+    })
     setEditingMonitor(null)
     setBrowsingFiles([])
     setBrowsingPath("/")
@@ -271,6 +298,8 @@ export default function FileMonitorPage() {
     setFormData({
       cloud_drive_id: monitor.cloud_drive_id.toString(),
       cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
+      push_channel_id: monitor.push_channel_id?.toString() || "",
+      push_template_type: monitor.push_template_type || "tv",
     })
     selectedFoldersRef.current = [{ path: monitor.path, name: monitor.path_name || monitor.path.split('/').pop() || monitor.path }]
     forceUpdate(n => n + 1)
@@ -401,9 +430,10 @@ export default function FileMonitorPage() {
                   <TableHead>网盘</TableHead>
                   <TableHead>监控目录</TableHead>
                   <TableHead>检测频率</TableHead>
+                  <TableHead>推送渠道</TableHead>
+                  <TableHead>内容类型</TableHead>
                   <TableHead>状态</TableHead>
                   <TableHead>最近扫描</TableHead>
-                  <TableHead>创建时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -446,6 +476,30 @@ export default function FileMonitorPage() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        {monitor.push_channels ? (
+                          <div className="flex items-center gap-1.5">
+                            <Image 
+                              src={pushChannelIcons[monitor.push_channels.channel_type]?.icon || ''} 
+                              alt=""
+                              width={14}
+                              height={14}
+                              className="rounded"
+                              unoptimized
+                            />
+                            <span className="text-sm truncate max-w-[100px]" title={monitor.push_channels.channel_name}>
+                              {monitor.push_channels.channel_name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">未配置</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {monitor.push_template_type === 'movie' ? '🎬 电影' : '📺 剧集'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center gap-2">
                           <Switch
                             checked={monitor.enabled}
@@ -479,9 +533,6 @@ export default function FileMonitorPage() {
                         ) : (
                           <span className="text-xs text-muted-foreground">暂无扫描记录</span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(monitor.created_at).toLocaleString("zh-CN")}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -595,6 +646,71 @@ export default function FileMonitorPage() {
                     </span>
                   </div>
                 )}
+              </div>
+              
+              {/* 推送配置 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>推送渠道</Label>
+                  <Select
+                    value={formData.push_channel_id}
+                    onValueChange={(value) => setFormData({ ...formData, push_channel_id: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择推送渠道" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {channels.map((channel) => (
+                        <SelectItem key={channel.id} value={channel.id.toString()}>
+                          <div className="flex items-center gap-2">
+                            <Image 
+                              src={pushChannelIcons[channel.channel_type]?.icon || ''} 
+                              alt=""
+                              width={14}
+                              height={14}
+                              className="rounded"
+                              unoptimized
+                            />
+                            <span className="truncate">{channel.channel_name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    收到新文件时推送到此渠道
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label>内容类型</Label>
+                  <div className="flex gap-4 pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="template_type"
+                        value="tv"
+                        checked={formData.push_template_type === 'tv'}
+                        onChange={() => setFormData({ ...formData, push_template_type: 'tv' })}
+                        className="h-4 w-4"
+                      />
+                      <span className="text-sm">📺 剧集模板</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="template_type"
+                        value="movie"
+                        checked={formData.push_template_type === 'movie'}
+                        onChange={() => setFormData({ ...formData, push_template_type: 'movie' })}
+                        className="h-4 w-4"
+                      />
+                      <span className="text-sm">🎬 电影模板</span>
+                    </label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    系统自动判断追更/完结状态
+                  </p>
+                </div>
               </div>
               
               {/* 文件浏览器 */}

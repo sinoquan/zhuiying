@@ -11,12 +11,14 @@ export async function PUT(
     const body = await request.json()
     const client = getSupabaseClient()
     
-    const updateData: Record<string, any> = {}
+    const updateData: Record<string, unknown> = {}
     
     if (body.path !== undefined) updateData.path = body.path
     if (body.path_name !== undefined) updateData.path_name = body.path_name
     if (body.enabled !== undefined) updateData.enabled = body.enabled
     if (body.cron_expression !== undefined) updateData.cron_expression = body.cron_expression
+    if (body.push_channel_id !== undefined) updateData.push_channel_id = body.push_channel_id
+    if (body.push_template_type !== undefined) updateData.push_template_type = body.push_template_type
     
     const { data, error } = await client
       .from('file_monitors')

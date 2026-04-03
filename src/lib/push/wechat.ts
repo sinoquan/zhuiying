@@ -10,8 +10,8 @@ export class WechatPushService implements IPushService {
   private mentionedList: string[]
 
   constructor(config: PushChannelConfig) {
-    this.webhookUrl = config.webhook_url || ''
-    this.mentionedList = config.mentioned_list || []
+    this.webhookUrl = (config.webhook_url as string) || ''
+    this.mentionedList = (config.mentioned_list as string[]) || []
   }
 
   /**
