@@ -122,6 +122,24 @@ interface ShareRecord {
   remark?: string
   tags?: string[]
   tmdb_title?: string
+  tmdb_id?: number
+  tmdb_info?: {
+    tmdbId?: number
+    id?: number
+    title?: string
+    year?: number
+    type?: string
+    season?: number
+    episode?: number
+    rating?: number
+    genres?: string[]
+    overview?: string
+    poster_url?: string
+    cast?: string[]
+    status?: string
+    totalEpisodes?: number
+    runtime?: number
+  }
   created_at: string
   cloud_drives?: {
     id: number
@@ -381,6 +399,10 @@ export default function ShareRecordsPage() {
     
     setPushing(true)
     try {
+      // 从 tmdb_info 中提取信息
+      const tmdbInfo = selectedRecord.tmdb_info
+      const tmdbId = tmdbInfo?.tmdbId || tmdbInfo?.id || selectedRecord.tmdb_id
+      
       const response = await fetch("/api/assistant/push", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -394,6 +416,16 @@ export default function ShareRecordsPage() {
             name: selectedRecord.tmdb_title || selectedRecord.file_name,
             type: selectedRecord.content_type || 'unknown',
           },
+          tmdb: tmdbId ? {
+            id: typeof tmdbId === 'string' ? parseInt(tmdbId, 10) : tmdbId,
+            title: tmdbInfo?.title || selectedRecord.tmdb_title || selectedRecord.file_name,
+            year: tmdbInfo?.year?.toString(),
+            poster_path: tmdbInfo?.poster_url,
+            rating: tmdbInfo?.rating,
+            genres: tmdbInfo?.genres,
+            cast: tmdbInfo?.cast,
+            overview: tmdbInfo?.overview,
+          } : undefined,
           channels: Array.from(selectedChannels),
           edit: {
             title: selectedRecord.tmdb_title || selectedRecord.file_name,

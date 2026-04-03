@@ -92,6 +92,22 @@ export class TelegramPushService implements IPushService {
 
   async send(message: PushMessage): Promise<PushResult> {
     try {
+      console.log('[Telegram] send message:', JSON.stringify({
+        title: message.title,
+        has_content: !!message.content,
+        has_poster_url: !!message.extra?.poster_url,
+        poster_url: message.extra?.poster_url,
+        extra_keys: message.extra ? Object.keys(message.extra) : [],
+      }))
+      
+      // 如果有图片，使用 sendWithImage
+      if (message.extra?.poster_url) {
+        console.log('[Telegram] 使用 sendWithImage 发送图片消息')
+        return this.sendWithImage(message, message.extra.poster_url)
+      }
+      
+      // 否则发送纯文本
+      console.log('[Telegram] 使用 sendMessage 发送纯文本消息')
       const text = this.formatMessage(message)
       
       return await this.sendRequest('sendMessage', {
@@ -154,6 +170,23 @@ export class TelegramPushService implements IPushService {
   }
 
   private formatMessage(message: PushMessage): string {
+    // buildDefaultMessage 已经生成了完整的格式化消息
+    // title 已经包含了类型图标（📺/🎬），content 包含所有详细信息
+    if (message.content && message.content.includes('\n')) {
+      // 直接使用 title 和 content，保持格式
+      const lines: string[] = []
+      
+      // 标题（加粗）- title 已经包含类型图标
+      lines.push(`<b>${this.escapeHtml(message.title)}</b>`)
+      lines.push('')
+      
+      // 添加完整内容（已包含所有详细信息）
+      lines.push(this.escapeHtml(message.content))
+      
+      return lines.join('\n')
+    }
+    
+    // 简化格式（用于无详细内容的场景）
     const lines: string[] = []
     
     // 标题（加粗）
@@ -174,41 +207,6 @@ export class TelegramPushService implements IPushService {
     // 提取码
     if (message.code) {
       lines.push(`🔑 提取码: <code>${this.escapeHtml(message.code)}</code>`)
-    }
-    
-    // 扩展信息
-    if (message.extra) {
-      const extra = message.extra
-      
-      if (extra.rating) {
-        lines.push(`⭐️ 评分: ${extra.rating}`)
-      }
-      
-      if (extra.genres?.length) {
-        lines.push(`🎭 类型: ${extra.genres.join(', ')}`)
-      }
-      
-      if (extra.quality) {
-        lines.push(`🎞️ 质量: ${extra.quality}`)
-      }
-      
-      if (extra.file_size) {
-        lines.push(`💾 大小: ${extra.file_size}`)
-      }
-      
-      if (extra.file_count) {
-        lines.push(`📦 文件: ${extra.file_count} 个`)
-      }
-      
-      if (extra.note) {
-        lines.push(`🏷️ 备注: ${this.escapeHtml(extra.note)}`)
-      }
-    }
-    
-    // 标签
-    if (message.extra?.tags?.length) {
-      lines.push('')
-      lines.push(message.extra.tags.map(tag => `#${tag.replace(/\s+/g, '')}`).join(' '))
     }
     
     return lines.join('\n')

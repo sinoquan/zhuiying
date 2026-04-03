@@ -106,19 +106,48 @@ export async function POST(request: NextRequest) {
         let success = false
         
         if (channelType === 'telegram') {
+          // 获取全局 Bot Token
+          const { data: tokenSetting } = await client
+            .from('system_settings')
+            .select('setting_value')
+            .eq('setting_key', 'telegram_bot_token')
+            .single()
+          
+          const { data: proxySetting } = await client
+            .from('system_settings')
+            .select('setting_value')
+            .eq('setting_key', 'proxy_url')
+            .single()
+          
+          const { data: proxyEnabledSetting } = await client
+            .from('system_settings')
+            .select('setting_value')
+            .eq('setting_key', 'proxy_enabled')
+            .single()
+          
           const service = new TelegramPushService({
-            bot_token: channel.config?.bot_token || process.env.TELEGRAM_BOT_TOKEN || '',
+            bot_token: tokenSetting?.setting_value as string || process.env.TELEGRAM_BOT_TOKEN || '',
             chat_id: channel.config?.chat_id || '',
+            proxy_url: proxyEnabledSetting?.setting_value ? (proxySetting?.setting_value as string) : undefined,
+          })
+          
+          console.log('[Assistant Push] Telegram 配置:', {
+            has_bot_token: !!tokenSetting?.setting_value,
+            chat_id: channel.config?.chat_id,
+            has_proxy: !!proxySetting?.setting_value && !!proxyEnabledSetting?.setting_value,
+            has_poster: !!tmdb?.poster_path,
           })
           
           // 发送消息（带图片）
           if (tmdb?.poster_path) {
+            console.log('[Assistant Push] 发送带图片消息:', tmdb.poster_path)
             const result = await service.sendWithImage(
               { title: messageData.title, content },
               tmdb.poster_path
             )
             success = result.success
           } else {
+            console.log('[Assistant Push] 发送纯文本消息')
             const result = await service.send({ title: messageData.title, content })
             success = result.success
           }

@@ -528,6 +528,7 @@ export class FileMonitorService {
           tmdb_id: seriesInfo.contentInfo.tmdbId,
           tmdb_title: seriesInfo.contentInfo.title,
           tmdb_info: {
+            tmdbId: seriesInfo.contentInfo.tmdbId,
             id: seriesInfo.contentInfo.tmdbId,
             title: seriesInfo.contentInfo.title,
             year: seriesInfo.contentInfo.year,
@@ -841,9 +842,34 @@ export class FileMonitorService {
     shareRecord: Record<string, unknown>,
     templates: Record<string, unknown>[] | null
   ): Promise<PushMessage> {
-    const contentInfo = typeof shareRecord.tmdb_info === 'string' 
+    let contentInfo = typeof shareRecord.tmdb_info === 'string' 
       ? JSON.parse(shareRecord.tmdb_info as string) 
       : shareRecord.tmdb_info as Record<string, unknown> || { type: 'unknown', title: shareRecord.file_name }
+    
+    // 兼容旧数据：如果没有 tmdbId 但有 id，则使用 id
+    if (!contentInfo.tmdbId && contentInfo.id) {
+      contentInfo.tmdbId = typeof contentInfo.id === 'string' ? parseInt(contentInfo.id, 10) : contentInfo.id
+    }
+    
+    // 确保标题存在
+    if (!contentInfo.title) {
+      contentInfo.title = shareRecord.file_name as string
+    }
+    
+    // 确保 rating 是数字
+    if (contentInfo.rating && typeof contentInfo.rating === 'string') {
+      contentInfo.rating = parseFloat(contentInfo.rating)
+    }
+    
+    console.log('[Monitor] buildPushMessage contentInfo:', JSON.stringify({
+      type: contentInfo.type,
+      title: contentInfo.title,
+      tmdbId: contentInfo.tmdbId,
+      rating: contentInfo.rating,
+      poster_url: contentInfo.poster_url,
+      genres: contentInfo.genres,
+      cast: contentInfo.cast?.slice(0, 2),
+    }))
     
     // 查找其他网盘的相同文件分享记录
     const duplicateShares = await this.findDuplicateShares(
