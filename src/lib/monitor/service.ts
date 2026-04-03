@@ -686,6 +686,22 @@ export class FileMonitorService {
         return false
       }
       
+      // 获取系统设置（包含 Telegram Bot Token 等全局配置）
+      const { data: settingsData } = await this.client
+        .from('system_settings')
+        .select('*')
+      
+      // 转换为键值对格式
+      const settings: Record<string, any> = {}
+      settingsData?.forEach((item: { setting_key: string; setting_value: any }) => {
+        settings[item.setting_key] = item.setting_value
+      })
+      
+      console.log(`[Monitor] 系统设置:`, { 
+        telegram_bot_token: settings.telegram_bot_token ? '已配置' : '未配置',
+        proxy_url: settings.proxy_url || '未配置'
+      })
+      
       // 获取推送模板
       let templateType: 'movie' | 'tv' | 'completed' = 'tv'
       
@@ -731,9 +747,26 @@ export class FileMonitorService {
       // 对每个渠道推送
       let anySuccess = false
       for (const channel of monitor.push_channels_list) {
+        // 合并渠道配置和全局设置
+        const pushConfig: PushChannelConfig = {
+          ...(channel.config as PushChannelConfig || {}),
+          // Telegram 需要 bot_token（从系统设置获取）
+          bot_token: settings?.telegram_bot_token || undefined,
+          // 代理设置
+          proxy_url: settings?.proxy_url || undefined,
+          proxy_enabled: settings?.proxy_enabled || false,
+        }
+        
+        console.log(`[Monitor] 推送配置:`, {
+          channel_type: channel.channel_type,
+          chat_id: pushConfig.chat_id,
+          bot_token: pushConfig.bot_token ? '已配置' : '未配置',
+          proxy_url: pushConfig.proxy_url || '未配置'
+        })
+        
         const pushService = createPushService(
           channel.channel_type as PushChannelType,
-          (channel.config as PushChannelConfig) || {}
+          pushConfig
         )
         
         const pushResult = await pushService.send(message)
