@@ -212,24 +212,15 @@ export default function FileMonitorPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const currentSelection = getSelectedFolders()
-    if (currentSelection.length === 0) {
-      toast.error("请至少选择一个监控目录")
-      return
-    }
-
     const cronExpr = cronPreset === 'custom' ? customCron : cronPreset
 
     try {
-      // 为每个选中的目录创建监控任务
-      for (const folder of currentSelection) {
-        const response = await fetch("/api/share/monitor", {
-          method: "POST",
+      // 编辑模式
+      if (editingMonitor) {
+        const response = await fetch(`/api/share/monitor/${editingMonitor.id}`, {
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
-            cloud_drive_id: formData.cloud_drive_id,
-            path: folder.path,
-            path_name: folder.name,
             cron_expression: cronExpr,
             push_channel_ids: formData.push_channel_ids,
             push_template_type: formData.push_template_type,
@@ -237,11 +228,38 @@ export default function FileMonitorPage() {
         })
         if (!response.ok) {
           const errData = await response.json()
-          throw new Error(errData.error || "创建失败")
+          throw new Error(errData.error || "更新失败")
         }
+        toast.success("更新成功")
+      } else {
+        // 创建模式
+        const currentSelection = getSelectedFolders()
+        if (currentSelection.length === 0) {
+          toast.error("请至少选择一个监控目录")
+          return
+        }
+        
+        for (const folder of currentSelection) {
+          const response = await fetch("/api/share/monitor", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              cloud_drive_id: formData.cloud_drive_id,
+              path: folder.path,
+              path_name: folder.name,
+              cron_expression: cronExpr,
+              push_channel_ids: formData.push_channel_ids,
+              push_template_type: formData.push_template_type,
+            }),
+          })
+          if (!response.ok) {
+            const errData = await response.json()
+            throw new Error(errData.error || "创建失败")
+          }
+        }
+        toast.success(`成功创建 ${currentSelection.length} 个监控任务`)
       }
-
-      toast.success(`成功创建 ${currentSelection.length} 个监控任务`)
+      
       setDialogOpen(false)
       resetForm()
       fetchData()
