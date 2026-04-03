@@ -947,9 +947,9 @@ export default function FileMonitorPage() {
           </DialogHeader>
           
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-            <div className="flex gap-6 flex-1 min-h-0 overflow-hidden p-6">
+            <div className="flex gap-4 flex-1 min-h-[400px] overflow-hidden p-6">
               {/* 左侧：配置区域 */}
-              <div className="w-[320px] flex-shrink-0 space-y-5 overflow-y-auto pr-2">
+              <div className="w-[280px] flex-shrink-0 space-y-4 overflow-y-auto pr-2">
                 {/* 网盘选择 */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium flex items-center gap-2">
@@ -1148,7 +1148,7 @@ export default function FileMonitorPage() {
               <div className="w-px bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
               
               {/* 右侧：目录选择 */}
-              <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 flex flex-col min-h-[350px]">
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium flex items-center gap-2">
                     <span className="w-5 h-5 rounded bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center text-xs text-cyan-600 dark:text-cyan-400">5</span>
@@ -1245,7 +1245,7 @@ export default function FileMonitorPage() {
                       </div>
                       
                       {/* 文件列表 */}
-                      <div className="flex-1 overflow-y-auto min-h-0">
+                      <div className="flex-1 overflow-y-auto min-h-[300px]">
                         {loadingFiles ? (
                           <div className="flex items-center justify-center py-16">
                             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1256,7 +1256,7 @@ export default function FileMonitorPage() {
                             <p className="text-sm">{fileSearchQuery ? '没有匹配的文件夹' : '当前目录没有子文件夹'}</p>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-2 gap-1 p-2">
+                          <div className="p-2 space-y-1">
                             {filteredFiles.map((file) => {
                               const folderPath = file.path || file.id
                               const isSelected = selectedFoldersRef.current.some(f => f.path === folderPath)
@@ -1264,7 +1264,7 @@ export default function FileMonitorPage() {
                               return (
                                 <div
                                   key={file.id}
-                                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all text-sm border ${
+                                  className={`flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all border ${
                                     isSelected 
                                       ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 shadow-sm' 
                                       : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700'
@@ -1272,17 +1272,17 @@ export default function FileMonitorPage() {
                                   onClick={() => toggleFolderSelection(file)}
                                   onDoubleClick={() => handleDoubleClick(file)}
                                 >
-                                  <div className={`w-4 h-4 border-2 rounded flex items-center justify-center flex-shrink-0 ${
+                                  <div className={`w-5 h-5 border-2 rounded flex items-center justify-center flex-shrink-0 ${
                                     isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300 dark:border-slate-600'
                                   }`}>
                                     {isSelected && (
-                                      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                       </svg>
                                     )}
                                   </div>
-                                  <FolderOpen className={`h-4 w-4 flex-shrink-0 ${isSelected ? 'text-blue-500' : 'text-yellow-500'}`} />
-                                  <span className="truncate flex-1">{file.name}</span>
+                                  <FolderOpen className={`h-5 w-5 flex-shrink-0 ${isSelected ? 'text-blue-500' : 'text-yellow-500'}`} />
+                                  <span className="truncate text-sm">{file.name}</span>
                                 </div>
                               )
                             })}
