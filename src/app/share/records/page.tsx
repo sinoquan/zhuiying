@@ -581,7 +581,11 @@ export default function ShareRecordsPage() {
         body: JSON.stringify({ ids: Array.from(selectedIds) }),
       })
       
-      if (!response.ok) throw new Error('删除失败')
+      const data = await response.json()
+      
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || '删除失败')
+      }
       
       toast.success(`成功删除 ${selectedIds.size} 条记录`)
       setBatchDeleteDialogOpen(false)
