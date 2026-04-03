@@ -224,6 +224,31 @@ export default function PushChannelsPage() {
     }
   }
 
+  // 从频道列表快速添加为推送渠道
+  const quickAddChannel = async (channel: TelegramChannel) => {
+    try {
+      const response = await fetch("/api/push/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel_type: "telegram",
+          channel_name: channel.title,
+          config: {
+            chat_id: channel.chat_id,
+          },
+        }),
+      })
+      
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "添加失败")
+      
+      toast.success(`已添加「${channel.title}」为推送渠道`)
+      fetchChannels()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "添加失败")
+    }
+  }
+
   // 保存 Bot Token
   const saveBotToken = async () => {
     setConfigSaving(true)
@@ -598,6 +623,9 @@ export default function PushChannelsPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <code className="text-xs bg-muted px-2 py-1 rounded">{channel.chat_id}</code>
+                          <Button variant="outline" size="sm" onClick={() => quickAddChannel(channel)} title="添加为推送渠道">
+                            <Plus className="h-3 w-3" />
+                          </Button>
                           <Button variant="outline" size="sm" onClick={() => testSendToChat(channel.chat_id, channel.title)} disabled={testingChatId === channel.chat_id}>
                             {testingChatId === channel.chat_id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                           </Button>

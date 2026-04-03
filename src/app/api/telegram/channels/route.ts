@@ -100,11 +100,63 @@ export async function GET(request: NextRequest) {
     console.log(`[Telegram] 使用 Bot Token: ${botToken.substring(0, 10)}...`)
     console.log(`[Telegram] 使用代理: ${proxyUrl ? '是' : '否'}`)
     
+    // 获取当前 webhook 信息
+    let webhookInfo: { url: string } | null = null
+    try {
+      webhookInfo = await callTelegramAPI(botToken, 'getWebhookInfo', undefined, proxyUrl)
+      console.log(`[Telegram] 当前 Webhook: ${webhookInfo?.url || '无'}`)
+    } catch (e) {
+      console.error('[Telegram] 获取 Webhook 信息失败:', e)
+    }
+    
+    // 如果有 webhook，临时删除它以便使用 getUpdates
+    if (webhookInfo?.url) {
+      console.log('[Telegram] 临时删除 Webhook 以获取频道列表...')
+      try {
+        await callTelegramAPI(botToken, 'deleteWebhook', { drop_pending_updates: true }, proxyUrl)
+      } catch (e) {
+        console.error('[Telegram] 删除 Webhook 失败:', e)
+      }
+    }
+    
     // 获取更新来提取频道/群组信息
-    const updates: TelegramUpdate[] = await callTelegramAPI(botToken, 'getUpdates', {
-      limit: 100,
-      allowed_updates: ['message', 'channel_post', 'my_chat_member'],
-    }, proxyUrl)
+    let updates: TelegramUpdate[] = []
+    try {
+      updates = await callTelegramAPI(botToken, 'getUpdates', {
+        limit: 100,
+        allowed_updates: ['message', 'channel_post', 'my_chat_member'],
+      }, proxyUrl)
+    } catch (e) {
+      console.error('[Telegram] 获取更新失败:', e)
+      // 如果获取失败，返回空列表并提示用户
+      return NextResponse.json({
+        channels: [],
+        groups: [],
+        all: [],
+        error: '无法获取频道列表。请尝试：1) 先删除 Webhook 后刷新；2) 手动输入 Chat ID',
+      })
+    }
+    
+    // 如果之前有 webhook，恢复它
+    if (webhookInfo?.url) {
+      console.log('[Telegram] 恢复 Webhook...')
+      try {
+        // 从数据库获取 webhook URL
+        const { data: webhookSetting } = await client
+          .from('system_settings')
+          .select('setting_value')
+          .eq('setting_key', 'telegram_webhook_url')
+          .single()
+        
+        if (webhookSetting?.setting_value) {
+          await callTelegramAPI(botToken, 'setWebhook', {
+            url: webhookSetting.setting_value,
+          }, proxyUrl)
+        }
+      } catch (e) {
+        console.error('[Telegram] 恢复 Webhook 失败:', e)
+      }
+    }
     
     // 提取唯一的聊天/频道
     const chatsMap = new Map<number, TelegramChat>()
