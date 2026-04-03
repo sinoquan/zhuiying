@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { 
   Settings, Globe, Database, Loader2, TestTube,
-  ExternalLink, CheckCircle2, XCircle
+  ExternalLink, CheckCircle2, XCircle, Clock, Play, Square
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -37,6 +37,12 @@ interface SystemSettings {
   disable_auth: boolean
 }
 
+interface SchedulerStatus {
+  running: boolean
+  executing: boolean
+  cronExpression: string
+}
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -47,6 +53,12 @@ export default function SettingsPage() {
     latency?: number
     message?: string
   } | null>(null)
+  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus>({
+    running: false,
+    executing: false,
+    cronExpression: '',
+  })
+  const [schedulerLoading, setSchedulerLoading] = useState(false)
   const [settings, setSettings] = useState<SystemSettings>({
     tmdb_api_key: "",
     tmdb_language: "zh-CN",
@@ -64,7 +76,46 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchSettings()
+    fetchSchedulerStatus()
   }, [])
+
+  const fetchSchedulerStatus = async () => {
+    try {
+      const response = await fetch('/api/scheduler')
+      const data = await response.json()
+      if (data.success) {
+        setSchedulerStatus({
+          running: data.running,
+          executing: data.executing,
+          cronExpression: data.cronExpression,
+        })
+      }
+    } catch (error) {
+      console.error('获取定时器状态失败:', error)
+    }
+  }
+
+  const handleSchedulerAction = async (action: 'start' | 'stop' | 'restart') => {
+    setSchedulerLoading(true)
+    try {
+      const response = await fetch('/api/scheduler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        toast.success(data.message)
+        fetchSchedulerStatus()
+      } else {
+        toast.error(data.error || '操作失败')
+      }
+    } catch (error) {
+      toast.error('操作失败')
+    } finally {
+      setSchedulerLoading(false)
+    }
+  }
 
   const fetchSettings = async () => {
     try {
@@ -301,6 +352,65 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">
                   修改系统登录密码
                 </p>
+              </div>
+
+              {/* 内置定时器 */}
+              <div className="border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/50">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-blue-500" />
+                    <Label className="text-base font-semibold">内置定时器</Label>
+                  </div>
+                  <Badge variant={schedulerStatus.running ? "default" : "secondary"} className={schedulerStatus.running ? "bg-green-500" : ""}>
+                    {schedulerStatus.running ? (schedulerStatus.executing ? '执行中' : '运行中') : '已停止'}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  启用后系统将自动按计划执行监控扫描，无需外部 cron 调用
+                </p>
+                {schedulerStatus.running && schedulerStatus.cronExpression && (
+                  <div className="text-xs text-muted-foreground mb-3 flex items-center gap-2">
+                    <span>当前表达式:</span>
+                    <code className="bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded">
+                      {schedulerStatus.cronExpression}
+                    </code>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  {!schedulerStatus.running ? (
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleSchedulerAction('start')}
+                      disabled={schedulerLoading}
+                      className="gap-1"
+                    >
+                      {schedulerLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                      启动定时器
+                    </Button>
+                  ) : (
+                    <>
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => handleSchedulerAction('stop')}
+                        disabled={schedulerLoading}
+                        className="gap-1"
+                      >
+                        {schedulerLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                        停止
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleSchedulerAction('restart')}
+                        disabled={schedulerLoading}
+                        className="gap-1"
+                      >
+                        重启
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
 
               <Button onClick={() => handleSave("general")} disabled={saving}>

@@ -97,6 +97,13 @@ interface DashboardStats {
   pushStatusCounts: Record<string, number>
 }
 
+interface TrendData {
+  date: string
+  label: string
+  shares: number
+  pushes: number
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalDrives: 0,
@@ -119,13 +126,27 @@ export default function DashboardPage() {
     pushStatusCounts: {},
   })
   const [loading, setLoading] = useState(true)
+  const [trendData, setTrendData] = useState<TrendData[]>([])
 
   useEffect(() => {
     fetchStats()
+    fetchTrend()
     // 每30秒刷新一次
     const interval = setInterval(fetchStats, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  const fetchTrend = async () => {
+    try {
+      const response = await fetch("/api/dashboard/trend")
+      const data = await response.json()
+      if (data.success) {
+        setTrendData(data.data)
+      }
+    } catch (error) {
+      console.error("获取趋势数据失败:", error)
+    }
+  }
 
   const fetchStats = async () => {
     try {
@@ -283,6 +304,60 @@ export default function DashboardPage() {
           )
         })}
       </div>
+
+      {/* 趋势图表 */}
+      {trendData.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              7天趋势
+            </CardTitle>
+            <CardDescription>过去一周分享和推送趋势</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-1 h-24">
+              {trendData.map((day, index) => {
+                const maxValue = Math.max(...trendData.map(d => Math.max(d.shares, d.pushes)), 1)
+                const shareHeight = (day.shares / maxValue) * 100
+                const pushHeight = (day.pushes / maxValue) * 100
+                
+                return (
+                  <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
+                    <div className="w-full flex items-end justify-center gap-0.5 h-20">
+                      {/* 分享柱 */}
+                      <div 
+                        className="w-2 bg-green-500 rounded-t transition-all duration-300"
+                        style={{ height: `${shareHeight}%` }}
+                        title={`分享: ${day.shares}`}
+                      />
+                      {/* 推送柱 */}
+                      <div 
+                        className="w-2 bg-purple-500 rounded-t transition-all duration-300"
+                        style={{ height: `${pushHeight}%` }}
+                        title={`推送: ${day.pushes}`}
+                      />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      {day.label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex items-center justify-center gap-4 mt-3 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded bg-green-500" />
+                <span className="text-muted-foreground">分享</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded bg-purple-500" />
+                <span className="text-muted-foreground">推送</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 主要内容区 */}
       <div className="grid gap-6 lg:grid-cols-3">

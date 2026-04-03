@@ -33,7 +33,7 @@ import {
   FileText, Copy, Trash2, 
   Send, RefreshCw, Search, ChevronLeft, ChevronRight, Bot, Eye, 
   Hand, Clock, CheckCircle2, XCircle, AlertCircle, Loader2,
-  Film, Tv, File, Check, Square
+  Film, Tv, File, Check, Square, RotateCcw, AlertTriangle
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
@@ -174,6 +174,7 @@ export default function ShareRecordsPage() {
   // 操作状态
   const [saving, setSaving] = useState(false)
   const [pushing, setPushing] = useState(false)
+  const [renewingId, setRenewingId] = useState<number | null>(null)
   
   // 批量操作
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -252,6 +253,45 @@ export default function ShareRecordsPage() {
       navigator.clipboard.writeText(shareUrl)
     }
     toast.success("已复制到剪贴板")
+  }
+
+  // 续期分享链接
+  const handleRenew = async (record: ShareRecord) => {
+    setRenewingId(record.id)
+    try {
+      const response = await fetch('/api/share/renew', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordId: record.id }),
+      })
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success('续期成功')
+        fetchRecords() // 刷新列表
+      } else {
+        toast.error(data.error || '续期失败')
+      }
+    } catch (error) {
+      toast.error('续期失败')
+    } finally {
+      setRenewingId(null)
+    }
+  }
+
+  // 判断分享是否即将过期（7天内）
+  const isExpiringSoon = (record: ShareRecord): boolean => {
+    if (!record.expire_at) return false
+    const expireTime = new Date(record.expire_at).getTime()
+    const now = Date.now()
+    const sevenDays = 7 * 24 * 60 * 60 * 1000
+    return expireTime - now < sevenDays && expireTime > now
+  }
+
+  // 判断分享是否已过期
+  const isExpired = (record: ShareRecord): boolean => {
+    if (!record.expire_at) return false
+    return new Date(record.expire_at).getTime() < Date.now()
   }
 
   // 打开删除对话框
@@ -838,6 +878,23 @@ export default function ShareRecordsPage() {
                               >
                                 <Copy className="h-3.5 w-3.5" />
                               </Button>
+                              {/* 续期按钮 - 即将过期或已过期时显示 */}
+                              {(isExpiringSoon(record) || isExpired(record)) && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className={`h-6 w-6 ${isExpired(record) ? 'text-red-500' : 'text-orange-500'}`}
+                                  onClick={() => handleRenew(record)}
+                                  disabled={renewingId === record.id}
+                                  title={isExpired(record) ? '已过期，点击续期' : '即将过期，点击续期'}
+                                >
+                                  {renewingId === record.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                  )}
+                                </Button>
+                              )}
                             </div>
                             {/* 多网盘链接 */}
                             {record.other_drive_links && record.other_drive_links.length > 0 && (
