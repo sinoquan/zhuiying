@@ -3,6 +3,8 @@
  * 用于智能识别影视内容
  */
 
+import { fetchWithProxy } from '@/lib/proxy'
+
 // TMDB 配置
 export interface TMDBConfig {
   apiKey: string
@@ -179,52 +181,18 @@ export class TMDBService {
       url.searchParams.set(key, value)
     }
 
-    // 如果配置了代理，设置环境变量方式（简单有效）
-    if (this.proxyUrl) {
-      // 使用全局代理设置
-      const originalProxy = process.env.HTTPS_PROXY
-      process.env.HTTPS_PROXY = this.proxyUrl
-      process.env.HTTP_PROXY = this.proxyUrl
-      
-      try {
-        const response = await fetch(url.toString(), {
-          headers: { 'Accept': 'application/json' },
-        })
-        
-        // 恢复原始设置
-        if (originalProxy) {
-          process.env.HTTPS_PROXY = originalProxy
-          process.env.HTTP_PROXY = originalProxy
-        } else {
-          delete process.env.HTTPS_PROXY
-          delete process.env.HTTP_PROXY
-        }
-        
-        if (!response.ok) {
-          throw new Error(`TMDB API错误: ${response.status}`)
-        }
-        
-        const data = await response.json()
-        // 存入缓存
-        this.setCache(cacheKey, data)
-        return data
-      } catch (error) {
-        // 确保恢复环境变量
-        if (originalProxy) {
-          process.env.HTTPS_PROXY = originalProxy
-          process.env.HTTP_PROXY = originalProxy
-        } else {
-          delete process.env.HTTPS_PROXY
-          delete process.env.HTTP_PROXY
-        }
-        throw error
-      }
-    }
+    let response: Response
     
-    // 无代理，直接请求
-    const response = await fetch(url.toString(), {
-      headers: { 'Accept': 'application/json' },
-    })
+    // 如果配置了代理，使用带代理的 fetch
+    if (this.proxyUrl) {
+      response = await fetchWithProxy(url.toString(), this.proxyUrl, {
+        headers: { 'Accept': 'application/json' },
+      })
+    } else {
+      response = await fetch(url.toString(), {
+        headers: { 'Accept': 'application/json' },
+      })
+    }
     
     if (!response.ok) {
       throw new Error(`TMDB API错误: ${response.status}`)

@@ -293,12 +293,6 @@ export async function POST(request: NextRequest) {
     if (!tmdbDetails.rating && apiKey && tmdb?.id) {
       console.log('[预览] 尝试TMDB获取详情, ID:', tmdb.id, '代理:', proxyUrl ? '已配置' : '未配置')
       try {
-        // 设置全局代理环境变量
-        if (proxyUrl) {
-          process.env.HTTPS_PROXY = proxyUrl
-          process.env.HTTP_PROXY = proxyUrl
-        }
-        
         const tmdbService = new TMDBService({ apiKey, language, proxyUrl })
         
         if (file?.type === 'tv_series' || contentType === 'tv_series' || contentType === 'completed') {
