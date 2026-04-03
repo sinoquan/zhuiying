@@ -62,12 +62,12 @@ export const pushChannelTypeOptions = Object.keys(pushChannelIcons).map(key => (
   label: pushChannelIcons[key].name,
 }))
 
-// 获取推送渠道图标组件
+// 获取推送渠道图标组件（带颜色）
 export function getPushChannelIcon(type: string): React.ReactNode {
   const icons: Record<string, React.ReactNode> = {
-    'telegram': <TelegramIcon className="h-4 w-4" />,
-    'qq': <QQIcon className="h-4 w-4" />,
-    'wechat': <WechatIcon className="h-4 w-4" />,
+    'telegram': <TelegramIcon className="h-4 w-4 text-[#0088cc]" />,
+    'qq': <QQIcon className="h-4 w-4 text-[#12B7F5]" />,
+    'wechat': <WechatIcon className="h-4 w-4 text-[#07C160]" />,
   }
   return icons[type] || <TelegramIcon className="h-4 w-4" />
 }

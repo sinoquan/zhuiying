@@ -29,13 +29,25 @@ import {
   Bot, RefreshCw, Settings, Copy, Check, ExternalLink
 } from "lucide-react"
 import { toast } from "sonner"
-import { getPushChannelIcon } from "@/lib/icons"
+import { getPushChannelIcon, getPushChannelName } from "@/lib/icons"
+
+// 渠道图标组件
+function ChannelIcon({ type, size = 16 }: { type: ChannelType; size?: number }) {
+  return (
+    <span 
+      className="inline-block" 
+      style={{ width: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      {getPushChannelIcon(type)}
+    </span>
+  )
+}
 
 // 渠道类型定义
 const CHANNEL_TYPES = [
-  { id: 'telegram', name: 'Telegram', icon: '📱', color: 'blue' },
-  { id: 'qq', name: 'QQ', icon: '💬', color: 'green' },
-  { id: 'wechat', name: '微信', icon: '💚', color: 'emerald' },
+  { id: 'telegram', name: 'Telegram' },
+  { id: 'qq', name: 'QQ' },
+  { id: 'wechat', name: '微信' },
 ] as const
 
 type ChannelType = typeof CHANNEL_TYPES[number]['id']
@@ -372,10 +384,14 @@ export default function PushChannelsPage() {
 
       {/* TAB 切换 */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ChannelType)}>
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
+        <TabsList className="inline-flex h-10 items-center justify-center rounded-full bg-muted p-1 text-muted-foreground mb-4">
           {CHANNEL_TYPES.map(type => (
-            <TabsTrigger key={type.id} value={type.id} className="gap-2">
-              <span>{type.icon}</span>
+            <TabsTrigger 
+              key={type.id} 
+              value={type.id} 
+              className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
+              <ChannelIcon type={type.id} />
               {type.name}
               {targetsByType[type.id]?.length > 0 && (
                 <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
