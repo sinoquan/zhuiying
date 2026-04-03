@@ -674,6 +674,23 @@ export async function accessShareLink(parseResult: LinkParseResult): Promise<Sha
   }
   
   try {
+    // 获取代理配置
+    let proxyUrl: string | undefined
+    try {
+      const client = getSupabaseClient()
+      const { data: settings } = await client
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'proxy_url')
+        .single()
+      proxyUrl = settings?.setting_value as string | undefined
+      if (proxyUrl) {
+        console.log(`[智能助手] 使用代理访问: ${proxyUrl.replace(/:[^:@]+@/, ':****@')}`)
+      }
+    } catch (e) {
+      console.log('[智能助手] 未获取到代理配置')
+    }
+    
     // 支持匿名访问的网盘
     const anonymousAccessors: Record<string, (shareId: string, shareCode?: string) => Promise<SharedFileInfo>> = {
       '115': access115ShareAnonymously,
@@ -723,7 +740,7 @@ export async function accessShareLink(parseResult: LinkParseResult): Promise<Sha
         if (parseResult.type === '115') {
           try {
             console.log('[智能助手] 尝试使用浏览器模拟访问115分享链接...')
-            const shareInfo = await access115ShareWithBrowser(parseResult.shareId, parseResult.shareCode)
+            const shareInfo = await access115ShareWithBrowser(parseResult.shareId, parseResult.shareCode, proxyUrl)
             result.shareInfo = shareInfo
             result.success = true
             

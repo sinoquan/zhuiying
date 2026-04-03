@@ -3,6 +3,7 @@
  * 使用 Puppeteer 模拟真实浏览器访问分享链接
  * 
  * 注意：需要安装 Chrome/Chromium 浏览器才能使用此功能
+ * 在某些服务器环境中，浏览器可能无法访问外部网络，此功能可能不可用
  */
 
 import puppeteer, { Browser, Page } from 'puppeteer-core'
@@ -21,6 +22,16 @@ interface FileItem {
 // 浏览器实例缓存
 let browserInstance: Browser | null = null
 let browserLaunchPromise: Promise<Browser> | null = null
+let networkAvailable: boolean | null = null  // 网络可用性缓存
+
+/**
+ * 重置浏览器实例（用于测试）
+ */
+export function resetBrowser(): void {
+  browserInstance = null
+  browserLaunchPromise = null
+  networkAvailable = null
+}
 
 /**
  * 获取或创建浏览器实例
@@ -80,16 +91,29 @@ async function getBrowser(): Promise<Browser> {
     throw new Error('浏览器环境不可用。请配置115网盘账号，或在链接下方提供文件名以辅助识别')
   }
   
+  // 115是国内网站，直连即可，不使用代理
   browserLaunchPromise = puppeteer.launch({
     headless: true,
+    protocolTimeout: 120000,  // 增加协议超时时间
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
-      '--disable-web-security',
-      '--disable-features=IsolateOrigins,site-per-process',
       '--window-size=1920,1080',
+      // 网络相关
+      '--disable-web-security',
+      '--ignore-certificate-errors',
+      // 反检测参数
+      '--disable-blink-features=AutomationControlled',
+      '--disable-infobars',
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-translate',
+      '--mute-audio',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
     ],
     ignoreDefaultArgs: ['--enable-automation'],
     executablePath,
@@ -127,17 +151,33 @@ export async function closeBrowser(): Promise<void> {
 
 /**
  * 使用浏览器模拟访问115分享链接
+ * 注意：浏览器访问115.com不需要代理（国内网站）
+ * 
+ * 警告：在服务器环境中，浏览器模拟可能无法访问外部网络
+ * 建议用户配置115网盘账号或手动提供文件名
  */
 export async function access115ShareWithBrowser(
   shareId: string, 
-  shareCode?: string
+  shareCode?: string,
+  _proxyUrl?: string  // 保留参数但不使用，115是国内网站直连更快
 ): Promise<SharedFileInfo> {
+  // 检查网络可用性缓存
+  if (networkAvailable === false) {
+    console.log('[浏览器模拟] 网络不可用，跳过浏览器模拟')
+    throw new Error('浏览器模拟不可用。请配置115网盘账号，或在链接下方提供文件名以辅助识别')
+  }
+
   let browser: Browser | null = null
   let page: Page | null = null
-  // 使用明确的类型定义
   const capturedData: { files: unknown[]; shareName: string | null } = { files: [], shareName: null }
 
   try {
+    // 关闭旧的浏览器实例
+    if (browserInstance) {
+      try { await browserInstance.close() } catch { /* ignore */ }
+      browserInstance = null
+    }
+    
     browser = await getBrowser()
     page = await browser.newPage()
 
@@ -146,68 +186,82 @@ export async function access115ShareWithBrowser(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     )
 
-    // 设置视口
+    // 反检测：隐藏 webdriver 属性
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] })
+      Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] })
+      ;(window as unknown as Record<string, unknown>).chrome = { runtime: {} }
+    })
+
     await page.setViewport({ width: 1920, height: 1080 })
     
     // 拦截网络请求，捕获API响应
     page.on('response', async (response) => {
       const url = response.url()
-      // 捕获115 API响应
       if (url.includes('webapi.115.com') || url.includes('/api/') || url.includes('share')) {
         try {
           const contentType = response.headers()['content-type'] || ''
           if (contentType.includes('json')) {
             const data = await response.json() as Record<string, unknown>
             console.log(`[浏览器模拟] 捕获API响应: ${url}`)
-            
-            // 提取文件列表
             if (data && typeof data === 'object') {
               const dataObj = data as Record<string, unknown>
-              if (Array.isArray(dataObj.data)) {
-                capturedData.files = dataObj.data
-              }
-              if (typeof dataObj.share_name === 'string') {
-                capturedData.shareName = dataObj.share_name
-              }
+              if (Array.isArray(dataObj.data)) capturedData.files = dataObj.data
+              if (typeof dataObj.share_name === 'string') capturedData.shareName = dataObj.share_name
             }
           }
-        } catch {
-          // 忽略解析错误
-        }
+        } catch { /* ignore */ }
       }
     })
 
-    // 构建分享链接URL
-    const shareUrl = `https://115.com/s/${shareId}${shareCode ? `?password=${shareCode}` : ''}`
+    // 测试网络可用性
+    if (networkAvailable === null) {
+      console.log('[浏览器模拟] 测试网络可用性...')
+      try {
+        const testPage = await browser.newPage()
+        const testResponse = await testPage.goto('https://example.com', { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 8000 
+        })
+        networkAvailable = testResponse?.ok() ?? false
+        console.log(`[浏览器模拟] 网络测试结果: ${networkAvailable ? '可用' : '不可用'}`)
+        await testPage.close()
+      } catch {
+        networkAvailable = false
+        console.log('[浏览器模拟] 网络不可用')
+      }
+      
+      if (!networkAvailable) {
+        throw new Error('浏览器网络不可用')
+      }
+    }
 
-    // 访问分享页面
+    const shareUrl = `https://115.com/s/${shareId}${shareCode ? `?password=${shareCode}` : ''}`
     console.log(`[浏览器模拟] 访问: ${shareUrl}`)
     
     const response = await page.goto(shareUrl, {
-      waitUntil: 'networkidle2',
+      waitUntil: 'domcontentloaded',
       timeout: 30000,
     })
 
-    if (!response || !response.ok()) {
+    if (!response?.ok()) {
       throw new Error(`页面加载失败: ${response?.status() || 'unknown'}`)
     }
 
-    // 等待页面内容加载 - 115网站可能需要更长时间
     console.log('[浏览器模拟] 等待页面加载...')
     await new Promise(resolve => setTimeout(resolve, 3000))
     
-    // 点击"确定"按钮（115分享页面需要点击确认才能查看文件）
-    console.log('[浏览器模拟] 尝试点击"确定"按钮...')
+    // 点击"确定"按钮
     const clicked = await page.evaluate(() => {
-      // 查找所有可能包含"确定"的按钮
-      const buttons = document.querySelectorAll('button, [role="button"], .btn, [class*="btn"], [class*="button"], [class*="confirm"]');
+      const buttons = document.querySelectorAll('button, [role="button"], .btn, [class*="btn"], [class*="button"], [class*="confirm"]')
       for (const btn of buttons) {
         if (btn.textContent?.includes('确定') || btn.textContent?.includes('确认')) {
-          (btn as HTMLElement).click();
-          return true;
+          ;(btn as HTMLElement).click()
+          return true
         }
       }
-      return false;
+      return false
     })
     
     if (clicked) {
@@ -228,68 +282,40 @@ export async function access115ShareWithBrowser(
       }))
       
       if (files.length === 1 && !files[0].is_dir) {
-        return {
-          share_id: shareId,
-          share_code: shareCode,
-          file_id: files[0].file_id,
-          file_name: files[0].file_name,
-          file_size: files[0].file_size,
-          is_dir: false,
-        }
+        return { share_id: shareId, share_code: shareCode, file_id: files[0].file_id, file_name: files[0].file_name, file_size: files[0].file_size, is_dir: false }
       }
       
       return {
-        share_id: shareId,
-        share_code: shareCode,
-        file_id: '0',
+        share_id: shareId, share_code: shareCode, file_id: '0',
         file_name: capturedData.shareName || files[0]?.file_name || '分享文件夹',
         file_size: files.reduce((sum, f) => sum + f.file_size, 0),
-        is_dir: true,
-        file_count: files.length,
-        files: files.slice(0, 50),
+        is_dir: true, file_count: files.length, files: files.slice(0, 50),
       }
     }
     
-    // 尝试等待文件列表元素出现
-    try {
-      await page.waitForSelector('[class*="file"], [class*="list"], [class*="item"]', { timeout: 10000 })
-      console.log('[浏览器模拟] 检测到文件列表元素')
-    } catch {
-      console.log('[浏览器模拟] 未检测到文件列表元素，继续尝试提取')
-    }
-
-    // 尝试提取文件信息
+    // 尝试从页面提取
     const fileInfo = await extractFileInfoFromPage(page, shareId, shareCode)
-    
-    if (fileInfo) {
-      return fileInfo
-    }
+    if (fileInfo) return fileInfo
 
-    // 如果没有提取到，等待更长时间后重试
-    console.log('[浏览器模拟] 第一次提取失败，等待后重试...')
-    await new Promise(resolve => setTimeout(resolve, 5000))
-    
+    await new Promise(resolve => setTimeout(resolve, 3000))
     const retryFileInfo = await extractFileInfoFromPage(page, shareId, shareCode)
-    
-    if (retryFileInfo) {
-      return retryFileInfo
-    }
-    
-    // 第三次尝试 - 获取页面标题
-    console.log('[浏览器模拟] 第二次提取失败，尝试从页面标题提取...')
+    if (retryFileInfo) return retryFileInfo
+
     const titleInfo = await extractFromTitle(page, shareId, shareCode)
-    if (titleInfo) {
-      return titleInfo
-    }
+    if (titleInfo) return titleInfo
 
     throw new Error('无法从页面提取文件信息')
 
   } catch (error) {
-    // 检查是否是浏览器不可用的错误
     const errorMessage = error instanceof Error ? error.message : String(error)
     console.error('[浏览器模拟] 访问失败:', errorMessage)
     
-    // 只有在浏览器相关的错误才抛出浏览器不可用提示
+    // 网络不可用，标记并抛出友好错误
+    if (errorMessage.includes('网络不可用') || errorMessage.includes('ERR_EMPTY_RESPONSE')) {
+      networkAvailable = false
+      throw new Error('浏览器模拟不可用。请配置115网盘账号，或在链接下方提供文件名以辅助识别')
+    }
+    
     if (errorMessage.includes('Could not find Chrome') || 
         errorMessage.includes('Executable doesn\'t exist') ||
         errorMessage.includes('Failed to launch the browser process')) {
