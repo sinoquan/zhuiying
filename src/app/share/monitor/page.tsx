@@ -33,12 +33,14 @@ import { Badge } from "@/components/ui/badge"
 import { 
   FolderOpen, Plus, MoreHorizontal, Edit, Trash2, 
   Loader2, ChevronRight, ChevronLeft, Home, X, Clock,
-  CheckCircle2, XCircle, AlertCircle
+  CheckCircle2, XCircle, AlertCircle, RefreshCw, Play, Search,
+  Activity, Share2, Send, Monitor
 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
@@ -114,6 +116,12 @@ const CRON_PRESETS = [
   { label: '自定义', value: 'custom' },
 ]
 
+const channelTypeLabels: Record<string, string> = {
+  telegram: 'TG',
+  qq: 'QQ',
+  wechat: '微信',
+}
+
 export default function FileMonitorPage() {
   const [monitors, setMonitors] = useState<FileMonitor[]>([])
   const [drives, setDrives] = useState<CloudDrive[]>([])
@@ -128,6 +136,13 @@ export default function FileMonitorPage() {
     push_template_type: "tv",
   })
   
+  // 删除确认弹窗
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [monitorToDelete, setMonitorToDelete] = useState<FileMonitor | null>(null)
+  
+  // 扫描状态
+  const [scanning, setScanning] = useState(false)
+  
   // 使用 ref 存储选择状态，避免 React Strict Mode 双重调用
   const selectedFoldersRef = useRef<{ path: string; name: string }[]>([])
   // 强制重新渲染
@@ -141,6 +156,7 @@ export default function FileMonitorPage() {
   const [browsingPath, setBrowsingPath] = useState("/")
   const [pathHistory, setPathHistory] = useState<{ path: string; name: string }[]>([{ path: "/", name: "根目录" }])
   const [loadingFiles, setLoadingFiles] = useState(false)
+  const [fileSearchQuery, setFileSearchQuery] = useState("")
   
   // cron预设选择
   const [cronPreset, setCronPreset] = useState("*/10 7-23 * * *")
@@ -166,6 +182,7 @@ export default function FileMonitorPage() {
   }, [formData.cloud_drive_id, dialogOpen, channels])
 
   const fetchData = async () => {
+    setLoading(true)
     try {
       const [monitorsRes, drivesRes, channelsRes] = await Promise.all([
         fetch("/api/share/monitor"),
@@ -206,6 +223,34 @@ export default function FileMonitorPage() {
       setBrowsingFiles([])
     } finally {
       setLoadingFiles(false)
+    }
+  }
+
+  // 手动触发扫描
+  const handleManualScan = async (monitorId?: number) => {
+    setScanning(true)
+    try {
+      const response = await fetch("/api/monitor/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ monitor_id: monitorId }),
+      })
+      const result = await response.json()
+      
+      if (response.ok) {
+        if (monitorId) {
+          toast.success(`扫描完成：分享 ${result.shared_files || 0} 个，推送 ${result.pushed_files || 0} 个`)
+        } else {
+          toast.success("全量扫描已触发")
+        }
+        fetchData()
+      } else {
+        throw new Error(result.error || "扫描失败")
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "扫描失败")
+    } finally {
+      setScanning(false)
     }
   }
 
@@ -283,11 +328,11 @@ export default function FileMonitorPage() {
     }
   }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("确定要删除这个监控任务吗？")) return
-
+  const handleDelete = async () => {
+    if (!monitorToDelete) return
+    
     try {
-      const response = await fetch(`/api/share/monitor/${id}`, {
+      const response = await fetch(`/api/share/monitor/${monitorToDelete.id}`, {
         method: "DELETE",
       })
       if (!response.ok) throw new Error("删除失败")
@@ -295,7 +340,15 @@ export default function FileMonitorPage() {
       fetchData()
     } catch {
       toast.error("删除失败")
+    } finally {
+      setDeleteDialogOpen(false)
+      setMonitorToDelete(null)
     }
+  }
+
+  const openDeleteDialog = (monitor: FileMonitor) => {
+    setMonitorToDelete(monitor)
+    setDeleteDialogOpen(true)
   }
 
   const resetForm = () => {
@@ -313,6 +366,7 @@ export default function FileMonitorPage() {
     forceUpdate(n => n + 1)
     setCronPreset("*/10 7-23 * * *")
     setCustomCron("")
+    setFileSearchQuery("")
   }
 
   const openEditDialog = (monitor: FileMonitor) => {
@@ -340,6 +394,7 @@ export default function FileMonitorPage() {
       const newPath = file.path || file.id
       setPathHistory([...pathHistory, { path: newPath, name: file.name }])
       fetchFiles(newPath)
+      setFileSearchQuery("")
     }
   }
 
@@ -426,7 +481,7 @@ export default function FileMonitorPage() {
 
   // 解析cron表达式显示人类可读的描述
   const getCronDescription = (cron?: string) => {
-    if (!cron) return '默认(工作时间每10分钟)'
+    if (!cron) return '默认'
     const preset = CRON_PRESETS.find(p => p.value === cron)
     if (preset) return preset.label
     return cron
@@ -437,64 +492,152 @@ export default function FileMonitorPage() {
     ? channels.filter(c => c.cloud_drive_id === parseInt(formData.cloud_drive_id))
     : []
 
-  const channelTypeLabels: Record<string, string> = {
-    telegram: 'Telegram',
-    qq: 'QQ',
-    wechat: '微信',
+  // 过滤文件列表
+  const filteredFiles = browsingFiles.filter(f => 
+    f.is_dir && (!fileSearchQuery || f.name.toLowerCase().includes(fileSearchQuery.toLowerCase()))
+  )
+
+  // 统计数据
+  const stats = {
+    total: monitors.length,
+    active: monitors.filter(m => m.enabled).length,
+    todayShared: monitors.reduce((sum, m) => sum + (m.scan_stats?.shared || 0), 0),
+    todayPushed: monitors.reduce((sum, m) => sum + (m.scan_stats?.pushed || 0), 0),
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">文件监控</h1>
-          <p className="text-muted-foreground mt-2">
-            监控指定目录，自动分享新文件（以创建时间为界，只推新文件）
-          </p>
-        </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          新建监控
-        </Button>
+    <div className="p-8 space-y-6">
+      {/* 统计卡片 */}
+      <div className="grid grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                <Monitor className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">监控任务</p>
+                <p className="text-2xl font-bold">{stats.total}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
+                <Activity className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">运行中</p>
+                <p className="text-2xl font-bold">{stats.active}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-orange-100 dark:bg-orange-900 rounded-lg">
+                <Share2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">已分享</p>
+                <p className="text-2xl font-bold">{stats.todayShared}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                <Send className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">已推送</p>
+                <p className="text-2xl font-bold">{stats.todayPushed}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
+      {/* 操作栏 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">文件监控</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            监控指定目录，自动分享新文件并推送
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => handleManualScan()}
+            disabled={scanning || stats.active === 0}
+          >
+            {scanning ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="mr-2 h-4 w-4" />
+            )}
+            全量扫描
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={fetchData}
+            disabled={loading}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            刷新
+          </Button>
+          <Button size="sm" onClick={openCreateDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            新建监控
+          </Button>
+        </div>
+      </div>
+
+      {/* 监控任务列表 */}
       <Card>
-        <CardHeader>
-          <CardTitle>监控任务列表</CardTitle>
-          <CardDescription>
-            {monitors.filter(m => m.enabled).length} 个活跃监控任务
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">加载中...</div>
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" />
+              加载中...
+            </div>
           ) : monitors.length === 0 ? (
-            <div className="text-center py-8">
+            <div className="text-center py-12">
               <FolderOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">暂无监控任务</p>
-              <Button className="mt-4" onClick={openCreateDialog}>
+              <p className="text-muted-foreground mb-4">暂无监控任务</p>
+              <Button size="sm" onClick={openCreateDialog}>
                 创建第一个监控
               </Button>
             </div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>网盘</TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[180px]">网盘</TableHead>
                   <TableHead>监控目录</TableHead>
-                  <TableHead>检测频率</TableHead>
-                  <TableHead>推送渠道</TableHead>
-                  <TableHead>内容类型</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>最近扫描</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
+                  <TableHead className="w-[120px]">检测频率</TableHead>
+                  <TableHead className="w-[160px]">推送渠道</TableHead>
+                  <TableHead className="w-[80px]">类型</TableHead>
+                  <TableHead className="w-[100px]">状态</TableHead>
+                  <TableHead className="w-[140px]">最近扫描</TableHead>
+                  <TableHead className="w-[60px] text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {monitors.map((monitor) => {
                   const scanStats = monitor.scan_stats
                   const lastScanTime = scanStats?.lastScan 
-                    ? new Date(scanStats.lastScan).toLocaleString("zh-CN")
+                    ? new Date(scanStats.lastScan).toLocaleString("zh-CN", { 
+                        month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' 
+                      })
                     : null
                   const scanStatus = scanStats?.lastScanStatus
                   
@@ -505,26 +648,26 @@ export default function FileMonitorPage() {
                           <img 
                             src={getDriveIcon(monitor.cloud_drives?.name || '')} 
                             alt={monitor.cloud_drives?.name}
-                            width={20}
-                            height={20}
+                            width={18}
+                            height={18}
                             className="rounded"
                           />
-                          <span className="font-medium">{getDriveName(monitor)}</span>
+                          <span className="font-medium text-sm">{getDriveName(monitor)}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm">
+                          <span className="font-medium text-sm truncate max-w-[200px]" title={monitor.path_name}>
                             {monitor.path_name || monitor.path.split('/').pop() || monitor.path}
                           </span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={monitor.path}>
                             {monitor.path}
                           </span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
                           {getCronDescription(monitor.cron_expression)}
                         </div>
                       </TableCell>
@@ -532,19 +675,21 @@ export default function FileMonitorPage() {
                         {monitor.push_channels_list && monitor.push_channels_list.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {monitor.push_channels_list.map(ch => (
-                              <div key={ch.id} className="flex items-center gap-1 px-1.5 py-0.5 bg-muted rounded text-xs">
+                              <Badge 
+                                key={ch.id} 
+                                variant="outline" 
+                                className="text-[10px] px-1.5 py-0 h-5 gap-1"
+                              >
                                 <Image 
                                   src={pushChannelIcons[ch.channel_type]?.icon || ''} 
                                   alt=""
-                                  width={12}
-                                  height={12}
-                                  className="rounded"
+                                  width={10}
+                                  height={10}
+                                  className="rounded-sm"
                                   unoptimized
                                 />
-                                <span className="truncate max-w-[60px]" title={ch.channel_name}>
-                                  {ch.channel_name}
-                                </span>
-                              </div>
+                                {channelTypeLabels[ch.channel_type]}
+                              </Badge>
                             ))}
                           </div>
                         ) : (
@@ -552,7 +697,7 @@ export default function FileMonitorPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="secondary" className="text-xs font-normal">
                           {monitor.push_template_type === 'movie' ? '🎬 电影' : '📺 剧集'}
                         </Badge>
                       </TableCell>
@@ -561,49 +706,58 @@ export default function FileMonitorPage() {
                           <Switch
                             checked={monitor.enabled}
                             onCheckedChange={() => handleToggle(monitor)}
+                            className="data-[state=checked]:bg-green-500"
                           />
-                          <Badge variant={monitor.enabled ? "default" : "secondary"}>
-                            {monitor.enabled ? "运行中" : "已暂停"}
-                          </Badge>
+                          <span className={`text-xs ${monitor.enabled ? 'text-green-600' : 'text-muted-foreground'}`}>
+                            {monitor.enabled ? "运行" : "暂停"}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        {scanStats ? (
-                          <div className="flex flex-col gap-1">
+                        {scanStats && lastScanTime ? (
+                          <div className="flex flex-col gap-0.5">
                             <div className="flex items-center gap-1 text-xs">
                               {scanStatus === 'success' ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                <CheckCircle2 className="h-3 w-3 text-green-500" />
                               ) : scanStatus === 'partial' ? (
-                                <AlertCircle className="h-3.5 w-3.5 text-yellow-500" />
+                                <AlertCircle className="h-3 w-3 text-yellow-500" />
                               ) : scanStatus === 'failed' ? (
-                                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                                <XCircle className="h-3 w-3 text-red-500" />
                               ) : (
-                                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                                <Clock className="h-3 w-3 text-muted-foreground" />
                               )}
-                              <span className="text-muted-foreground">{lastScanTime || '-'}</span>
+                              <span className="text-muted-foreground text-[10px]">{lastScanTime}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-xs">
+                            <div className="flex items-center gap-2 text-[10px]">
                               <span className="text-green-600">分享 {scanStats.shared}</span>
                               <span className="text-blue-600">推送 {scanStats.pushed}</span>
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">暂无扫描记录</span>
+                          <span className="text-xs text-muted-foreground">暂无记录</span>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem onClick={() => handleManualScan(monitor.id)} disabled={scanning}>
+                              <Play className="mr-2 h-4 w-4" />
+                              立即扫描
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openEditDialog(monitor)}>
                               <Edit className="mr-2 h-4 w-4" />
-                              编辑
+                              编辑配置
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDelete(monitor.id)} className="text-destructive">
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={() => openDeleteDialog(monitor)}
+                              className="text-destructive focus:text-destructive"
+                            >
                               <Trash2 className="mr-2 h-4 w-4" />
                               删除
                             </DropdownMenuItem>
@@ -621,13 +775,13 @@ export default function FileMonitorPage() {
 
       {/* 创建/编辑对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className={editingMonitor ? "max-w-xl" : "max-w-3xl"}>
           <DialogHeader>
             <DialogTitle>
               {editingMonitor ? "编辑监控任务" : "新建监控任务"}
             </DialogTitle>
             <DialogDescription>
-              选择网盘和要监控的目录，系统会自动分享新文件。支持多选目录。
+              {editingMonitor ? "修改监控配置" : "选择网盘和要监控的目录，系统会自动分享新文件"}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
@@ -638,12 +792,11 @@ export default function FileMonitorPage() {
                 <Select
                   value={formData.cloud_drive_id}
                   onValueChange={(value) => {
-                    // 获取该网盘的所有渠道并默认全选
                     const driveChannels = channels.filter(c => c.cloud_drive_id === parseInt(value))
                     setFormData({ 
                       ...formData, 
                       cloud_drive_id: value,
-                      push_channel_ids: driveChannels.map(c => c.id) // 默认全选
+                      push_channel_ids: driveChannels.map(c => c.id)
                     })
                     selectedFoldersRef.current = []
                     forceUpdate(n => n + 1)
@@ -697,17 +850,12 @@ export default function FileMonitorPage() {
                   </SelectContent>
                 </Select>
                 {cronPreset === 'custom' && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <Input
-                      value={customCron}
-                      onChange={(e) => setCustomCron(e.target.value)}
-                      placeholder="输入cron表达式，如: */10 7-23 * * *"
-                      className="flex-1"
-                    />
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      格式: 分 时 日 月 周
-                    </span>
-                  </div>
+                  <Input
+                    value={customCron}
+                    onChange={(e) => setCustomCron(e.target.value)}
+                    placeholder="输入cron表达式，如: */10 7-23 * * *"
+                    className="mt-1"
+                  />
                 )}
               </div>
               
@@ -721,7 +869,7 @@ export default function FileMonitorPage() {
                       variant="ghost" 
                       size="sm"
                       onClick={() => toggleAllChannels(formData.push_channel_ids.length !== currentDriveChannels.length)}
-                      className="text-xs h-7"
+                      className="text-xs h-6"
                     >
                       {formData.push_channel_ids.length === currentDriveChannels.length ? '取消全选' : '全选'}
                     </Button>
@@ -729,7 +877,7 @@ export default function FileMonitorPage() {
                 </div>
                 {formData.cloud_drive_id ? (
                   currentDriveChannels.length > 0 ? (
-                    <div className="grid grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
+                    <div className="grid grid-cols-3 gap-2 p-3 border rounded-lg bg-muted/30">
                       {Object.entries(
                         currentDriveChannels.reduce((acc, ch) => {
                           if (!acc[ch.channel_type]) acc[ch.channel_type] = []
@@ -737,29 +885,29 @@ export default function FileMonitorPage() {
                           return acc
                         }, {} as Record<string, PushChannel[]>)
                       ).map(([type, typeChannels]) => (
-                        <div key={type} className="space-y-2">
-                          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        <div key={type} className="space-y-1.5">
+                          <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                             <Image 
                               src={pushChannelIcons[type]?.icon || ''} 
                               alt=""
-                              width={14}
-                              height={14}
+                              width={12}
+                              height={12}
                               className="rounded"
                               unoptimized
                             />
-                            {channelTypeLabels[type] || type}
+                            {channelTypeLabels[type]}
                           </div>
                           {typeChannels.map(ch => (
                             <label 
                               key={ch.id} 
-                              className="flex items-center gap-2 p-2 rounded border bg-background cursor-pointer hover:bg-accent"
+                              className="flex items-center gap-2 p-2 rounded border bg-background cursor-pointer hover:bg-accent text-sm"
                             >
                               <Switch
                                 checked={formData.push_channel_ids.includes(ch.id)}
                                 onCheckedChange={() => toggleChannel(ch.id)}
                                 className="data-[state=checked]:bg-blue-500"
                               />
-                              <span className="text-sm truncate">{ch.channel_name}</span>
+                              <span className="truncate">{ch.channel_name}</span>
                             </label>
                           ))}
                         </div>
@@ -775,15 +923,12 @@ export default function FileMonitorPage() {
                     请先选择网盘
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  开启后将推送到对应的渠道，支持同时推送到多个渠道
-                </p>
               </div>
               
               {/* 内容类型 */}
               <div className="grid gap-2">
                 <Label>内容类型</Label>
-                <div className="flex gap-4 pt-2">
+                <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
@@ -812,92 +957,102 @@ export default function FileMonitorPage() {
                 </p>
               </div>
               
-              {/* 目录选择 */}
-              <div className="grid gap-2">
-                <Label>选择监控目录 *</Label>
-                {!formData.cloud_drive_id ? (
-                  <div className="text-sm text-muted-foreground p-4 border rounded-lg bg-muted/30">
-                    请先选择网盘
-                  </div>
-                ) : (
-                  <>
-                    {/* 已选择的目录 */}
-                    {selectedFoldersRef.current.length > 0 && (
-                      <div className="flex flex-wrap gap-2 p-2 border rounded-lg bg-muted/30 mb-2">
-                        {selectedFoldersRef.current.map((folder) => (
-                          <Badge 
-                            key={folder.path} 
-                            variant="secondary"
-                            className="flex items-center gap-1 pr-1"
-                          >
-                            <FolderOpen className="h-3 w-3 mr-1" />
-                            {folder.name}
-                            <button
-                              type="button"
-                              onClick={() => removeSelectedFolder(folder.path)}
-                              className="ml-1 hover:bg-muted rounded-full p-0.5"
+              {/* 目录选择 - 仅创建模式显示 */}
+              {!editingMonitor && (
+                <div className="grid gap-2">
+                  <Label>选择监控目录 *</Label>
+                  {!formData.cloud_drive_id ? (
+                    <div className="text-sm text-muted-foreground p-4 border rounded-lg bg-muted/30">
+                      请先选择网盘
+                    </div>
+                  ) : (
+                    <>
+                      {/* 已选择的目录 */}
+                      {selectedFoldersRef.current.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 p-2 border rounded-lg bg-muted/30 mb-2">
+                          {selectedFoldersRef.current.map((folder) => (
+                            <Badge 
+                              key={folder.path} 
+                              variant="secondary"
+                              className="flex items-center gap-1 pr-1"
                             >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* 文件浏览器 */}
-                    <div className="border rounded-lg overflow-hidden">
-                      {/* 面包屑导航 */}
-                      <div className="flex items-center gap-1 p-2 bg-muted/50 border-b text-sm overflow-x-auto">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={navigateBack}
-                          disabled={pathHistory.length <= 1}
-                          className="h-7 px-2"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={navigateToRoot}
-                          className="h-7 px-2"
-                        >
-                          <Home className="h-4 w-4" />
-                        </Button>
-                        {pathHistory.map((item, index) => (
-                          <div key={item.path + index} className="flex items-center">
-                            {index > 0 && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                            <button
-                              type="button"
-                              onClick={() => navigateToPath(index)}
-                              className={`px-1 py-0.5 rounded hover:bg-muted ${
-                                index === pathHistory.length - 1 ? 'font-medium' : 'text-muted-foreground'
-                              }`}
-                            >
-                              {item.name}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                              <FolderOpen className="h-3 w-3 mr-1" />
+                              {folder.name}
+                              <button
+                                type="button"
+                                onClick={() => removeSelectedFolder(folder.path)}
+                                className="ml-1 hover:bg-muted rounded-full p-0.5"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                       
-                      {/* 文件列表 */}
-                      <div className="max-h-60 overflow-y-auto">
-                        {loadingFiles ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      {/* 文件浏览器 */}
+                      <div className="border rounded-lg overflow-hidden">
+                        {/* 面包屑导航 + 搜索 */}
+                        <div className="flex items-center gap-2 p-2 bg-muted/50 border-b">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={navigateBack}
+                            disabled={pathHistory.length <= 1}
+                            className="h-6 px-2"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={navigateToRoot}
+                            className="h-6 px-2"
+                          >
+                            <Home className="h-4 w-4" />
+                          </Button>
+                          <div className="flex items-center gap-0.5 text-sm overflow-x-auto flex-1">
+                            {pathHistory.map((item, index) => (
+                              <div key={item.path + index} className="flex items-center">
+                                {index > 0 && <ChevronRight className="h-4 w-4 text-muted-foreground mx-0.5" />}
+                                <button
+                                  type="button"
+                                  onClick={() => navigateToPath(index)}
+                                  className={`px-1 py-0.5 rounded hover:bg-muted text-xs ${
+                                    index === pathHistory.length - 1 ? 'font-medium' : 'text-muted-foreground'
+                                  }`}
+                                >
+                                  {item.name}
+                                </button>
+                              </div>
+                            ))}
                           </div>
-                        ) : browsingFiles.filter(f => f.is_dir).length === 0 ? (
-                          <div className="text-center py-8 text-muted-foreground text-sm">
-                            当前目录没有子文件夹
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                            <Input
+                              value={fileSearchQuery}
+                              onChange={(e) => setFileSearchQuery(e.target.value)}
+                              placeholder="搜索文件夹"
+                              className="h-7 w-32 pl-6 text-xs"
+                            />
                           </div>
-                        ) : (
-                          <div className="divide-y">
-                            {browsingFiles
-                              .filter(f => f.is_dir)
-                              .map((file) => {
+                        </div>
+                        
+                        {/* 文件列表 */}
+                        <div className="max-h-80 overflow-y-auto">
+                          {loadingFiles ? (
+                            <div className="flex items-center justify-center py-8">
+                              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                            </div>
+                          ) : filteredFiles.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground text-sm">
+                              {fileSearchQuery ? '没有匹配的文件夹' : '当前目录没有子文件夹'}
+                            </div>
+                          ) : (
+                            <div className="divide-y">
+                              {filteredFiles.map((file) => {
                                 const folderPath = file.path || file.id
                                 const isSelected = selectedFoldersRef.current.some(f => f.path === folderPath)
                                 
@@ -919,32 +1074,55 @@ export default function FileMonitorPage() {
                                         </svg>
                                       )}
                                     </div>
-                                    <FolderOpen className="h-4 w-4 text-yellow-500" />
+                                    <FolderOpen className="h-4 w-4 text-yellow-500 flex-shrink-0" />
                                     <span className="text-sm truncate">{file.name}</span>
                                   </div>
                                 )
                               })}
-                          </div>
-                        )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      单击选择/取消，双击进入文件夹。支持多选。
-                    </p>
-                  </>
-                )}
-              </div>
+                      <p className="text-xs text-muted-foreground">
+                        单击选择/取消，双击进入文件夹。支持多选。
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 取消
               </Button>
-              <Button type="submit" disabled={!formData.cloud_drive_id || selectedFoldersRef.current.length === 0}>
+              <Button type="submit" disabled={!formData.cloud_drive_id || (!editingMonitor && selectedFoldersRef.current.length === 0)}>
                 {editingMonitor ? "保存" : "创建"}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认弹窗 */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>
+              确定要删除监控任务 <span className="font-medium">「{monitorToDelete?.path_name}」</span> 吗？
+              <br />
+              <span className="text-xs text-muted-foreground">此操作无法撤销</span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeleteDialogOpen(false)}>
+              取消
+            </Button>
+            <Button variant="destructive" size="sm" onClick={handleDelete}>
+              删除
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
