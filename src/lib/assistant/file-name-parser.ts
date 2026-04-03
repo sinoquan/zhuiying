@@ -45,6 +45,12 @@ export interface ParsedFileInfo {
   // 视频来源（WEB-DL, BluRay 等）
   source?: string
   
+  // HDR 格式（HDR, HDR10, Dolby Vision）
+  hdr_format?: string
+  
+  // 色深（10bit, 8bit）
+  bit_depth?: string
+  
   // TMDB ID（如果文件名中包含）
   tmdb_id?: number
   
@@ -177,6 +183,24 @@ export function parseFileName(fileName: string, fileSize?: number): ParsedFileIn
   if (sourceMatch) {
     result.source = sourceMatch[1].toUpperCase()
     cleanName = cleanName.replace(sourceMatch[0], '').trim()
+  }
+  
+  // 提取 HDR 格式
+  const hdrMatch = cleanName.match(/\b(HDR10\+|HDR10|HDR|Dolby\.?Vision|DV|DoVi|SDR)\b/i)
+  if (hdrMatch) {
+    let hdr = hdrMatch[1].toUpperCase()
+    if (hdr === 'DV' || hdr === 'DOVI' || hdr === 'DOLBYVISION') {
+      hdr = 'Dolby Vision'
+    }
+    result.hdr_format = hdr
+    cleanName = cleanName.replace(hdrMatch[0], '').trim()
+  }
+  
+  // 提取色深
+  const bitMatch = cleanName.match(/\b(\d+)bit\b/i)
+  if (bitMatch) {
+    result.bit_depth = bitMatch[1] + 'bit'
+    cleanName = cleanName.replace(bitMatch[0], '').trim()
   }
   
   // 提取年份

@@ -80,6 +80,9 @@ function buildTemplateData(
 ): Record<string, any> {
   const driveName = shareRecord.cloud_drives?.alias || shareRecord.cloud_drives?.name || '网盘'
   
+  // 从 tmdb_info 获取已存储的数据
+  const tmdbInfo = shareRecord.tmdb_info || {}
+  
   // 确定类型
   const contentType = tmdbData?.type || shareRecord.content_type || 'movie'
   const isTV = contentType === 'tv' || contentType === 'tv_series'
@@ -87,11 +90,10 @@ function buildTemplateData(
   // 计算进度条（电视剧）
   let progressBar = ''
   let progressPercent = ''
-  if (isTV && tmdbData?.total_episodes) {
-    const progress = calculateProgress(
-      tmdbData.episode || shareRecord.tmdb_info?.episode || 1,
-      tmdbData.total_episodes
-    )
+  if (isTV && (tmdbData?.total_episodes || tmdbInfo.totalEpisodes)) {
+    const total = tmdbData?.total_episodes || tmdbInfo.totalEpisodes || 1
+    const current = tmdbData?.episode || tmdbInfo.episode || tmdbInfo.season || 1
+    const progress = calculateProgress(current, total)
     progressBar = progress.bar
     progressPercent = progress.percent
   }
@@ -108,6 +110,21 @@ function buildTemplateData(
     const hours = Math.floor(tmdbData.runtime / 60)
     const mins = tmdbData.runtime % 60
     runtimeText = hours > 0 ? `${hours}小时${mins}分钟` : `${mins}分钟`
+  }
+  
+  // 构建质量信息字符串
+  const qualityParts: string[] = []
+  if (tmdbInfo.resolution) qualityParts.push(tmdbInfo.resolution)
+  if (tmdbInfo.hdr_format) qualityParts.push(tmdbInfo.hdr_format)
+  if (tmdbInfo.source) qualityParts.push(tmdbInfo.source)
+  if (tmdbInfo.video_codec) qualityParts.push(tmdbInfo.video_codec)
+  if (tmdbInfo.audio_codec) qualityParts.push(tmdbInfo.audio_codec)
+  const qualityText = qualityParts.join(' | ') || ''
+  
+  // 文件大小（排除无效值）
+  let fileSizeText = shareRecord.file_size || ''
+  if (fileSizeText === '0 B' || fileSizeText === '0' || fileSizeText === '未知') {
+    fileSizeText = ''
   }
   
   return {
@@ -132,8 +149,8 @@ function buildTemplateData(
     poster_url: posterCacheUrl || tmdbData?.poster_url || '',
     
     // 剧集信息
-    season: tmdbData?.season || shareRecord.tmdb_info?.season || 1,
-    episode: tmdbData?.episode || shareRecord.tmdb_info?.episode || 1,
+    season: tmdbInfo.season || tmdbData?.season || 1,
+    episode: tmdbInfo.episode || tmdbData?.episode || 1,
     total_episodes: tmdbData?.total_episodes || 1,
     progress_bar: progressBar,
     progress_percent: progressPercent,
@@ -144,9 +161,9 @@ function buildTemplateData(
     
     // 文件信息
     file_name: shareRecord.file_name,
-    file_size: shareRecord.file_size || '未知',
+    file_size: fileSizeText,
     file_count: shareRecord.file_count || 1,
-    quality: '', // TODO: 从文件名解析
+    quality: qualityText,
     
     // 分享链接
     share_url: shareRecord.share_url,
@@ -230,10 +247,14 @@ export async function POST(request: NextRequest) {
     
     console.log('[Push] 模板数据:', {
       title: templateData.title,
+      year: templateData.year,
       rating: templateData.rating,
       genres: templateData.genres,
       cast: templateData.cast?.substring(0, 30),
       has_poster: !!templateData.poster_url,
+      file_size: templateData.file_size,
+      quality: templateData.quality,
+      share_url: templateData.share_url,
     })
     
     // 5. 获取推送渠道
@@ -266,6 +287,8 @@ export async function POST(request: NextRequest) {
         // 渲染消息
         const platform = channelType === 'qq' ? 'qq' : channelType === 'dingtalk' ? 'dingtalk' : 'telegram'
         const content = renderTemplate(template, templateData, platform as 'telegram' | 'qq' | 'dingtalk')
+        
+        console.log('[Push] 渲染后的消息:', content.substring(0, 500))
         
         let success = false
         

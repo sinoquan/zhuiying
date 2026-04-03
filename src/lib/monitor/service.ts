@@ -506,11 +506,28 @@ export class FileMonitorService {
       
       // 构建TMDB信息，包含视频编码等
       const tmdbInfo = {
-        ...seriesInfo.contentInfo,
+        tmdbId: seriesInfo.contentInfo.tmdbId,
+        id: seriesInfo.contentInfo.tmdbId,
+        title: seriesInfo.contentInfo.title,
+        year: seriesInfo.contentInfo.year,
+        type: seriesInfo.contentInfo.type,
+        season: seriesInfo.contentInfo.season,
+        episode: seriesInfo.contentInfo.episode,
+        rating: seriesInfo.contentInfo.rating,
+        genres: seriesInfo.contentInfo.genres,
+        overview: seriesInfo.contentInfo.overview,
+        poster_url: seriesInfo.contentInfo.poster_url,
+        cast: seriesInfo.contentInfo.cast,
+        status: seriesInfo.contentInfo.status,
+        totalEpisodes: seriesInfo.contentInfo.totalEpisodes,
+        runtime: seriesInfo.contentInfo.runtime,
+        // 视频质量参数
         resolution: parsedInfo?.resolution,
+        source: parsedInfo?.source,
         video_codec: parsedInfo?.video_codec,
         audio_codec: parsedInfo?.audio_codec,
-        source: parsedInfo?.source,
+        hdr_format: parsedInfo?.hdr_format,
+        bit_depth: parsedInfo?.bit_depth,
         quality_type: parsedInfo?.quality_type || 'normal',
       }
       
@@ -530,23 +547,7 @@ export class FileMonitorService {
           content_type: seriesInfo.contentInfo.type,
           tmdb_id: seriesInfo.contentInfo.tmdbId,
           tmdb_title: seriesInfo.contentInfo.title,
-          tmdb_info: {
-            tmdbId: seriesInfo.contentInfo.tmdbId,
-            id: seriesInfo.contentInfo.tmdbId,
-            title: seriesInfo.contentInfo.title,
-            year: seriesInfo.contentInfo.year,
-            type: seriesInfo.contentInfo.type,
-            season: seriesInfo.contentInfo.season,
-            episode: seriesInfo.contentInfo.episode,
-            rating: seriesInfo.contentInfo.rating,
-            genres: seriesInfo.contentInfo.genres,
-            overview: seriesInfo.contentInfo.overview,
-            poster_url: seriesInfo.contentInfo.poster_url,
-            cast: seriesInfo.contentInfo.cast,
-            status: seriesInfo.contentInfo.status,
-            totalEpisodes: seriesInfo.contentInfo.totalEpisodes,
-            runtime: seriesInfo.contentInfo.runtime,
-          },
+          tmdb_info: tmdbInfo,
           source: 'monitor',
         })
         .select(`
