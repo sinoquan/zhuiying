@@ -501,6 +501,9 @@ export class FileMonitorService {
       // 创建分享
       const shareInfo = await driveService.createShare([file.id])
       
+      // 使用 shareInfo 的总大小，如果 file.size 为 0
+      const fileSize = file.size || shareInfo.total_size || 0
+      
       // 构建TMDB信息，包含视频编码等
       const tmdbInfo = {
         ...seriesInfo.contentInfo,
@@ -519,7 +522,7 @@ export class FileMonitorService {
           monitor_id: monitor.id,
           file_path: file.path,
           file_name: file.name,
-          file_size: this.formatFileSize(file.size),
+          file_size: this.formatFileSize(fileSize),
           share_url: shareInfo.share_url,
           share_code: shareInfo.share_code,
           share_status: 'active',

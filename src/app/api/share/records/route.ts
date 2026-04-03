@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
         const shareIds = data.map((r: { id: number }) => r.id)
         const { data: pushRecords } = await client
           .from('push_records')
-          .select('share_record_id, push_status, push_channels(channel_name, channel_type)')
+          .select('share_record_id, push_status, push_channel_id, push_channels(id, channel_name, channel_type)')
           .in('share_record_id', shareIds)
         
         // 按分享ID分组推送记录

@@ -85,7 +85,9 @@ const CONTENT_TYPE_CONFIG: Record<string, { label: string; icon: typeof File; co
 interface PushInfo {
   share_record_id: number
   push_status: string
+  push_channel_id: number
   push_channels: {
+    id: number
     channel_name: string
     channel_type: string
   }
@@ -399,38 +401,13 @@ export default function ShareRecordsPage() {
     
     setPushing(true)
     try {
-      // 从 tmdb_info 中提取信息
-      const tmdbInfo = selectedRecord.tmdb_info
-      const tmdbId = tmdbInfo?.tmdbId || tmdbInfo?.id || selectedRecord.tmdb_id
-      
+      // 直接传递分享记录ID，让API获取完整数据
       const response = await fetch("/api/assistant/push", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          link: {
-            type: selectedRecord.cloud_drives?.name,
-            shareUrl: selectedRecord.share_url,
-            shareCode: selectedRecord.share_code,
-          },
-          file: {
-            name: selectedRecord.tmdb_title || selectedRecord.file_name,
-            type: selectedRecord.content_type || 'unknown',
-          },
-          tmdb: tmdbId ? {
-            id: typeof tmdbId === 'string' ? parseInt(tmdbId, 10) : tmdbId,
-            title: tmdbInfo?.title || selectedRecord.tmdb_title || selectedRecord.file_name,
-            year: tmdbInfo?.year?.toString(),
-            poster_path: tmdbInfo?.poster_url,
-            rating: tmdbInfo?.rating,
-            genres: tmdbInfo?.genres,
-            cast: tmdbInfo?.cast,
-            overview: tmdbInfo?.overview,
-          } : undefined,
+          share_record_id: selectedRecord.id,
           channels: Array.from(selectedChannels),
-          edit: {
-            title: selectedRecord.tmdb_title || selectedRecord.file_name,
-            note: selectedRecord.remark || '',
-          },
         }),
       })
       
@@ -464,24 +441,15 @@ export default function ShareRecordsPage() {
     try {
       // 重试所有失败的推送
       for (const push of failedPushes) {
+        const channelId = push.push_channel_id || push.push_channels?.id
+        if (!channelId) continue
+        
         const response = await fetch("/api/assistant/push", {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            link: {
-              type: record.cloud_drives?.name,
-              shareUrl: record.share_url,
-              shareCode: record.share_code,
-            },
-            file: {
-              name: record.tmdb_title || record.file_name,
-              type: record.content_type || 'unknown',
-            },
-            channels: [push.push_channels?.channel_name], // 这里需要channel id
-            edit: {
-              title: record.tmdb_title || record.file_name,
-              note: record.remark || '',
-            },
+            share_record_id: record.id,
+            channels: [channelId],
           }),
         })
         
@@ -675,27 +643,14 @@ export default function ShareRecordsPage() {
     
     setPushing(true)
     try {
-      const selectedRecords = records.filter(r => selectedIds.has(r.id))
       const results = await Promise.all(
-        selectedRecords.map(record =>
+        Array.from(selectedIds).map(id =>
           fetch("/api/assistant/push", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              link: {
-                type: record.cloud_drives?.name,
-                shareUrl: record.share_url,
-                shareCode: record.share_code,
-              },
-              file: {
-                name: record.tmdb_title || record.file_name,
-                type: record.content_type || 'unknown',
-              },
+              share_record_id: id,
               channels: Array.from(selectedChannels),
-              edit: {
-                title: record.tmdb_title || record.file_name,
-                note: record.remark || '',
-              },
             }),
           })
         )
