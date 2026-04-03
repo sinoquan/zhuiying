@@ -33,7 +33,7 @@ import {
   FileText, Copy, Trash2, 
   Send, RefreshCw, Search, ChevronLeft, ChevronRight, Bot, Eye, 
   Hand, Clock, CheckCircle2, XCircle, AlertCircle, Loader2,
-  Film, Tv, File, Check, Square, RotateCcw, AlertTriangle, HelpCircle
+  Film, Tv, File, Folder, Check, Square, RotateCcw, AlertTriangle, HelpCircle
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
@@ -77,9 +77,11 @@ const CONTENT_TYPE_CONFIG: Record<string, { label: string; icon: typeof File; co
   image: { label: '图片', icon: File, color: 'text-blue-500' },
   document: { label: '文档', icon: FileText, color: 'text-yellow-500' },
   archive: { label: '压缩包', icon: File, color: 'text-orange-500' },
-  folder: { label: '文件夹', icon: File, color: 'text-amber-500' },
+  folder: { label: '文件夹', icon: Folder, color: 'text-amber-500' },
   other: { label: '其他', icon: File, color: 'text-gray-500' },
   unknown: { label: '未知', icon: File, color: 'text-gray-500' },
+  // 兼容旧数据
+  '': { label: '未知', icon: File, color: 'text-gray-500' },
 }
 
 interface PushInfo {
@@ -468,8 +470,12 @@ export default function ShareRecordsPage() {
   }
 
   // 格式化文件大小
-  const formatFileSize = (size: string | null | undefined) => {
+  const formatFileSize = (size: string | null | undefined, contentType?: string) => {
     if (!size) return '-'
+    
+    // 如果是文件夹类型，直接显示 "-"
+    if (contentType === 'folder') return '-'
+    
     const bytes = parseInt(size)
     if (isNaN(bytes) || bytes <= 0) return '-'
     
@@ -870,9 +876,10 @@ export default function ShareRecordsPage() {
                           <span className="font-medium text-sm truncate" title={record.file_name}>
                             {record.tmdb_title || record.file_name}
                           </span>
-                          {record.tmdb_title && record.tmdb_title !== record.file_name && (
-                            <span className="text-xs text-muted-foreground truncate" title={record.file_name}>
-                              {record.file_name}
+                          {/* 只有当有 TMDB 信息且是剧集时显示季集信息 */}
+                          {record.tmdb_info?.season && record.tmdb_info?.episode && (
+                            <span className="text-xs text-muted-foreground">
+                              S{String(record.tmdb_info.season).padStart(2, '0')}E{String(record.tmdb_info.episode).padStart(2, '0')}
                             </span>
                           )}
                         </div>
@@ -962,7 +969,7 @@ export default function ShareRecordsPage() {
                         {getContentTypeBadge(record.content_type)}
                       </TableCell>
                       <TableCell className="text-sm text-center">
-                        {formatFileSize(record.file_size)}
+                        {formatFileSize(record.file_size, record.content_type)}
                       </TableCell>
                       <TableCell className="text-sm text-center">
                         {formatExpireAt(record.expire_at)}
