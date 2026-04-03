@@ -214,6 +214,10 @@ export async function POST(request: NextRequest) {
               console.error('TMDB搜索失败:', error)
             }
           }
+          
+          // 成功识别后清除警告，设置为成功
+          result.warning = undefined
+          result.success = true
         } else {
           // 没有文件名时，提供更明确的提示
           // 针对115网盘提供特殊提示
@@ -253,6 +257,10 @@ export async function POST(request: NextRequest) {
             console.error('TMDB搜索失败:', err)
           }
         }
+        
+        // 成功识别后清除警告，设置为成功
+        result.warning = undefined
+        result.success = true
       } else {
         // 没有文件名时，提供更明确的提示
         result.warning = `无法访问分享链接获取文件信息。请在链接下方添加文件名以辅助识别，例如：\n\n${parseResult.originalUrl}\n剧名.S01E01.1080p.mp4`
