@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { bot_token, chat_id, message } = body
+    const { bot_token, chat_id, message, photo, caption } = body
     
     if (!bot_token || !chat_id) {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 })
@@ -169,18 +169,28 @@ export async function POST(request: NextRequest) {
     
     proxyUrl = proxySetting?.setting_value as string | undefined
     
-    // 发送测试消息
-    await callTelegramAPI(bot_token, 'sendMessage', {
-      chat_id,
-      text: message || '🤖 追影系统测试消息 - 频道连接成功！',
-      parse_mode: 'HTML',
-    }, proxyUrl)
+    // 如果有图片，发送图片消息
+    if (photo) {
+      await callTelegramAPI(bot_token, 'sendPhoto', {
+        chat_id,
+        photo,
+        caption: caption || message || '🤖 追影系统测试消息',
+        parse_mode: 'HTML',
+      }, proxyUrl)
+    } else {
+      // 发送文本消息
+      await callTelegramAPI(bot_token, 'sendMessage', {
+        chat_id,
+        text: message || '🤖 追影系统测试消息 - 频道连接成功！',
+        parse_mode: 'HTML',
+      }, proxyUrl)
+    }
     
-    return NextResponse.json({ success: true, message: '测试消息发送成功' })
+    return NextResponse.json({ success: true, message: '消息发送成功' })
   } catch (error) {
-    console.error('发送测试消息失败:', error)
+    console.error('发送消息失败:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : '发送测试消息失败' },
+      { error: error instanceof Error ? error.message : '发送消息失败' },
       { status: 500 }
     )
   }
