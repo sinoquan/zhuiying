@@ -45,8 +45,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
-import { getDriveIcon, pushChannelIcons } from "@/lib/icons"
-import Image from "next/image"
+import { getDriveIcon, getPushChannelIcon } from "@/lib/icons"
 
 interface ScanStats {
   shared: number
@@ -786,13 +785,9 @@ export default function FileMonitorPage() {
                     <TableRow key={monitor.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <img 
-                            src={getDriveIcon(monitor.cloud_drives?.name || '')} 
-                            alt={monitor.cloud_drives?.name}
-                            width={18}
-                            height={18}
-                            className="rounded"
-                          />
+                          <span className="w-4.5 h-4.5 flex items-center justify-center">
+                            {getDriveIcon(monitor.cloud_drives?.name || '')}
+                          </span>
                           <span className="font-medium text-sm">{getDriveName(monitor)}</span>
                         </div>
                       </TableCell>
@@ -822,14 +817,9 @@ export default function FileMonitorPage() {
                                 className="text-[10px] px-1.5 py-0 h-5 gap-1"
                                 title={ch.channel_name}
                               >
-                                <Image 
-                                  src={pushChannelIcons[ch.channel_type]?.icon || ''} 
-                                  alt=""
-                                  width={10}
-                                  height={10}
-                                  className="rounded-sm"
-                                  unoptimized
-                                />
+                                <span className="w-2.5 h-2.5 flex items-center justify-center">
+                                  {getPushChannelIcon(ch.channel_type)}
+                                </span>
                                 {channelTypeLabels[ch.channel_type]}
                               </Badge>
                             ))}
@@ -977,13 +967,9 @@ export default function FileMonitorPage() {
                     {drives.map((drive) => (
                       <SelectItem key={drive.id} value={drive.id.toString()}>
                         <div className="flex items-center gap-2">
-                          <img 
-                            src={getDriveIcon(drive.name)} 
-                            alt={drive.name}
-                            width={16}
-                            height={16}
-                            className="rounded"
-                          />
+                          <span className="w-4 h-4 flex items-center justify-center">
+                            {getDriveIcon(drive.name)}
+                          </span>
                           {getDriveLabel(drive)}
                         </div>
                       </SelectItem>
@@ -1053,14 +1039,9 @@ export default function FileMonitorPage() {
                       ).map(([type, typeChannels]) => (
                         <div key={type} className="space-y-1.5">
                           <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                            <Image 
-                              src={pushChannelIcons[type]?.icon || ''} 
-                              alt=""
-                              width={12}
-                              height={12}
-                              className="rounded"
-                              unoptimized
-                            />
+                            <span className="w-3 h-3 flex items-center justify-center">
+                              {getPushChannelIcon(type)}
+                            </span>
                             {channelTypeLabels[type]}
                           </div>
                           {typeChannels.map(ch => (

@@ -32,7 +32,7 @@ import {
   Phone
 } from "lucide-react"
 import { toast } from "sonner"
-import { driveTypeOptions } from "@/lib/icons"
+import { driveTypeOptions, getDriveIcon } from "@/lib/icons"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -486,14 +486,9 @@ export default function CloudDrivesPage() {
                     {/* 网盘图标 */}
                     <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       {driveType && (
-                        <Image 
-                          src={driveType.icon} 
-                          alt={driveType.label}
-                          width={40}
-                          height={40}
-                          className="w-10 h-10 object-contain"
-                          unoptimized
-                        />
+                        <span className="w-10 h-10 flex items-center justify-center">
+                          {getDriveIcon(drive.name)}
+                        </span>
                       )}
                     </div>
                     
@@ -628,14 +623,9 @@ export default function CloudDrivesPage() {
                       : 'hover:bg-muted/50 hover:border-primary/50'
                   }`}
                 >
-                  <Image 
-                    src={type.icon} 
-                    alt={type.label}
-                    width={36}
-                    height={36}
-                    className="w-9 h-9 object-contain flex-shrink-0"
-                    unoptimized
-                  />
+                  <span className="w-9 h-9 flex items-center justify-center flex-shrink-0">
+                    {getDriveIcon(type.value)}
+                  </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm">{type.label}</div>
                     {isAdded && (

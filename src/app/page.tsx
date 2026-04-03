@@ -315,14 +315,9 @@ export default function DashboardPage() {
                   return (
                     <div key={drive.id} className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
-                        <Image 
-                          src={getDriveIcon(drive.name)} 
-                          alt={drive.alias}
-                          width={32}
-                          height={32}
-                          className="w-8 h-8 object-contain"
-                          unoptimized
-                        />
+                        <span className="w-8 h-8 flex items-center justify-center">
+                          {getDriveIcon(drive.name)}
+                        </span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
@@ -427,14 +422,9 @@ export default function DashboardPage() {
                       className={`flex items-center gap-3 p-3 rounded-lg border ${isUrgent ? 'border-red-300 bg-red-50 dark:bg-red-950/20' : 'border-amber-200 bg-amber-50 dark:bg-amber-950/20'}`}
                     >
                       <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
-                        <Image 
-                          src={getDriveIcon(share.cloud_drives?.name || '')} 
-                          alt={share.cloud_drives?.alias || ''}
-                          width={28}
-                          height={28}
-                          className="w-7 h-7 object-contain"
-                          unoptimized
-                        />
+                        <span className="w-7 h-7 flex items-center justify-center">
+                          {getDriveIcon(share.cloud_drives?.name || '')}
+                        </span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate" title={share.file_name}>

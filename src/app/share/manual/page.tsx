@@ -511,11 +511,9 @@ export default function ManualSharePage() {
                     {drives.map((drive) => (
                       <SelectItem key={drive.id} value={drive.id.toString()}>
                         <div className="flex items-center gap-2">
-                          <img 
-                            src={getCloudDriveIcon(drive.name)} 
-                            alt={drive.name}
-                            className="w-4 h-4 rounded"
-                          />
+                          <span className="w-4 h-4 flex items-center justify-center">
+                            {getCloudDriveIcon(drive.name)}
+                          </span>
                           <span>{CLOUD_DRIVE_NAMES[drive.name] || drive.name}：{drive.alias || drive.name}</span>
                         </div>
                       </SelectItem>

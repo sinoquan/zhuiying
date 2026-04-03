@@ -35,7 +35,6 @@ import {
   Plus, MoreHorizontal, Edit, Trash2, Send, RefreshCw, Loader2, 
   Bot, CheckCircle2, ExternalLink, TestTube, Settings, Users, Hash, XCircle
 } from "lucide-react"
-import Image from "next/image"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -513,15 +512,15 @@ export default function PushChannelsPage() {
       <Tabs defaultValue="telegram" className="mb-8">
         <TabsList className="inline-flex h-10 items-center justify-center rounded-full bg-muted p-1 text-muted-foreground">
           <TabsTrigger value="telegram" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
-            <Image src={getPushChannelIcon('telegram')} alt="Telegram" width={18} height={18} unoptimized />
+            {getPushChannelIcon('telegram')}
             Telegram
           </TabsTrigger>
           <TabsTrigger value="qq" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
-            <Image src={getPushChannelIcon('qq')} alt="QQ" width={18} height={18} unoptimized />
+            {getPushChannelIcon('qq')}
             QQ
           </TabsTrigger>
           <TabsTrigger value="wechat" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
-            <Image src={getPushChannelIcon('wechat')} alt="微信" width={18} height={18} unoptimized />
+            {getPushChannelIcon('wechat')}
             微信
           </TabsTrigger>
         </TabsList>
@@ -780,7 +779,7 @@ export default function PushChannelsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Image src={getPushChannelIcon('qq')} alt="QQ" width={24} height={24} unoptimized />
+                {getPushChannelIcon('qq')}
                 QQ 推送配置
               </CardTitle>
               <CardDescription>
@@ -814,7 +813,7 @@ export default function PushChannelsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Image src={getPushChannelIcon('wechat')} alt="微信" width={24} height={24} unoptimized />
+                {getPushChannelIcon('wechat')}
                 微信推送配置
               </CardTitle>
               <CardDescription>
@@ -865,15 +864,8 @@ export default function PushChannelsPage() {
             <div className="text-center py-8 text-muted-foreground">加载中...</div>
           ) : channels.length === 0 ? (
             <div className="text-center py-8">
-              <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                <Image 
-                  src={getPushChannelIcon('telegram')} 
-                  alt="推送渠道"
-                  width={64}
-                  height={64}
-                  className="w-16 h-16 object-contain opacity-50"
-                  unoptimized
-                />
+              <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center opacity-50">
+                {getPushChannelIcon('telegram')}
               </div>
               <p className="text-muted-foreground">暂无推送绑定</p>
               <p className="text-sm text-muted-foreground mt-2 mb-4">
@@ -899,14 +891,9 @@ export default function PushChannelsPage() {
                   <TableRow key={channel.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Image 
-                          src={getDriveIcon(channel.cloud_drives?.name || '')} 
-                          alt=""
-                          width={24}
-                          height={24}
-                          className="w-6 h-6 object-contain"
-                          unoptimized
-                        />
+                        <span className="w-6 h-6 flex items-center justify-center">
+                          {getDriveIcon(channel.cloud_drives?.name || '')}
+                        </span>
                         <span className="font-medium">{getDriveDisplayName(channel.cloud_drives)}</span>
                       </div>
                     </TableCell>
@@ -922,14 +909,9 @@ export default function PushChannelsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Image 
-                          src={getPushChannelIcon(channel.channel_type)} 
-                          alt={channel.channel_type}
-                          width={20}
-                          height={20}
-                          className="w-5 h-5 object-contain"
-                          unoptimized
-                        />
+                        <span className="w-5 h-5 flex items-center justify-center">
+                          {getPushChannelIcon(channel.channel_type)}
+                        </span>
                         <Badge variant="outline">{getPushChannelName(channel.channel_type)}</Badge>
                       </div>
                     </TableCell>
@@ -1015,14 +997,9 @@ export default function PushChannelsPage() {
                     {cloudDrives.map((drive) => (
                       <SelectItem key={drive.id} value={drive.id.toString()}>
                         <div className="flex items-center gap-2">
-                          <Image 
-                            src={getDriveIcon(drive.name)} 
-                            alt=""
-                            width={20}
-                            height={20}
-                            className="w-5 h-5 object-contain"
-                            unoptimized
-                          />
+                          <span className="w-5 h-5 flex items-center justify-center">
+                            {getDriveIcon(drive.name)}
+                          </span>
                           {drive.alias || drive.name}
                         </div>
                       </SelectItem>
@@ -1046,14 +1023,9 @@ export default function PushChannelsPage() {
                     {pushChannelTypeOptions.map((type) => (
                       <SelectItem key={type.value} value={type.value}>
                         <div className="flex items-center gap-2">
-                          <Image 
-                            src={type.icon} 
-                            alt={type.label}
-                            width={20}
-                            height={20}
-                            className="w-5 h-5 object-contain"
-                            unoptimized
-                          />
+                          <span className="w-5 h-5 flex items-center justify-center">
+                            {getPushChannelIcon(type.value)}
+                          </span>
                           {type.label}
                         </div>
                       </SelectItem>

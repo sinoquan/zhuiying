@@ -50,7 +50,6 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
-import Image from "next/image"
 
 // 状态配置 - 状态驱动
 const STATUS_CONFIG = {
@@ -705,14 +704,9 @@ export default function PushRecordsPage() {
                   {channels.map(channel => (
                     <SelectItem key={channel.id} value={String(channel.id)}>
                       <div className="flex items-center gap-2">
-                        <Image 
-                          src={getPushChannelIcon(channel.channel_type)} 
-                          alt={channel.channel_type}
-                          width={16}
-                          height={16}
-                          className="rounded"
-                          unoptimized
-                        />
+                        <span className="w-4 h-4 flex items-center justify-center">
+                          {getPushChannelIcon(channel.channel_type)}
+                        </span>
                         {channel.channel_name}
                       </div>
                     </SelectItem>
@@ -820,14 +814,9 @@ export default function PushRecordsPage() {
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                   {share.cloud_drives && (
                                     <>
-                                      <Image 
-                                        src={getCloudDriveIcon(share.cloud_drives.name)} 
-                                        alt={share.cloud_drives.name}
-                                        width={14}
-                                        height={14}
-                                        className="rounded"
-                                        unoptimized
-                                      />
+                                      <span className="w-3.5 h-3.5 flex items-center justify-center">
+                                        {getCloudDriveIcon(share.cloud_drives.name)}
+                                      </span>
                                       <span>{share.cloud_drives.alias || share.cloud_drives.name}</span>
                                     </>
                                   )}
@@ -848,14 +837,9 @@ export default function PushRecordsPage() {
                           <TableCell>
                             {channel ? (
                               <div className="flex items-center gap-2">
-                                <Image 
-                                  src={getPushChannelIcon(channel.channel_type)} 
-                                  alt={channel.channel_type}
-                                  width={18}
-                                  height={18}
-                                  className="rounded"
-                                  unoptimized
-                                />
+                                <span className="w-4.5 h-4.5 flex items-center justify-center">
+                                  {getPushChannelIcon(channel.channel_type)}
+                                </span>
                                 <span className="truncate">{channel.channel_name}</span>
                               </div>
                             ) : (
@@ -1108,14 +1092,9 @@ export default function PushRecordsPage() {
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   {selectedRecord.share_records?.cloud_drives && (
                     <div className="flex items-center gap-1">
-                      <Image 
-                        src={getCloudDriveIcon(selectedRecord.share_records.cloud_drives.name)} 
-                        alt=""
-                        width={14}
-                        height={14}
-                        className="rounded"
-                        unoptimized
-                      />
+                      <span className="w-3.5 h-3.5 flex items-center justify-center">
+                        {getCloudDriveIcon(selectedRecord.share_records.cloud_drives.name)}
+                      </span>
                       {selectedRecord.share_records.cloud_drives.alias}
                     </div>
                   )}
@@ -1132,14 +1111,9 @@ export default function PushRecordsPage() {
                   <div className="flex items-center gap-1">
                     {selectedRecord.push_channels && (
                       <>
-                        <Image 
-                          src={getPushChannelIcon(selectedRecord.push_channels.channel_type)} 
-                          alt=""
-                          width={16}
-                          height={16}
-                          className="rounded"
-                          unoptimized
-                        />
+                        <span className="w-4 h-4 flex items-center justify-center">
+                          {getPushChannelIcon(selectedRecord.push_channels.channel_type)}
+                        </span>
                         {selectedRecord.push_channels.channel_name}
                       </>
                     )}
@@ -1278,14 +1252,9 @@ export default function PushRecordsPage() {
                     {channels.map(channel => (
                       <SelectItem key={channel.id} value={String(channel.id)}>
                         <div className="flex items-center gap-2">
-                          <Image 
-                            src={getPushChannelIcon(channel.channel_type)} 
-                            alt={channel.channel_type}
-                            width={16}
-                            height={16}
-                            className="rounded"
-                            unoptimized
-                          />
+                          <span className="w-4 h-4 flex items-center justify-center">
+                            {getPushChannelIcon(channel.channel_type)}
+                          </span>
                           {channel.channel_name}
                         </div>
                       </SelectItem>
@@ -1388,14 +1357,9 @@ export default function PushRecordsPage() {
                     {channels.map(channel => (
                       <SelectItem key={channel.id} value={String(channel.id)}>
                         <div className="flex items-center gap-2">
-                          <Image 
-                            src={getPushChannelIcon(channel.channel_type)} 
-                            alt={channel.channel_type}
-                            width={16}
-                            height={16}
-                            className="rounded"
-                            unoptimized
-                          />
+                          <span className="w-4 h-4 flex items-center justify-center">
+                            {getPushChannelIcon(channel.channel_type)}
+                          </span>
                           {channel.channel_name}
                         </div>
                       </SelectItem>

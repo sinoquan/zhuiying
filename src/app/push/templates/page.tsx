@@ -60,7 +60,7 @@ import {
   PushTemplate 
 } from "@/lib/push/types"
 import { renderTemplate, getPreviewData } from "@/lib/push/template-renderer"
-import { pushChannelIcons } from "@/lib/icons"
+import { getPushChannelIcon, getPushChannelName } from "@/lib/icons"
 
 // 扩展模板类型，支持预设标记
 interface DisplayTemplate extends PushTemplate {
@@ -73,17 +73,13 @@ interface DisplayTemplate extends PushTemplate {
 
 // 渠道图标组件
 function ChannelIcon({ type, size = 16 }: { type: PushChannelType; size?: number }) {
-  const iconData = pushChannelIcons[type]
-  if (!iconData) return null
   return (
-    <img 
-      src={iconData.icon} 
-      alt={iconData.name}
-      width={size}
-      height={size}
-      className="inline-block"
-      style={{ borderRadius: 2 }}
-    />
+    <span 
+      className="inline-block" 
+      style={{ width: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      {getPushChannelIcon(type)}
+    </span>
   )
 }
 
@@ -385,7 +381,7 @@ export default function PushTemplatesPage() {
   }
 
   const getChannelLabel = (type: PushChannelType) => {
-    return pushChannelIcons[type]?.name || type
+    return getPushChannelName(type)
   }
 
   // 获取当前渠道支持的变量
