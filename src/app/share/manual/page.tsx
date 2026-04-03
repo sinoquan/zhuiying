@@ -134,8 +134,13 @@ export default function ManualSharePage() {
   const [sharing, setSharing] = useState(false)
   const [pathHistory, setPathHistory] = useState<{ path: string; name: string }[]>([{ path: "/", name: "根目录" }])
   const [shareResult, setShareResult] = useState<{
-    share_url: string
-    share_code: string
+    success_count: number
+    total: number
+    results: Array<{
+      file_name: string
+      share_url: string
+      share_code: string
+    }>
   } | null>(null)
   const [expireDays, setExpireDays] = useState<number>(0) // 默认永久
   
@@ -404,6 +409,7 @@ export default function ManualSharePage() {
     }
 
     setSharing(true)
+    setShareResult(null)
     try {
       // 获取选中文件的详细信息
       const selectedFilesList = files.filter(f => currentSelection.has(f.id))
@@ -444,10 +450,16 @@ export default function ManualSharePage() {
       if (data.error) throw new Error(data.error)
 
       setShareResult({
-        share_url: data.share_url,
-        share_code: data.share_code,
+        success_count: data.success_count,
+        total: data.total,
+        results: data.results,
       })
-      toast.success("分享成功")
+      
+      if (data.success_count === data.total) {
+        toast.success(`分享成功，已创建 ${data.success_count} 个分享链接`)
+      } else {
+        toast.warning(`成功分享 ${data.success_count}/${data.total} 个文件`)
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "分享失败")
     } finally {
@@ -830,73 +842,76 @@ export default function ManualSharePage() {
               {/* 分享结果 */}
               {shareResult && (
                 <div className="mt-4 p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                  <div className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
-                    分享成功
+                  <div className="text-sm font-medium text-green-800 dark:text-green-200 mb-3">
+                    分享成功 ({shareResult.success_count}/{shareResult.total} 个文件)
                   </div>
-                  <div className="space-y-2">
-                    {selectedDriveName === '115' && shareResult.share_code ? (
-                      // 115网盘：share_url已包含password参数，直接显示
-                      <div>
-                        <span className="text-xs text-muted-foreground">分享链接:</span>
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-background p-1 rounded flex-1 break-all">
-                            {shareResult.share_url}
-                          </code>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() => {
-                              navigator.clipboard.writeText(shareResult.share_url)
-                              toast.success("链接已复制")
-                            }}
-                          >
-                            复制
-                          </Button>
+                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                    {shareResult.results.map((result, index) => (
+                      <div key={index} className="p-2 bg-background rounded border">
+                        <div className="text-xs font-medium text-foreground mb-1 truncate">
+                          {result.file_name}
                         </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div>
-                          <span className="text-xs text-muted-foreground">链接:</span>
-                          <div className="flex items-center gap-2">
-                            <code className="text-xs bg-background p-1 rounded flex-1 break-all">
-                              {shareResult.share_url}
-                            </code>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="shrink-0"
-                              onClick={() => {
-                                navigator.clipboard.writeText(shareResult.share_url)
-                                toast.success("链接已复制")
-                              }}
-                            >
-                              复制
-                            </Button>
-                          </div>
-                        </div>
-                        {shareResult.share_code && (
-                          <div>
-                            <span className="text-xs text-muted-foreground">提取码:</span>
+                        {result.share_url ? (
+                          <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                              <code className="text-sm font-mono">{shareResult.share_code}</code>
+                              <span className="text-xs text-muted-foreground shrink-0">链接:</span>
+                              <code className="text-xs flex-1 break-all">
+                                {result.share_url}
+                              </code>
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                className="shrink-0 h-6 px-2"
                                 onClick={() => {
-                                  navigator.clipboard.writeText(shareResult.share_code)
-                                  toast.success("提取码已复制")
+                                  navigator.clipboard.writeText(result.share_url)
+                                  toast.success("链接已复制")
                                 }}
                               >
                                 复制
                               </Button>
                             </div>
+                            {result.share_code && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground shrink-0">提取码:</span>
+                                <code className="text-xs font-mono">{result.share_code}</code>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="shrink-0 h-6 px-2"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(result.share_code)
+                                    toast.success("提取码已复制")
+                                  }}
+                                >
+                                  复制
+                                </Button>
+                              </div>
+                            )}
                           </div>
+                        ) : (
+                          <div className="text-xs text-red-500">分享失败</div>
                         )}
-                      </>
-                    )}
+                      </div>
+                    ))}
                   </div>
+                  {/* 一键复制所有链接 */}
+                  {shareResult.success_count > 1 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 w-full"
+                      onClick={() => {
+                        const allLinks = shareResult.results
+                          .filter(r => r.share_url)
+                          .map(r => `${r.file_name}\n链接: ${r.share_url}${r.share_code ? `\n提取码: ${r.share_code}` : ''}`)
+                          .join('\n\n')
+                        navigator.clipboard.writeText(allLinks)
+                        toast.success("已复制所有分享链接")
+                      }}
+                    >
+                      复制全部链接
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>

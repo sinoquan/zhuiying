@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 import { createCloudDriveService, CloudDriveType } from '@/lib/cloud-drive'
 
-// POST - 创建分享
+// POST - 创建分享（每个文件/文件夹单独分享）
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -37,62 +37,91 @@ export async function POST(
       (drive.config as Record<string, any>) || {}
     )
     
-    // 创建分享
-    console.log('[分享API] 开始创建分享...')
-    const shareInfo = await service.createShare(file_ids, expire_days)
-    console.log('[分享API] 分享创建成功:', shareInfo)
-    
     // 计算过期时间
     let expireAt: string | null = null
     if (expire_days > 0) {
       expireAt = new Date(Date.now() + expire_days * 24 * 60 * 60 * 1000).toISOString()
     }
     
-    // 保存分享记录
-    // 使用从API返回的total_size（如果有）
-    const totalSize = shareInfo.total_size || 0
-    const fileCount = shareInfo.file_count || file_ids.length
+    // 每个文件/文件夹单独分享
+    const shareResults: Array<{
+      file_id: string
+      file_name: string
+      share_url: string
+      share_code: string
+    }> = []
     
-    console.log('[分享API] 文件大小信息:', { 
-      totalSize, 
-      fileCount, 
-      file_sizes, 
-      shareInfo_total_size: shareInfo.total_size 
-    })
+    const shareRecords: Array<{
+      cloud_drive_id: number
+      file_path: string
+      file_name: string
+      file_size: string
+      content_type: string
+      share_url: string
+      share_code: string
+      share_status: string
+      source: string
+      expire_at: string | null
+    }> = []
     
-    const shareRecords = file_ids.map((fileId: string, index: number) => {
-      // 计算单个文件的大小：如果只有一个文件，使用total_size；否则平均分配
-      let fileSize = file_sizes?.[index]?.toString() || '0'
-      if (fileSize === '0' && totalSize > 0) {
-        fileSize = fileCount === 1 
-          ? totalSize.toString() 
-          : Math.floor(totalSize / fileCount).toString()
-      }
+    for (let i = 0; i < file_ids.length; i++) {
+      const fileId = file_ids[i]
+      const fileName = file_names?.[i] || `文件${i + 1}`
+      const filePath = file_paths?.[i] || '/'
+      const fileSize = file_sizes?.[i]?.toString() || '0'
+      const contentType = content_types?.[i] || 'other'
       
-      console.log(`[分享API] 文件 ${index}: fileId=${fileId}, fileSize=${fileSize}`)
-      
-      return {
-        cloud_drive_id: parseInt(id),
-        file_path: file_paths?.[index] || '/',
-        file_name: file_names?.[index] || `文件${index + 1}`,
-        file_size: fileSize,
-        content_type: content_types?.[index] || 'other',
-        share_url: shareInfo.share_url,
-        share_code: shareInfo.share_code,
-        share_status: 'active',
-        source: 'manual',
-        expire_at: expireAt,
+      try {
+        console.log(`[分享API] 正在分享 ${i + 1}/${file_ids.length}: ${fileName}`)
+        
+        // 单独为每个文件创建分享
+        const shareInfo = await service.createShare([fileId], expire_days)
+        
+        console.log(`[分享API] 分享成功: ${fileName} -> ${shareInfo.share_url}`)
+        
+        shareResults.push({
+          file_id: fileId,
+          file_name: fileName,
+          share_url: shareInfo.share_url,
+          share_code: shareInfo.share_code,
+        })
+        
+        shareRecords.push({
+          cloud_drive_id: parseInt(id),
+          file_path: filePath,
+          file_name: fileName,
+          file_size: fileSize,
+          content_type: contentType,
+          share_url: shareInfo.share_url,
+          share_code: shareInfo.share_code,
+          share_status: 'active',
+          source: 'manual',
+          expire_at: expireAt,
+        })
+      } catch (shareError) {
+        console.error(`[分享API] 分享失败: ${fileName}`, shareError)
+        // 记录失败的分享
+        shareResults.push({
+          file_id: fileId,
+          file_name: fileName,
+          share_url: '',
+          share_code: '',
+        })
       }
-    })
+    }
     
-    const { error: insertError } = await client
-      .from('share_records')
-      .insert(shareRecords)
-    
-    if (insertError) {
-      console.error('[分享API] 保存分享记录失败:', insertError)
-    } else {
-      console.log('[分享API] 分享记录保存成功:', shareRecords.length, '条')
+    // 批量保存分享记录
+    const successRecords = shareRecords.filter(r => r.share_url)
+    if (successRecords.length > 0) {
+      const { error: insertError } = await client
+        .from('share_records')
+        .insert(successRecords)
+      
+      if (insertError) {
+        console.error('[分享API] 保存分享记录失败:', insertError)
+      } else {
+        console.log('[分享API] 分享记录保存成功:', successRecords.length, '条')
+      }
     }
     
     // 记录操作日志
@@ -100,14 +129,20 @@ export async function POST(
       cloud_drive_id: parseInt(id),
       operation_type: 'share',
       operation_detail: JSON.stringify({
-        file_ids,
-        share_url: shareInfo.share_url,
-        share_code: shareInfo.share_code,
+        total: file_ids.length,
+        success: successRecords.length,
+        files: shareResults,
       }),
-      status: 'success',
+      status: successRecords.length > 0 ? 'success' : 'failed',
     })
     
-    return NextResponse.json(shareInfo)
+    // 返回所有分享结果
+    return NextResponse.json({
+      success: true,
+      total: file_ids.length,
+      success_count: successRecords.length,
+      results: shareResults,
+    })
   } catch (error) {
     console.error('[分享API] 创建分享失败:', error)
     return NextResponse.json(
