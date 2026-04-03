@@ -31,7 +31,7 @@ import {
 import { 
   Bell, RefreshCw, Copy, CheckCircle2, XCircle, 
   Clock, Loader2, ChevronLeft, ChevronRight, Film, Tv, File,
-  Search, Send, Eye, AlertTriangle
+  Search, Send, Eye, AlertTriangle, Trash2
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
@@ -126,6 +126,11 @@ export default function PushRecordsPage() {
   // 详情弹窗
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedRecord, setSelectedRecord] = useState<PushRecord | null>(null)
+  
+  // 删除相关
+  const [deleting, setDeleting] = useState<number | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [recordToDelete, setRecordToDelete] = useState<PushRecord | null>(null)
 
   // 加载推送渠道列表
   useEffect(() => {
@@ -232,6 +237,31 @@ export default function PushRecordsPage() {
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text)
     toast.success('已复制到剪贴板')
+  }
+
+  // 删除单条记录
+  const handleDelete = async (recordId: number) => {
+    setDeleting(recordId)
+    try {
+      const response = await fetch(`/api/push/records?id=${recordId}`, {
+        method: 'DELETE'
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        toast.success('删除成功')
+        fetchRecords()
+      } else {
+        toast.error(result.error || '删除失败')
+      }
+    } catch {
+      toast.error('删除失败')
+    } finally {
+      setDeleting(null)
+      setDeleteDialogOpen(false)
+      setRecordToDelete(null)
+    }
   }
 
   // 全选/取消全选
@@ -495,7 +525,7 @@ export default function PushRecordsPage() {
                       <TableHead className="w-24">状态</TableHead>
                       <TableHead className="w-20 text-center">重试</TableHead>
                       <TableHead className="w-40">推送时间</TableHead>
-                      <TableHead className="w-20 text-center">操作</TableHead>
+                      <TableHead className="w-28 text-center">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -608,6 +638,23 @@ export default function PushRecordsPage() {
                                   )}
                                 </Button>
                               )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                onClick={() => {
+                                  setRecordToDelete(record)
+                                  setDeleteDialogOpen(true)
+                                }}
+                                disabled={deleting === record.id}
+                                title="删除"
+                              >
+                                {deleting === record.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -881,6 +928,36 @@ export default function PushRecordsPage() {
             >
               {retrying !== null && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               确认重试
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认弹窗 */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>删除推送记录</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            确定要删除这条推送记录吗？
+          </p>
+          {recordToDelete?.share_records?.file_name && (
+            <p className="text-sm font-medium">
+              文件：{recordToDelete.share_records.file_name}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => recordToDelete && handleDelete(recordToDelete.id)}
+              disabled={deleting !== null}
+            >
+              {deleting !== null && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              确认删除
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -151,4 +151,30 @@ export async function GET(request: NextRequest) {
   }
 }
 
-
+// DELETE - 删除单条推送记录
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    
+    if (!id) {
+      return NextResponse.json({ error: '缺少记录ID' }, { status: 400 })
+    }
+    
+    const client = getSupabaseClient()
+    
+    const { error } = await client
+      .from('push_records')
+      .delete()
+      .eq('id', parseInt(id))
+    
+    if (error) {
+      throw new Error(`删除失败: ${error.message}`)
+    }
+    
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('删除推送记录失败:', error)
+    return NextResponse.json({ error: '删除失败' }, { status: 500 })
+  }
+}
