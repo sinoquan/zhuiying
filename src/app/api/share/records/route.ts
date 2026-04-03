@@ -165,6 +165,13 @@ export async function DELETE(request: NextRequest) {
     
     // 批量删除
     if (body.ids && body.ids.length > 0) {
+      // 先删除关联的推送记录
+      await client
+        .from('push_records')
+        .delete()
+        .in('share_record_id', body.ids)
+      
+      // 再删除分享记录
       const { error: deleteError } = await client
         .from('share_records')
         .delete()
@@ -201,7 +208,13 @@ export async function DELETE(request: NextRequest) {
         .eq('id', parseInt(id))
     }
     
-    // 删除记录
+    // 先删除关联的推送记录
+    await client
+      .from('push_records')
+      .delete()
+      .eq('share_record_id', parseInt(id))
+    
+    // 删除分享记录
     const { error: deleteError } = await client
       .from('share_records')
       .delete()
