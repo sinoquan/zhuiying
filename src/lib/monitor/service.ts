@@ -816,7 +816,7 @@ export class FileMonitorService {
       // 进度条
       const filled = Math.floor(progress / 10)
       const empty = 10 - filled
-      const progressBar = '█'.repeat(filled) + '░'.repeat(empty)
+      const progressBar = '●'.repeat(filled) + '○'.repeat(empty)
       lines.push(`📊 进度: ${progressBar} ${progress}% (${currentEp}/${total}集)`)
       
       // 下一集播出时间
@@ -874,7 +874,7 @@ export class FileMonitorService {
     
     // 主链接
     const driveName = shareRecord.cloud_drives?.alias || shareRecord.cloud_drives?.name || '网盘'
-    lines.push(`🔗 ${driveName}链接: ${shareRecord.share_url}`)
+    lines.push(`🔗 ${driveName}: ${shareRecord.share_url}`)
     
     if (shareRecord.share_code) {
       lines.push(`🔑 密码: ${shareRecord.share_code}`)
@@ -974,7 +974,7 @@ export class FileMonitorService {
       const progress = Math.round((currentEp / total) * 100)
       const filled = Math.floor(progress / 10)
       const empty = 10 - filled
-      progressBar = `${'█'.repeat(filled)}${'░'.repeat(empty)} ${progress}%`
+      progressBar = `${'●'.repeat(filled)}${'○'.repeat(empty)} ${progress}%`
     }
     
     // 构建画质信息

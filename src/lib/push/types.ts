@@ -139,7 +139,7 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 👥 主演: {cast}
 📝 简介: {overview}
 
-🔗 {drive_name}链接: {share_url}
+🔗 {drive_name}:{share_url}
 🔑 密码: {share_code}
 
 #{category_tag}`,
@@ -155,7 +155,7 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 👥 主演: {cast}
 📝 简介: {overview}
 
-🔗 {drive_name}链接: {share_url}
+🔗 {drive_name}:{share_url}
 🔑 密码: {share_code}
 
 #{category_tag}`,
@@ -170,7 +170,7 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 👥 主演: {cast}
 📝 简介: {overview}
 
-🔗 {drive_name}链接: {share_url}
+🔗 {drive_name}:{share_url}
 🔑 密码: {share_code}
 
 #{category_tag}`,

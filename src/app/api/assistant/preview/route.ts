@@ -48,7 +48,7 @@ function generateProgressBar(current: number, total: number): string {
   const percent = Math.min(100, Math.round((current / total) * 100))
   const filled = Math.round(percent / 10)
   const empty = 10 - filled
-  return '█'.repeat(filled) + '░'.repeat(empty)
+  return '●'.repeat(filled) + '○'.repeat(empty)
 }
 
 export async function POST(request: NextRequest) {
