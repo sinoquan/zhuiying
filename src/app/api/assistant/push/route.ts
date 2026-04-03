@@ -333,10 +333,10 @@ export async function POST(request: NextRequest) {
           tmdbData = {
             tmdb_id: identifyResult.tmdb_id,
             title: identifyResult.title || '',
-            year: identifyResult.year || undefined,
+            year: identifyResult.year ?? undefined,
             type: identifyResult.type === 'tv' ? 'tv' : 'movie',
             poster_url: identifyResult.poster_url || undefined,
-            backdrop_url: identifyResult.backdrop_url || undefined,
+            backdrop_url: undefined,
             overview: identifyResult.overview || undefined,
             rating: identifyResult.rating || undefined,
             genres: identifyResult.genres || undefined,

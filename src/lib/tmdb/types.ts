@@ -45,6 +45,8 @@ export interface TMDBTVShow extends TMDBSearchResult {
   status: string
   seasons: TMDBSeason[]
   genres?: Array<{ id: number; name: string }>
+  original_language?: string
+  production_countries?: Array<{ iso_3166_1: string }>
 }
 
 // 季信息
@@ -64,6 +66,8 @@ export interface TMDBMovie extends TMDBSearchResult {
   status: string
   tagline: string
   genres?: Array<{ id: number; name: string }>
+  original_language?: string
+  production_countries?: Array<{ iso_3166_1: string }>
 }
 
 // 内容识别结果

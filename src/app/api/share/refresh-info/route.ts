@@ -84,12 +84,13 @@ async function access115ShareWithUserCookie(
         const files = result?.files || []
         if (files.length > 0) {
           console.log(`[RefreshInfo] 获取到 ${files.length} 个文件`)
-          // listFiles 返回的是 CloudFile[] 格式，需要转换
+          // listFiles 返回的是 CloudFile[] 格式，需要转换为 SharedFileInfo 格式
           shareInfo.files = files.map(f => ({
+            share_id: shareInfo.share_id || '',
             file_id: f.id || '',
             file_name: f.name || '',
             file_size: f.size || 0,
-            is_dir: f.isDir || false,
+            is_dir: f.is_dir || false,
           }))
           shareInfo.file_count = files.length
         }
@@ -99,8 +100,8 @@ async function access115ShareWithUserCookie(
     }
     
     return {
-      share_id: shareInfo.share_id,
-      share_code: shareInfo.share_code,
+      share_id: shareInfo.share_id || '',
+      share_code: shareInfo.share_code || '',
       file_id: shareInfo.file_id,
       file_name: shareInfo.file_name,
       file_size: shareInfo.file_size,

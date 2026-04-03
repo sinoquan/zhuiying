@@ -9,19 +9,19 @@ export interface TMDBFullData {
   tmdb_id: number
   title: string
   original_title?: string
-  year: number | string
+  year?: number | string
   type: 'movie' | 'tv'
-  rating: number
-  genres: string[]
-  overview: string
-  poster_url: string | null
-  poster_path: string | null
-  backdrop_url: string | null
-  cast: string[]
-  runtime: number
-  status: string
-  total_episodes: number
-  seasons: number
+  rating?: number
+  genres?: string[]
+  overview?: string
+  poster_url?: string | null
+  poster_path?: string | null
+  backdrop_url?: string | null
+  cast?: string[]
+  runtime?: number
+  status?: string
+  total_episodes?: number
+  seasons?: number
   // 剧集特有
   season?: number
   episode?: number
@@ -125,8 +125,8 @@ export async function fetchTMDBFullData(
       title: data.title,
       tmdb_id: data.tmdb_id,
       rating: data.rating,
-      genres: data.genres.slice(0, 3).join(', '),
-      cast: data.cast.slice(0, 3).join(', '),
+      genres: data.genres?.slice(0, 3).join(', ') || '',
+      cast: data.cast?.slice(0, 3).join(', ') || '',
       has_poster: !!data.poster_url,
     })
 
@@ -194,8 +194,8 @@ export async function fetchTMDBById(
     console.log(`[TMDB Fetcher] 数据获取成功:`, {
       title: data.title,
       rating: data.rating,
-      genres: data.genres.slice(0, 3).join(', '),
-      cast: data.cast.slice(0, 3).join(', '),
+      genres: data.genres?.slice(0, 3).join(', ') || '',
+      cast: data.cast?.slice(0, 3).join(', ') || '',
       has_poster: !!data.poster_url,
     })
 

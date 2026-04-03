@@ -499,8 +499,13 @@ export default function ShareRecordsPage() {
   const formatFileSize = (size: string | null | undefined, contentType?: string) => {
     if (!size) return '-'
     
-    // 如果是文件夹类型，直接显示 "-"
-    if (contentType === 'folder') return '-'
+    // 如果 size 是 "0" 或空，显示 "-"
+    if (size === '0' || size === '') return '-'
+    
+    // 如果已经是格式化的字符串（包含 GB、MB 等），直接返回
+    if (typeof size === 'string' && (size.includes('GB') || size.includes('MB') || size.includes('KB') || size.includes(' B'))) {
+      return size
+    }
     
     const bytes = parseInt(size)
     if (isNaN(bytes) || bytes <= 0) return '-'
@@ -1011,8 +1016,8 @@ export default function ShareRecordsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
-                          {/* 刷新信息按钮：文件夹类型或大小为0时显示 */}
-                          {(record.content_type === 'folder' || record.file_size === '0') && (
+                          {/* 刷新信息按钮：文件夹类型且大小为0时显示 */}
+                          {record.content_type === 'folder' && (record.file_size === '0' || String(record.file_size) === '0') && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
