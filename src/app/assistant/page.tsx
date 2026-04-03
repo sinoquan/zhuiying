@@ -96,10 +96,42 @@ export default function AssistantPage() {
   const [editMode, setEditMode] = useState(false)
   const [editedTitle, setEditedTitle] = useState("")
   const [editedNote, setEditedNote] = useState("")
+  
+  // 预览相关
+  const [previewContent, setPreviewContent] = useState("")
+  const [previewTemplateName, setPreviewTemplateName] = useState("")
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   useEffect(() => {
     fetchChannels()
   }, [])
+
+  // 获取推送预览
+  const fetchPreview = async (result: AnalyzeResult, title: string, note: string) => {
+    setPreviewLoading(true)
+    try {
+      const response = await fetch("/api/assistant/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          link: result.link,
+          file: result.file,
+          tmdb: result.tmdb,
+          edit: { title, note },
+          channelType: 'telegram'
+        }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        setPreviewContent(data.preview)
+        setPreviewTemplateName(data.templateName)
+      }
+    } catch (error) {
+      console.error("获取预览失败:", error)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
 
   // 获取推送渠道
   const fetchChannels = async () => {
@@ -122,6 +154,7 @@ export default function AssistantPage() {
     setLoading(true)
     setAnalyzeResult(null)
     setEditMode(false)
+    setPreviewContent("")
     
     try {
       const response = await fetch("/api/assistant/analyze", {
@@ -141,14 +174,20 @@ export default function AssistantPage() {
       setAnalyzeResult(data)
       
       // 初始化编辑内容
+      let initTitle = ""
       if (data.tmdb?.title) {
-        setEditedTitle(data.tmdb.title)
+        initTitle = data.tmdb.title
       } else if (data.file?.name) {
-        setEditedTitle(data.file.name)
+        initTitle = data.file.name
       } else {
         // 没有文件名时，使用网盘类型作为默认标题
-        setEditedTitle(`${data.link?.typeName || '网盘'}分享`)
+        initTitle = `${data.link?.typeName || '网盘'}分享`
       }
+      setEditedTitle(initTitle)
+      setEditedNote("")
+      
+      // 获取预览
+      fetchPreview(data, initTitle, "")
       
       // 智能选择渠道：根据链接类型匹配
       if (data.link?.type && channels.length > 0) {
@@ -494,29 +533,41 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                         {/* 推送预览 */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">推送预览</span>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => setEditMode(!editMode)}
-                            >
-                              {editMode ? "完成编辑" : "编辑"}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">推送预览</span>
+                              {previewTemplateName && (
+                                <Badge variant="outline" className="text-xs">{previewTemplateName}</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {editMode && (
+                                <Button 
+                                  variant="default" 
+                                  size="sm"
+                                  onClick={() => {
+                                    fetchPreview(analyzeResult, editedTitle, editedNote)
+                                    setEditMode(false)
+                                  }}
+                                >
+                                  应用
+                                </Button>
+                              )}
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => setEditMode(!editMode)}
+                              >
+                                {editMode ? "取消" : "编辑"}
+                              </Button>
+                            </div>
                           </div>
                           <div className="p-4 bg-gradient-to-b from-slate-900 to-slate-800 text-slate-100 rounded-lg text-sm whitespace-pre-wrap font-mono leading-relaxed max-h-[300px] overflow-y-auto">
-                            <span className="text-slate-400">🎬 {analyzeResult.tmdb.title}</span>
-                            {analyzeResult.tmdb.year && <span className="text-slate-400"> ({analyzeResult.tmdb.year})</span>}
-                            <br /><br />
-                            <span className="text-slate-400">⭐️ 评分: {analyzeResult.tmdb.rating?.toFixed(1)}</span>
-                            <br />
-                            <span className="text-slate-400">🎭 类型: {analyzeResult.tmdb.genres?.join(', ')}</span>
-                            <br />
-                            <span className="text-slate-400">🔗 链接: {analyzeResult.link?.shareUrl}</span>
-                            {analyzeResult.link?.shareCode && (
-                              <>
-                                <br />
-                                <span className="text-slate-400">🔑 提取码: {analyzeResult.link.shareCode}</span>
-                              </>
+                            {previewLoading ? (
+                              <span className="text-slate-400">正在渲染预览...</span>
+                            ) : previewContent ? (
+                              <span className="text-slate-400">{previewContent}</span>
+                            ) : (
+                              <span className="text-slate-400">暂无预览</span>
                             )}
                           </div>
                           
@@ -564,30 +615,41 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                         {/* 简化推送预览 */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">推送预览</span>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => setEditMode(!editMode)}
-                            >
-                              {editMode ? "完成编辑" : "编辑"}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">推送预览</span>
+                              {previewTemplateName && (
+                                <Badge variant="outline" className="text-xs">{previewTemplateName}</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {editMode && (
+                                <Button 
+                                  variant="default" 
+                                  size="sm"
+                                  onClick={() => {
+                                    fetchPreview(analyzeResult, editedTitle, editedNote)
+                                    setEditMode(false)
+                                  }}
+                                >
+                                  应用
+                                </Button>
+                              )}
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => setEditMode(!editMode)}
+                              >
+                                {editMode ? "取消" : "编辑"}
+                              </Button>
+                            </div>
                           </div>
                           <div className="p-4 bg-gradient-to-b from-slate-900 to-slate-800 text-slate-100 rounded-lg text-sm whitespace-pre-wrap font-mono leading-relaxed max-h-[300px] overflow-y-auto">
-                            <span className="text-slate-400">📁 {editedTitle || '分享链接'}</span>
-                            <br /><br />
-                            <span className="text-slate-400">🔗 链接: {analyzeResult.link?.shareUrl}</span>
-                            {analyzeResult.link?.shareCode && (
-                              <>
-                                <br />
-                                <span className="text-slate-400">🔑 提取码: {analyzeResult.link.shareCode}</span>
-                              </>
-                            )}
-                            {editedNote && (
-                              <>
-                                <br /><br />
-                                <span className="text-slate-400">📝 备注: {editedNote}</span>
-                              </>
+                            {previewLoading ? (
+                              <span className="text-slate-400">正在渲染预览...</span>
+                            ) : previewContent ? (
+                              <span className="text-slate-400">{previewContent}</span>
+                            ) : (
+                              <span className="text-slate-400">暂无预览</span>
                             )}
                           </div>
                           

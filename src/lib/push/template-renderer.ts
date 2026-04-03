@@ -13,6 +13,7 @@ export function renderTemplate(
     year?: string | number
     share_url: string
     share_code?: string
+    drive_name?: string
     extra?: PushMessageExtra
   },
   format: PushChannelType = 'telegram'
@@ -24,6 +25,7 @@ export function renderTemplate(
   result = result.replace(/{year}/g, String(data.year || ''))
   result = result.replace(/{share_url}/g, data.share_url || '')
   result = result.replace(/{share_code}/g, data.share_code || '')
+  result = result.replace(/{drive_name}/g, data.drive_name || '网盘')
   
   // 扩展信息
   const extra = data.extra || {}
