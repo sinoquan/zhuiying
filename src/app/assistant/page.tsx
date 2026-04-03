@@ -26,7 +26,9 @@ import {
   FileText,
   Edit3,
   Copy,
-  Check
+  Check,
+  MessageCircle,
+  MessageSquare
 } from "lucide-react"
 import { toast } from "sonner"
 import Image from "next/image"
