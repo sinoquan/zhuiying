@@ -130,7 +130,6 @@ export const CHANNEL_CAPABILITIES: Record<PushChannelType, {
 export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentType, string>> = {
   telegram: {
     movie: `🎬 电影：{title} ({year})
-
 🍿 TMDB ID: {tmdb_id}
 ⭐️ 评分: {rating}
 🎭 类型: {genres}
@@ -138,13 +137,10 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 💾 大小: {file_size}
 👥 主演: {cast}
 📝 简介: {overview}
-
-🔗 {drive_name}:{share_url}
+🔗 {drive_name}: {share_url}
 🔑 密码: {share_code}
-
 #{category_tag}`,
     tv_series: `📺 电视剧：{title} ({year}) - S{season:02d}E{episode:02d}
-
 🍿 TMDB ID: {tmdb_id}
 ⭐️ 评分: {rating}
 🎭 类型: {genres}
@@ -154,13 +150,10 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 💾 大小: {file_size}
 👥 主演: {cast}
 📝 简介: {overview}
-
-🔗 {drive_name}:{share_url}
+🔗 {drive_name}: {share_url}
 🔑 密码: {share_code}
-
 #{category_tag}`,
     completed: `📺 电视剧：{title} ({year}) - 完结打包
-
 🍿 TMDB ID: {tmdb_id}
 ⭐️ 评分: {rating}
 🎭 类型: {genres}
@@ -169,10 +162,8 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 💾 大小: {file_size}
 👥 主演: {cast}
 📝 简介: {overview}
-
-🔗 {drive_name}:{share_url}
+🔗 {drive_name}: {share_url}
 🔑 密码: {share_code}
-
 #{category_tag}`,
   },
   qq: {

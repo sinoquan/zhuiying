@@ -87,15 +87,25 @@ export async function POST(request: NextRequest) {
       (channel.config as PushChannelConfig) || {}
     )
     
-    // 发送消息
+    // 发送消息（支持图片）
     console.log('[Push Send] Sending message...')
-    const result = await pushService.send({
+    const posterUrl = extra?.poster_url as string | undefined
+    const message = {
       title: pushTitle,
       content: pushContent,
       url: url,
       code: code,
       extra: extra,
-    })
+    }
+    
+    let result
+    if (posterUrl && channel.channel_type === 'telegram') {
+      // Telegram 支持图片
+      console.log('[Push Send] Sending with image:', posterUrl)
+      result = await pushService.sendWithImage(message, posterUrl)
+    } else {
+      result = await pushService.send(message)
+    }
     
     console.log('[Push Send] Send result:', result)
     
