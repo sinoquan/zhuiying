@@ -130,94 +130,93 @@ export const CHANNEL_CAPABILITIES: Record<PushChannelType, {
 export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentType, string>> = {
   telegram: {
     movie: `🎬 电影：{title} ({year})
-{note}
+
 🍿 TMDB ID: {tmdb_id}
 ⭐️ 评分: {rating}
 🎭 类型: {genres}
-📂 分类: {category}
 🎥 画质: {quality}
 💾 大小: {file_size}
 👥 主演: {cast}
 📝 简介: {overview}
 
-🔗 链接: {share_url}
+🔗 {drive_name}链接: {share_url}
+🔑 密码: {share_code}
 
 #{category_tag}`,
     tv_series: `📺 电视剧：{title} ({year}) - S{season:02d}E{episode:02d}
-{note}
+
 🍿 TMDB ID: {tmdb_id}
 ⭐️ 评分: {rating}
 🎭 类型: {genres}
-📂 分类: {category}
-📊 进度: {progress_bar} {progress_percent}
+📊 进度: {progress_bar} {progress_percent} ({episode}/{total_episodes}集)
 🔄 状态: {status}
 🎥 画质: {quality}
 💾 大小: {file_size}
 👥 主演: {cast}
 📝 简介: {overview}
 
-🔗 链接: {share_url}
+🔗 {drive_name}链接: {share_url}
+🔑 密码: {share_code}
 
 #{category_tag}`,
-    completed: `📺 电视剧：{title} ({year}) - S{season:02d}E{episode:02d}-E{episode_end:02d}(完结)
-{note}
+    completed: `📺 电视剧：{title} ({year}) - 完结打包
+
 🍿 TMDB ID: {tmdb_id}
 ⭐️ 评分: {rating}
 🎭 类型: {genres}
-📂 分类: {category}
 🎥 画质: {quality}
 📦 文件: {file_count} 个
 💾 大小: {file_size}
 👥 主演: {cast}
 📝 简介: {overview}
 
-🔗 链接: {share_url}
+🔗 {drive_name}链接: {share_url}
+🔑 密码: {share_code}
 
 #{category_tag}`,
   },
   qq: {
     movie: `【电影推送】
 🎬 {title} ({year})
-{note}
 ⭐️ {rating} | 🎭 {genres} | 🎥 {quality}
 
-🔗 {share_url}`,
+🔗 {share_url}
+🔑 {share_code}`,
     tv_series: `【剧集更新】
 📺 {title} S{season:02d}E{episode:02d}
-{note}
 ⭐️ {rating} | 🎭 {genres} | 🎥 {quality}
 
-🔗 {share_url}`,
+🔗 {share_url}
+🔑 {share_code}`,
     completed: `【完结剧集】
-📺 {title} S{season:02d}E{episode:02d}-E{episode_end:02d}(完结)
-{note}
+📺 {title} 全剧完结
 ⭐️ {rating} | 🎭 {genres} | 🎥 {quality}
 
-🔗 {share_url}`,
+🔗 {share_url}
+🔑 {share_code}`,
   },
   wechat: {
     movie: `🎬 {title} ({year})
-{note}
 ━━━━━━━━━━━━
 ⭐️ {rating} | 🎭 {genres}
 🎥 {quality}
 ━━━━━━━━━━━━
-🔗 {share_url}`,
+🔗 {share_url}
+🔑 {share_code}`,
     tv_series: `📺 {title} S{season:02d}E{episode:02d}
-{note}
 ━━━━━━━━━━━━
 ⭐️ {rating} | 🎭 {genres}
 🎥 {quality}
 ━━━━━━━━━━━━
-🔗 {share_url}`,
-    completed: `📺 {title} S{season:02d}E{episode:02d}-E{episode_end:02d}
-✅ 全剧完结
-{note}
+🔗 {share_url}
+🔑 {share_code}`,
+    completed: `📺 {title} - 全剧完结
 ━━━━━━━━━━━━
 ⭐️ {rating} | 🎭 {genres}
 🎥 {quality}
 ━━━━━━━━━━━━
-🔗 {share_url}`,
+🔗 {share_url}
+🔑 {share_code}`,
   },
 }
 
@@ -260,6 +259,7 @@ export const TEMPLATE_VARIABLES: Array<{
   { key: '{note}', description: '备注信息', example: '内封中文字幕' },
   
   // 链接
+  { key: '{drive_name}', description: '网盘名称', example: '115网盘' },
   { key: '{share_url}', description: '分享链接', example: 'https://115cdn.com/s/xxx' },
   { key: '{share_code}', description: '提取码', example: 'abc1' },
   

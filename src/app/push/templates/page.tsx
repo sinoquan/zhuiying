@@ -157,8 +157,8 @@ export default function PushTemplatesPage() {
     cloud_drive_id: "",
     name: "",
     content_type: "movie" as TemplateContentType,
-    template_content: "",
-    include_image: true,
+    template_content: DEFAULT_TEMPLATES['telegram']['movie'],
+    include_image: CHANNEL_CAPABILITIES['telegram'].supportsImage,
   })
 
   useEffect(() => {
