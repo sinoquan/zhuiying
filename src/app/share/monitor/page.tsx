@@ -71,7 +71,7 @@ interface FileMonitor {
   path_name?: string
   enabled: boolean
   cron_expression?: string
-  push_channel_ids?: number[]
+  push_channel_ids?: number[] | string[]
   push_template_type?: string
   created_at: string
   cloud_drives?: {
@@ -308,10 +308,14 @@ export default function FileMonitorPage() {
   // 复制任务配置
   const handleCopyMonitor = (monitor: FileMonitor) => {
     setEditingMonitor(null)
+    // 确保 push_channel_ids 是数字数组
+    const channelIds = (monitor.push_channel_ids || []).map(id => 
+      typeof id === 'string' ? parseInt(id) : id
+    )
     setFormData({
       cloud_drive_id: monitor.cloud_drive_id.toString(),
       cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
-      push_channel_ids: monitor.push_channel_ids || [],
+      push_channel_ids: channelIds,
       push_template_type: monitor.push_template_type || "auto",
     })
     selectedFoldersRef.current = []
@@ -443,10 +447,14 @@ export default function FileMonitorPage() {
 
   const openEditDialog = (monitor: FileMonitor) => {
     setEditingMonitor(monitor)
+    // 确保 push_channel_ids 是数字数组
+    const channelIds = (monitor.push_channel_ids || []).map(id => 
+      typeof id === 'string' ? parseInt(id) : id
+    )
     setFormData({
       cloud_drive_id: monitor.cloud_drive_id.toString(),
       cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
-      push_channel_ids: monitor.push_channel_ids || [],
+      push_channel_ids: channelIds,
       push_template_type: monitor.push_template_type || "auto",
     })
     selectedFoldersRef.current = [{ path: monitor.path, name: monitor.path_name || monitor.path.split('/').pop() || monitor.path }]

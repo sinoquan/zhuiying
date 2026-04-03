@@ -41,11 +41,15 @@ export async function GET() {
       // 为每个监控任务附加推送渠道信息
       for (const monitor of monitors) {
         // 解析 push_channel_ids (JSON 数组)
-        const channelIds = monitor.push_channel_ids as number[] | null
+        let channelIds = monitor.push_channel_ids as number[] | string[] | null
+        // 确保转换为数字数组
+        if (channelIds && Array.isArray(channelIds)) {
+          channelIds = channelIds.map(id => typeof id === 'string' ? parseInt(id) : id)
+        }
         if (channelIds && channelIds.length > 0) {
           monitor.push_channels_list = channelIds
             .map(id => channelMap.get(id))
-            .filter(Boolean)
+            .filter(Boolean) as Array<{ id: number; channel_name: string; channel_type: string; target_name?: string }>
         } else {
           monitor.push_channels_list = []
         }
