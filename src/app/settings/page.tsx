@@ -587,25 +587,6 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Telegram 配置提示 */}
-      <Card className="mt-8 border-dashed">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3 text-sm text-muted-foreground">
-            <div className="p-2 rounded-lg bg-muted">
-              <Settings className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="font-medium text-foreground mb-1">Telegram 推送配置已移动</p>
-              <p>
-                Telegram Bot 配置、Webhook 设置和频道管理已整合到 
-                <Link href="/push/channels" className="text-primary hover:underline mx-1">推送管理</Link>
-                页面，请前往该页面进行配置。
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
