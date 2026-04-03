@@ -328,9 +328,9 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
             year: tmdbResult.year?.toString(),
             overview: tmdbResult.overview?.substring(0, 200),
             poster_path: tmdbResult.poster_url || undefined,
-            rating: undefined,
-            genres: undefined,
-            cast: undefined,
+            rating: tmdbResult.rating,
+            genres: tmdbResult.genres,
+            cast: tmdbResult.cast,
             source: 'tmdb' as const,
           }
         }

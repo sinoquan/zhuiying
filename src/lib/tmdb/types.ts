@@ -42,6 +42,7 @@ export interface TMDBTVShow extends TMDBSearchResult {
   number_of_episodes: number
   status: string
   seasons: TMDBSeason[]
+  genres?: Array<{ id: number; name: string }>
 }
 
 // 季信息
@@ -60,6 +61,7 @@ export interface TMDBMovie extends TMDBSearchResult {
   revenue: number
   status: string
   tagline: string
+  genres?: Array<{ id: number; name: string }>
 }
 
 // 内容识别结果
@@ -74,6 +76,10 @@ export interface ContentIdentifyResult {
   poster_url: string | null
   overview: string
   is_completed: boolean // 是否完结
+  // 扩展字段
+  rating?: number // 评分
+  genres?: string[] // 类型
+  cast?: string[] // 主演
 }
 
 // TMDB 服务类
@@ -263,14 +269,18 @@ export class TMDBService {
     return data.results || []
   }
 
-  // 获取电视剧详情
-  async getTVDetails(tvId: number): Promise<TMDBTVShow> {
-    return this.request(`/tv/${tvId}`)
+  // 获取电视剧详情（支持 append_to_response）
+  async getTVDetails(tvId: number, appendToResponse?: string): Promise<TMDBTVShow & { credits?: { cast: Array<{ name: string }> } }> {
+    const params: Record<string, string> = {}
+    if (appendToResponse) params.append_to_response = appendToResponse
+    return this.request(`/tv/${tvId}`, params)
   }
 
-  // 获取电影详情
-  async getMovieDetails(movieId: number): Promise<TMDBMovie> {
-    return this.request(`/movie/${movieId}`)
+  // 获取电影详情（支持 append_to_response）
+  async getMovieDetails(movieId: number, appendToResponse?: string): Promise<TMDBMovie & { credits?: { cast: Array<{ name: string }> } }> {
+    const params: Record<string, string> = {}
+    if (appendToResponse) params.append_to_response = appendToResponse
+    return this.request(`/movie/${movieId}`, params)
   }
 
   // 从文件名识别内容
@@ -301,7 +311,7 @@ export class TMDBService {
         
         if (results.length > 0) {
           const show = results[0]
-          const details = await this.getTVDetails(show.id)
+          const details = await this.getTVDetails(show.id, 'credits')
           
           return {
             type: 'tv',
@@ -314,6 +324,9 @@ export class TMDBService {
             poster_url: show.poster_path ? `${this.imageBaseUrl}${show.poster_path}` : null,
             overview: show.overview,
             is_completed: details.status === 'Ended' || details.status === '已完结',
+            rating: show.vote_average,
+            genres: details.genres?.map((g: { name: string }) => g.name),
+            cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
           }
         }
       } else {
@@ -322,6 +335,7 @@ export class TMDBService {
         
         if (movieResults.length > 0) {
           const movie = movieResults[0]
+          const details = await this.getMovieDetails(movie.id, 'credits')
           
           return {
             type: 'movie',
@@ -334,6 +348,9 @@ export class TMDBService {
             poster_url: movie.poster_path ? `${this.imageBaseUrl}${movie.poster_path}` : null,
             overview: movie.overview,
             is_completed: true, // 电影默认完结
+            rating: movie.vote_average,
+            genres: details.genres?.map((g: { name: string }) => g.name),
+            cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
           }
         }
         
@@ -342,7 +359,7 @@ export class TMDBService {
         
         if (tvResults.length > 0) {
           const show = tvResults[0]
-          const details = await this.getTVDetails(show.id)
+          const details = await this.getTVDetails(show.id, 'credits')
           
           return {
             type: 'tv',
@@ -355,6 +372,9 @@ export class TMDBService {
             poster_url: show.poster_path ? `${this.imageBaseUrl}${show.poster_path}` : null,
             overview: show.overview,
             is_completed: details.status === 'Ended' || details.status === '已完结',
+            rating: show.vote_average,
+            genres: details.genres?.map((g: { name: string }) => g.name),
+            cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
           }
         }
       }
