@@ -544,7 +544,7 @@ export class FileMonitorService {
           share_code: shareInfo.share_code,
           share_status: 'active',
           file_created_at: file.created_at,
-          content_type: file.isDir ? 'folder' : 'video', // 文件类型：文件夹或视频
+          content_type: file.is_directory ? 'folder' : 'video', // 文件类型：文件夹或视频
           tmdb_id: seriesInfo.contentInfo.tmdbId,
           tmdb_title: seriesInfo.contentInfo.title,
           tmdb_info: tmdbInfo,
@@ -708,108 +708,27 @@ export class FileMonitorService {
         return false
       }
       
-      // 获取系统设置（包含 Telegram Bot Token 等全局配置）
-      const { data: settingsData } = await this.client
-        .from('system_settings')
-        .select('*')
+      // 使用公共推送服务
+      const { pushShareRecord } = await import('@/lib/push/share-push-service')
       
-      // 转换为键值对格式
-      const settings: Record<string, any> = {}
-      settingsData?.forEach((item: { setting_key: string; setting_value: any }) => {
-        settings[item.setting_key] = item.setting_value
+      // 提取渠道 ID 列表
+      const channelIds = monitor.push_channels_list.map(ch => ch.id)
+      
+      // 调用统一推送服务
+      const results = await pushShareRecord({
+        shareRecordId: shareRecord.id as number,
+        channelIds,
+        shareRecord,
       })
       
-      console.log(`[Monitor] 系统设置:`, { 
-        telegram_bot_token: settings.telegram_bot_token ? '已配置' : '未配置',
-        proxy_url: settings.proxy_url || '未配置'
+      // 检查是否有成功的推送
+      const anySuccess = results.some(r => r.success)
+      
+      console.log(`[Monitor] autoPush 结果:`, {
+        total: results.length,
+        success: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
       })
-      
-      // 获取推送模板
-      let templateType: 'movie' | 'tv' | 'completed' = 'tv'
-      
-      // 从分享记录获取 TMDB 信息判断是否完结
-      const tmdbInfo = shareRecord.tmdb_info as Record<string, unknown> | null
-      
-      // 根据配置决定模板类型
-      if (monitor.push_template_type === 'auto' || !monitor.push_template_type) {
-        // 自动识别：根据 TMDB 信息判断
-        const mediaType = tmdbInfo?.media_type as string | undefined
-        if (mediaType === 'movie') {
-          templateType = 'movie'
-        } else {
-          // 默认为剧集
-          templateType = 'tv'
-        }
-      } else if (monitor.push_template_type === 'completed') {
-        templateType = 'completed'
-      } else {
-        templateType = monitor.push_template_type
-      }
-      
-      const isCompleted = tmdbInfo?.isCompleted || 
-        (tmdbInfo?.status === 'Ended' && tmdbInfo?.episode === tmdbInfo?.totalEpisodes)
-      
-      // 如果是剧集模板且已完结，自动切换到完结模板
-      if (templateType === 'tv' && isCompleted) {
-        templateType = 'completed'
-      }
-      
-      // 查找对应类型的模板
-      const { data: templates } = await this.client
-        .from('push_templates')
-        .select('*')
-        .eq('cloud_drive_id', monitor.cloud_drive_id)
-        .eq('is_active', true)
-        .or(`template_type.eq.${templateType},template_type.is.null`)
-        .limit(1)
-      
-      // 构建推送消息
-      const message = await this.buildPushMessage(shareRecord, templates)
-      
-      // 对每个渠道推送
-      let anySuccess = false
-      for (const channel of monitor.push_channels_list) {
-        // 合并渠道配置和全局设置
-        const pushConfig: PushChannelConfig = {
-          ...(channel.config as PushChannelConfig || {}),
-          // Telegram 需要 bot_token（从系统设置获取）
-          bot_token: settings?.telegram_bot_token || undefined,
-          // 代理设置
-          proxy_url: settings?.proxy_url || undefined,
-          proxy_enabled: settings?.proxy_enabled || false,
-        }
-        
-        console.log(`[Monitor] 推送配置:`, {
-          channel_type: channel.channel_type,
-          chat_id: pushConfig.chat_id,
-          bot_token: pushConfig.bot_token ? '已配置' : '未配置',
-          proxy_url: pushConfig.proxy_url || '未配置'
-        })
-        
-        const pushService = createPushService(
-          channel.channel_type as PushChannelType,
-          pushConfig
-        )
-        
-        const pushResult = await pushService.send(message)
-        
-        // 记录推送结果
-        await this.client.from('push_records').insert({
-          share_record_id: shareRecord.id as number,
-          push_channel_id: channel.id,
-          push_rule_id: null,
-          push_template_id: templates?.[0]?.id || null,
-          content: JSON.stringify(message),
-          push_status: pushResult.success ? 'success' : 'failed',
-          error_message: pushResult.error,
-          retry_count: 0,
-          pushed_at: pushResult.success ? new Date().toISOString() : null,
-        })
-        
-        if (pushResult.success) {
-          anySuccess = true
-        }
-      }
       
       return anySuccess
     } catch (error) {
@@ -1183,6 +1102,9 @@ export class FileMonitorService {
       return 0
     }
     
+    // 使用公共推送服务
+    const { pushToSingleChannel } = await import('@/lib/push/share-push-service')
+    
     let successCount = 0
     
     for (const push of failedPushes) {
@@ -1197,14 +1119,8 @@ export class FileMonitorService {
         continue
       }
       
-      // 重试推送
       const channel = push.push_channels as any
       if (!channel) continue
-      
-      const pushService = createPushService(
-        channel.channel_type as PushChannelType,
-        (channel.config as PushChannelConfig) || {}
-      )
       
       // 获取分享记录
       const { data: shareRecord } = await this.client
@@ -1215,22 +1131,21 @@ export class FileMonitorService {
       
       if (!shareRecord) continue
       
-      // 构建消息
-      const message = await this.buildPushMessage(shareRecord, null)
-      const pushResult = await pushService.send(message)
+      // 使用公共推送服务
+      const result = await pushToSingleChannel(push.share_record_id, push.push_channel_id, shareRecord)
       
       // 更新推送记录
       await this.client
         .from('push_records')
         .update({
-          push_status: pushResult.success ? 'success' : 'failed',
-          error_message: pushResult.error,
+          push_status: result.success ? 'success' : 'failed',
+          error_message: result.error,
           retry_count: push.retry_count + 1,
-          pushed_at: pushResult.success ? new Date().toISOString() : null,
+          pushed_at: result.success ? new Date().toISOString() : null,
         })
         .eq('id', push.id)
       
-      if (pushResult.success) {
+      if (result.success) {
         successCount++
       }
     }
@@ -1298,26 +1213,22 @@ export class FileMonitorService {
       throw new Error('关联数据不完整')
     }
     
-    const pushService = createPushService(
-      channel.channel_type as PushChannelType,
-      (channel.config as PushChannelConfig) || {}
-    )
-    
-    const message = await this.buildPushMessage(shareRecord, null)
-    const pushResult = await pushService.send(message)
+    // 使用公共推送服务
+    const { pushToSingleChannel } = await import('@/lib/push/share-push-service')
+    const result = await pushToSingleChannel(shareRecord.id, channel.id, shareRecord)
     
     // 更新推送记录
     await this.client
       .from('push_records')
       .update({
-        push_status: pushResult.success ? 'success' : 'failed',
-        error_message: pushResult.error,
+        push_status: result.success ? 'success' : 'failed',
+        error_message: result.error,
         retry_count: 0,
-        pushed_at: pushResult.success ? new Date().toISOString() : null,
+        pushed_at: result.success ? new Date().toISOString() : null,
       })
       .eq('id', pushRecordId)
     
-    return pushResult.success
+    return result.success
   }
 
   async pushShare(shareRecordId: number, channelId: number): Promise<boolean> {
@@ -1327,36 +1238,15 @@ export class FileMonitorService {
       .eq('id', shareRecordId)
       .single()
     
-    const { data: channel } = await this.client
-      .from('push_channels')
-      .select('*')
-      .eq('id', channelId)
-      .single()
-    
-    if (!shareRecord || !channel) {
-      throw new Error('分享记录或推送渠道不存在')
+    if (!shareRecord) {
+      throw new Error('分享记录不存在')
     }
     
-    const pushService = createPushService(
-      channel.channel_type as PushChannelType,
-      (channel.config as PushChannelConfig) || {}
-    )
+    // 使用公共推送服务
+    const { pushToSingleChannel } = await import('@/lib/push/share-push-service')
+    const result = await pushToSingleChannel(shareRecordId, channelId, shareRecord)
     
-    const message = await this.buildPushMessage(shareRecord, null)
-    const pushResult = await pushService.send(message)
-    
-    // 创建新的推送记录
-    await this.client.from('push_records').insert({
-      share_record_id: shareRecordId,
-      push_channel_id: channelId,
-      content: JSON.stringify(message),
-      push_status: pushResult.success ? 'success' : 'failed',
-      error_message: pushResult.error,
-      retry_count: 0,
-      pushed_at: pushResult.success ? new Date().toISOString() : null,
-    })
-    
-    return pushResult.success
+    return result.success
   }
 
   // ==================== 工具方法 ====================
