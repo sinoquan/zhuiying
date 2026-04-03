@@ -10,8 +10,8 @@ const publicPaths = [
   '/grid.svg',
 ]
 
-// 认证中间件
-export function middleware(request: NextRequest) {
+// 认证代理（Next.js 16 使用 proxy 替代 middleware）
+export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname
   
   // 检查是否禁用认证（通过环境变量或数据库设置）
