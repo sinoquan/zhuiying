@@ -196,10 +196,48 @@ export class FileMonitorService {
         driveConfig
       )
       
-      // 获取新文件
-      const sinceTime = new Date(monitor.created_at)
-      const newFiles = await driveService.checkNewFiles(monitor.path, sinceTime)
-      result.new_files = newFiles.length
+      // 获取目录中的所有文件
+      console.log(`[Monitor] 扫描目录: ${monitor.path}`)
+      const allFilesResult = await driveService.listFiles(monitor.path, 1, 100)
+      let allFiles = allFilesResult.files
+      
+      // 如果有更多页面，继续获取
+      let page = 2
+      while (allFilesResult.has_more) {
+        const moreResult = await driveService.listFiles(monitor.path, page, 100)
+        allFiles = [...allFiles, ...moreResult.files]
+        page++
+      }
+      
+      console.log(`[Monitor] 目录中共有 ${allFiles.length} 个文件`)
+      result.new_files = allFiles.length
+      
+      if (allFiles.length === 0) {
+        return result
+      }
+      
+      // 过滤掉已经分享过的文件（去重检查）
+      const client = getSupabaseClient()
+      const newFiles: FileInfo[] = []
+      
+      for (const file of allFiles) {
+        // 检查是否已有分享记录
+        const { data: existingShare } = await client
+          .from('share_records')
+          .select('id')
+          .eq('cloud_drive_id', monitor.cloud_drive_id)
+          .eq('file_path', file.id)
+          .maybeSingle()
+        
+        if (existingShare) {
+          console.log(`[Monitor] 跳过已分享的文件: ${file.name}`)
+          result.skipped_files++
+        } else {
+          newFiles.push(file)
+        }
+      }
+      
+      console.log(`[Monitor] 未分享的文件: ${newFiles.length} 个`)
       
       if (newFiles.length === 0) {
         return result
@@ -487,11 +525,9 @@ export class FileMonitorService {
           file_size: this.formatFileSize(file.size),
           share_url: shareInfo.share_url,
           share_code: shareInfo.share_code,
-          share_status: 'success',
+          share_status: 'active',
           file_created_at: file.created_at,
-          tmdb_info: tmdbInfo,
           content_type: seriesInfo.contentInfo.type,
-          is_completed: seriesInfo.isCompleted,
           source: 'monitor',
         })
         .select(`
@@ -548,10 +584,8 @@ export class FileMonitorService {
           file_size: this.formatFileSize(totalSize),
           share_url: shareInfo.share_url,
           share_code: shareInfo.share_code,
-          share_status: 'success',
-          tmdb_info: completedContentInfo,
+          share_status: 'active',
           content_type: 'tv',
-          is_completed: true,
           file_count: files.length,
           source: 'monitor',
         })
@@ -644,6 +678,8 @@ export class FileMonitorService {
   
   private async autoPush(monitor: MonitorTask, shareRecord: Record<string, unknown>): Promise<boolean> {
     try {
+      console.log(`[Monitor] autoPush: 监控任务 ${monitor.id}, push_channels_list:`, monitor.push_channels_list)
+      
       // 如果监控任务没有配置推送渠道，跳过
       if (!monitor.push_channels_list || monitor.push_channels_list.length === 0) {
         console.log(`[Monitor] 监控任务 ${monitor.id} 未配置推送渠道，跳过推送`)

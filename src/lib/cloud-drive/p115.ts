@@ -196,14 +196,46 @@ export class Pan115Service implements ICloudDriveService {
       const fileId = item.fid || String(item.cid) || item.file_id || ''
       const name = item.file_name || item.n || item.name || ''
       
+      // 解析创建时间 - 115 API返回的是Unix时间戳（秒），可能是数字或字符串
+      // tp 字段是创建时间，t 字段是修改时间
+      let createdAt: string
+      const rawCreatedAt = item.tp || item.file_ctime || item.create_time || item.ctime
+      
+      // 辅助函数：解析时间戳（支持数字和字符串类型）
+      const parseTimestamp = (value: any): string => {
+        if (typeof value === 'number') {
+          return new Date(value * 1000).toISOString()
+        } else if (typeof value === 'string') {
+          // 检查是否是纯数字字符串（时间戳）
+          const numValue = parseInt(value, 10)
+          if (!isNaN(numValue) && value.length === 10) {
+            // 10位时间戳（秒）
+            return new Date(numValue * 1000).toISOString()
+          } else if (!isNaN(numValue) && value.length === 13) {
+            // 13位时间戳（毫秒）
+            return new Date(numValue).toISOString()
+          } else {
+            // 可能是ISO字符串
+            return value
+          }
+        }
+        return new Date().toISOString()
+      }
+      
+      createdAt = parseTimestamp(rawCreatedAt)
+      
+      // 解析修改时间
+      const rawModifiedAt = item.t || item.file_mtime || item.modify_time || item.mtime
+      const modifiedAt = parseTimestamp(rawModifiedAt)
+      
       return {
         id: fileId,
         name: name,
         path: isDir ? String(item.cid || item.parent_id || '') : path,
         is_dir: isDir,
         size: size,
-        created_at: item.file_ctime || item.tp || item.create_time || new Date().toISOString(),
-        modified_at: item.file_mtime || item.t || item.modify_time || new Date().toISOString(),
+        created_at: createdAt,
+        modified_at: modifiedAt,
         sha1: item.sha1 || item.file_sha1,
         md5: item.md5 || item.file_md5,
       }
@@ -644,22 +676,33 @@ export class Pan115Service implements ICloudDriveService {
     let page = 1
     const sinceTimestamp = new Date(sinceTime).getTime()
     
+    console.log(`[115] checkNewFiles: path=${path}, sinceTime=${sinceTime.toISOString()}, sinceTimestamp=${sinceTimestamp}`)
+    
+    // 扫描所有页面，不要因为某一页没有新文件就停止
     while (true) {
       const result = await this.listFiles(path, page, 50)
       
-      const newFiles = result.files.filter(file => {
+      console.log(`[115] 第${page}页: ${result.files.length}个文件`)
+      
+      for (const file of result.files) {
+        // 打印文件时间信息用于调试
         const fileTime = new Date(file.created_at).getTime()
-        return fileTime > sinceTimestamp
-      })
+        console.log(`[115] 文件: ${file.name}, created_at=${file.created_at}, fileTime=${fileTime}, sinceTimestamp=${sinceTimestamp}, isNew=${fileTime > sinceTimestamp}`)
+        
+        if (fileTime > sinceTimestamp) {
+          allFiles.push(file)
+          console.log(`[115] 发现新文件: ${file.name}`)
+        }
+      }
       
-      allFiles.push(...newFiles)
-      
-      if (!result.has_more || newFiles.length === 0) {
+      if (!result.has_more) {
+        console.log(`[115] 已扫描完所有页面`)
         break
       }
       page++
     }
     
+    console.log(`[115] checkNewFiles 完成: 共发现 ${allFiles.length} 个新文件`)
     return allFiles
   }
 
