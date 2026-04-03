@@ -11,6 +11,7 @@ import { DingTalkPushService } from '@/lib/push/dingtalk'
 import { FeishuPushService } from '@/lib/push/feishu'
 import { BarkPushService } from '@/lib/push/bark'
 import { ServerChanPushService } from '@/lib/push/serverchan'
+import { TMDBService } from '@/lib/tmdb'
 import { PushChannelType } from '@/lib/push/types'
 
 // 推送请求
@@ -39,6 +40,91 @@ interface PushRequest {
   }
   channels: number[]  // 选中的推送渠道ID
   customContent?: string  // 自定义推送内容
+}
+
+// 补全 TMDB 信息
+async function enrichTMDBInfo(
+  client: ReturnType<typeof getSupabaseClient>,
+  tmdbInfo: Record<string, any>,
+  tmdbId: number | undefined
+): Promise<Record<string, any>> {
+  // 如果已有 cast 信息，直接返回
+  if (tmdbInfo.cast?.length > 0) {
+    return tmdbInfo
+  }
+  
+  // 如果没有 tmdbId，无法获取
+  if (!tmdbId) {
+    return tmdbInfo
+  }
+  
+  try {
+    // 获取系统设置
+    const { data: apiKeySetting } = await client
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'tmdb_api_key')
+      .single()
+    
+    const { data: proxySetting } = await client
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'proxy_url')
+      .single()
+    
+    const { data: proxyEnabledSetting } = await client
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'proxy_enabled')
+      .single()
+    
+    const apiKey = apiKeySetting?.setting_value as string
+    const proxyUrl = proxyEnabledSetting?.setting_value ? (proxySetting?.setting_value as string) : undefined
+    
+    if (!apiKey) {
+      console.log('[Enrich TMDB] 未配置 TMDB API Key')
+      return tmdbInfo
+    }
+    
+    const tmdbService = new TMDBService({ apiKey, proxyUrl })
+    const type = tmdbInfo.type || 'movie'
+    
+    console.log(`[Enrich TMDB] 获取 ${type} 详情: ${tmdbId}`)
+    
+    if (type === 'movie') {
+      const details = await tmdbService.getMovieDetails(tmdbId, 'credits') as any
+      console.log('[Enrich TMDB] 电影详情返回:', JSON.stringify({
+        has_credits: !!details?.credits,
+        has_cast: !!details?.credits?.cast,
+        cast_length: details?.credits?.cast?.length,
+        cast_names: details?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
+        genres: details?.genres?.map((g: any) => g.name),
+        runtime: details?.runtime,
+      }))
+      if (details) {
+        tmdbInfo.cast = details.credits?.cast?.slice(0, 5).map((c: any) => c.name) || []
+        tmdbInfo.genres = details.genres?.map((g: any) => g.name) || tmdbInfo.genres
+        tmdbInfo.runtime = details.runtime || tmdbInfo.runtime
+        tmdbInfo.overview = details.overview || tmdbInfo.overview
+        console.log('[Enrich TMDB] 电影演员:', tmdbInfo.cast)
+      }
+    } else {
+      const details = await tmdbService.getTVDetails(tmdbId, 'credits') as any
+      if (details) {
+        tmdbInfo.cast = details.credits?.cast?.slice(0, 5).map((c: any) => c.name) || []
+        tmdbInfo.genres = details.genres?.map((g: any) => g.name) || tmdbInfo.genres
+        tmdbInfo.totalEpisodes = details.number_of_episodes || tmdbInfo.totalEpisodes
+        tmdbInfo.status = details.status || tmdbInfo.status
+        tmdbInfo.overview = details.overview || tmdbInfo.overview
+        console.log('[Enrich TMDB] 电视剧演员:', tmdbInfo.cast)
+      }
+    }
+    
+    return tmdbInfo
+  } catch (err) {
+    console.error('[Enrich TMDB] 获取失败:', err)
+    return tmdbInfo
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -86,13 +172,16 @@ export async function POST(request: NextRequest) {
       }
       
       // 解析 tmdb_info
-      const tmdbInfo = typeof shareRecord.tmdb_info === 'string' 
+      let tmdbInfo = typeof shareRecord.tmdb_info === 'string' 
         ? JSON.parse(shareRecord.tmdb_info) 
         : shareRecord.tmdb_info || {}
       
       // 兼容 id 和 tmdbId
       const tmdbId = tmdbInfo.tmdbId || tmdbInfo.id || shareRecord.tmdb_id
       const driveName = shareRecord.cloud_drives?.alias || shareRecord.cloud_drives?.name || '网盘'
+      
+      // 补全 TMDB 信息（获取演员等）
+      tmdbInfo = await enrichTMDBInfo(client, tmdbInfo, tmdbId as number)
       
       // 构建标题
       let title = ''
@@ -118,7 +207,8 @@ export async function POST(request: NextRequest) {
         lines.push(`🍿 TMDB ID: ${tmdbId}`)
       }
       
-      if (tmdbInfo.rating) {
+      // 评分（即使是0也显示）
+      if (tmdbInfo.rating !== undefined && tmdbInfo.rating !== null) {
         lines.push(`⭐️ 评分: ${tmdbInfo.rating}/10`)
       }
       
@@ -142,18 +232,22 @@ export async function POST(request: NextRequest) {
       }
       
       // 电影时长
-      if (contentType === 'movie' && tmdbInfo.runtime) {
+      if (contentType === 'movie' && tmdbInfo.runtime && tmdbInfo.runtime > 0) {
         const hours = Math.floor(tmdbInfo.runtime / 60)
         const mins = tmdbInfo.runtime % 60
         lines.push(`⏱️ 时长: ${hours > 0 ? `${hours}小时` : ''}${mins}分钟`)
       }
       
-      // 文件信息
-      if (shareRecord.file_count) {
+      // 文件信息（排除无效值）
+      if (shareRecord.file_count && shareRecord.file_count > 1) {
         lines.push(`📦 文件: ${shareRecord.file_count} 个`)
       }
       
-      lines.push(`💾 大小: ${shareRecord.file_size || '未知'}`)
+      // 文件大小（排除 0 B 和 0）
+      const fileSize = shareRecord.file_size
+      if (fileSize && fileSize !== '0 B' && fileSize !== '0' && fileSize !== '未知') {
+        lines.push(`💾 大小: ${fileSize}`)
+      }
       
       // 主演
       if (tmdbInfo.cast?.length > 0) {
@@ -166,6 +260,11 @@ export async function POST(request: NextRequest) {
           ? tmdbInfo.overview.substring(0, 150) + '...' 
           : tmdbInfo.overview
         lines.push(`📝 简介: ${shortOverview}`)
+      }
+      
+      // 备注
+      if (shareRecord.remark) {
+        lines.push(`🏷️ 备注: ${shareRecord.remark}`)
       }
       
       lines.push('')
@@ -259,10 +358,29 @@ export async function POST(request: NextRequest) {
             .eq('setting_key', 'proxy_enabled')
             .single()
           
+          const proxyEnabled = proxyEnabledSetting?.setting_value === 'true' || proxyEnabledSetting?.setting_value === true
+          const proxyUrl = proxyEnabled ? (proxySetting?.setting_value as string) : undefined
+          
+          console.log('[Assistant Push] 代理配置详情:', {
+            proxy_enabled_raw: proxyEnabledSetting?.setting_value,
+            proxy_enabled_parsed: proxyEnabled,
+            proxy_url_raw: proxySetting?.setting_value ? `${(proxySetting?.setting_value as string).substring(0, 20)}...` : null,
+            proxy_url_final: proxyUrl ? '已配置' : '未配置',
+          })
+          
           const service = new TelegramPushService({
             bot_token: tokenSetting?.setting_value as string || '',
             chat_id: channel.config?.chat_id || '',
-            proxy_url: proxyEnabledSetting?.setting_value ? (proxySetting?.setting_value as string) : undefined,
+            proxy_url: proxyUrl,
+          })
+          
+          console.log('[Assistant Push] Telegram 配置:', {
+            has_bot_token: !!tokenSetting?.setting_value,
+            chat_id: channel.config?.chat_id,
+            proxy_enabled: proxyEnabledSetting?.setting_value,
+            has_proxy_url: !!proxySetting?.setting_value,
+            has_poster: !!messageData.extra.poster_url,
+            content_length: messageData.content?.length,
           })
           
           // 发送消息（带图片）

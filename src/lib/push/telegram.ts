@@ -19,9 +19,12 @@ export class TelegramPushService implements IPushService {
     this.chatId = config.chat_id || ''
     this.apiUrl = `https://api.telegram.org/bot${this.botToken}`
     // 从配置获取代理URL
-    if (typeof config.proxy_url === 'string') {
-      this.proxyUrl = config.proxy_url
-    }
+    this.proxyUrl = typeof config.proxy_url === 'string' ? config.proxy_url : undefined
+    console.log('[Telegram] 构造函数配置:', {
+      has_bot_token: !!this.botToken,
+      chat_id: this.chatId,
+      proxy_url: this.proxyUrl ? '已配置' : '未配置',
+    })
   }
 
   /**
@@ -126,11 +129,88 @@ export class TelegramPushService implements IPushService {
 
   async sendWithImage(message: PushMessage, imageUrl: string): Promise<PushResult> {
     try {
-      // 如果有图片，使用 sendPhoto 方法
+      console.log('[Telegram] sendWithImage 尝试发送图片:', imageUrl)
+      
+      // 先尝试通过代理下载图片
+      let imageBuffer: Buffer | null = null
+      
+      if (this.proxyUrl && imageUrl) {
+        try {
+          console.log('[Telegram] 通过代理下载图片...')
+          const { fetchWithProxy } = await import('@/lib/proxy')
+          const response = await fetchWithProxy(imageUrl, this.proxyUrl, {
+            method: 'GET',
+            signal: AbortSignal.timeout(30000),
+          })
+          
+          if (response.ok) {
+            const arrayBuffer = await response.arrayBuffer()
+            imageBuffer = Buffer.from(arrayBuffer)
+            console.log('[Telegram] 图片下载成功, size:', imageBuffer.length)
+          } else {
+            console.warn('[Telegram] 代理下载失败, status:', response.status)
+          }
+        } catch (downloadErr) {
+          console.warn('[Telegram] 代理下载图片失败:', downloadErr)
+        }
+      }
+      
+      // 如果代理下载成功，使用 multipart/form-data 上传
+      if (imageBuffer) {
+        try {
+          const caption = this.formatMessage(message)
+          const truncatedCaption = caption.length > 1000 
+            ? caption.substring(0, 1000) + '...' 
+            : caption
+          
+          // 使用 undici 的 FormData 和 fetch
+          const { FormData: UndiciFormData, fetch: undiciFetch, ProxyAgent } = await import('undici')
+          
+          const formData = new UndiciFormData()
+          formData.append('chat_id', this.chatId)
+          formData.append('photo', new Blob([new Uint8Array(imageBuffer)], { type: 'image/jpeg' }), 'poster.jpg')
+          formData.append('caption', truncatedCaption)
+          formData.append('parse_mode', 'HTML')
+          
+          const uploadUrl = `${this.apiUrl}/sendPhoto`
+          
+          // 使用代理上传
+          let response: Response
+          if (this.proxyUrl) {
+            console.log('[Telegram] 使用代理上传图片...')
+            const proxyAgent = new ProxyAgent(this.proxyUrl)
+            response = await undiciFetch(uploadUrl, {
+              method: 'POST',
+              body: formData,
+              dispatcher: proxyAgent,
+            }) as unknown as Response
+          } else {
+            console.log('[Telegram] 直连上传图片...')
+            response = await undiciFetch(uploadUrl, {
+              method: 'POST',
+              body: formData,
+            }) as unknown as Response
+          }
+          
+          const data = await response.json() as { ok?: boolean; result?: { message_id?: number }; description?: string }
+          
+          if (response.ok && data.ok) {
+            console.log('[Telegram] 图片上传成功, message_id:', data.result?.message_id)
+            return {
+              success: true,
+              message_id: data.result?.message_id?.toString(),
+            }
+          }
+          
+          console.warn('[Telegram] FormData 上传图片失败:', data.description)
+        } catch (uploadErr) {
+          console.warn('[Telegram] FormData 上传异常:', uploadErr)
+        }
+      }
+      
+      // 尝试直接使用 URL（不通过代理，Telegram 服务器直接访问）
       if (imageUrl) {
         const caption = this.formatMessage(message)
-        
-        // Telegram caption 限制 1024 字符
         const truncatedCaption = caption.length > 1000 
           ? caption.substring(0, 1000) + '...' 
           : caption
@@ -145,14 +225,14 @@ export class TelegramPushService implements IPushService {
         if (result.success) {
           return result
         }
-        
-        // 如果图片发送失败（可能是URL无效），降级为纯文本
-        console.warn('Telegram photo send failed, falling back to text:', result.error)
+        console.warn('[Telegram] URL 发送图片失败:', result.error)
       }
       
-      // 没有图片或图片发送失败，发送纯文本
+      // 图片发送失败，发送纯文本（带完整内容）
+      console.log('[Telegram] 回退到纯文本消息')
       return this.send(message)
     } catch (error) {
+      console.error('[Telegram] sendWithImage 异常:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '发送失败',

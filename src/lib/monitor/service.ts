@@ -447,7 +447,7 @@ export class FileMonitorService {
         
         if (results && results.length > 0) {
           const movie = results[0]
-          const details = await tmdbService.getMovieDetails(movie.id)
+          const details = await tmdbService.getMovieDetails(movie.id, 'credits')
           
           return {
             tmdbId: movie.id,
@@ -467,7 +467,7 @@ export class FileMonitorService {
         
         if (results && results.length > 0) {
           const show = results[0]
-          const details = await tmdbService.getTVDetails(show.id)
+          const details = await tmdbService.getTVDetails(show.id, 'credits')
           
           return {
             tmdbId: show.id,
