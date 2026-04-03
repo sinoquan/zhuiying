@@ -17,7 +17,7 @@ interface MonitorTask {
   enabled: boolean
   created_at: string
   push_channel_ids?: number[] | null
-  push_template_type?: 'movie' | 'tv' | 'completed' | null
+  push_template_type?: 'movie' | 'tv' | 'completed' | 'auto' | null
   cloud_drives?: {
     id: number
     name: string
@@ -651,10 +651,27 @@ export class FileMonitorService {
       }
       
       // 获取推送模板
-      let templateType: 'movie' | 'tv' | 'completed' = monitor.push_template_type || 'tv'
+      let templateType: 'movie' | 'tv' | 'completed' = 'tv'
       
       // 从分享记录获取 TMDB 信息判断是否完结
       const tmdbInfo = shareRecord.tmdb_info as Record<string, unknown> | null
+      
+      // 根据配置决定模板类型
+      if (monitor.push_template_type === 'auto' || !monitor.push_template_type) {
+        // 自动识别：根据 TMDB 信息判断
+        const mediaType = tmdbInfo?.media_type as string | undefined
+        if (mediaType === 'movie') {
+          templateType = 'movie'
+        } else {
+          // 默认为剧集
+          templateType = 'tv'
+        }
+      } else if (monitor.push_template_type === 'completed') {
+        templateType = 'completed'
+      } else {
+        templateType = monitor.push_template_type
+      }
+      
       const isCompleted = tmdbInfo?.isCompleted || 
         (tmdbInfo?.status === 'Ended' && tmdbInfo?.episode === tmdbInfo?.totalEpisodes)
       

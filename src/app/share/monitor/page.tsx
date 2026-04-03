@@ -150,7 +150,7 @@ export default function FileMonitorPage() {
     cloud_drive_id: "",
     cron_expression: "*/10 7-23 * * *",
     push_channel_ids: [] as number[],
-    push_template_type: "tv",
+    push_template_type: "auto",
   })
   
   // 删除确认弹窗
@@ -316,7 +316,7 @@ export default function FileMonitorPage() {
       cloud_drive_id: monitor.cloud_drive_id.toString(),
       cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
       push_channel_ids: monitor.push_channel_ids || [],
-      push_template_type: monitor.push_template_type || "tv",
+      push_template_type: monitor.push_template_type || "auto",
     })
     selectedFoldersRef.current = []
     forceUpdate(n => n + 1)
@@ -432,7 +432,7 @@ export default function FileMonitorPage() {
       cloud_drive_id: "", 
       cron_expression: "*/10 7-23 * * *",
       push_channel_ids: [],
-      push_template_type: "tv",
+      push_template_type: "auto",
     })
     setEditingMonitor(null)
     setBrowsingFiles([])
@@ -451,7 +451,7 @@ export default function FileMonitorPage() {
       cloud_drive_id: monitor.cloud_drive_id.toString(),
       cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
       push_channel_ids: monitor.push_channel_ids || [],
-      push_template_type: monitor.push_template_type || "tv",
+      push_template_type: monitor.push_template_type || "auto",
     })
     selectedFoldersRef.current = [{ path: monitor.path, name: monitor.path_name || monitor.path.split('/').pop() || monitor.path }]
     forceUpdate(n => n + 1)
@@ -834,7 +834,8 @@ export default function FileMonitorPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="text-xs font-normal">
-                          {monitor.push_template_type === 'movie' ? '🎬 电影' : '📺 剧集'}
+                          {monitor.push_template_type === 'movie' ? '🎬 电影' : 
+                           monitor.push_template_type === 'tv' ? '📺 剧集' : '🔄 自动'}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -1096,52 +1097,6 @@ export default function FileMonitorPage() {
                     </div>
                   )}
                 </div>
-                
-                {/* 内容类型 */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium flex items-center gap-2">
-                    <span className="w-5 h-5 rounded bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-xs text-orange-600 dark:text-orange-400">4</span>
-                    内容类型
-                  </Label>
-                  <div className="flex gap-2">
-                    <label 
-                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg cursor-pointer border-2 transition-all text-sm ${
-                        formData.push_template_type === 'tv' 
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300' 
-                          : 'border-transparent bg-slate-100 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="template_type"
-                        value="tv"
-                        checked={formData.push_template_type === 'tv'}
-                        onChange={() => setFormData({ ...formData, push_template_type: 'tv' })}
-                        className="sr-only"
-                      />
-                      <span>📺</span>
-                      <span>剧集</span>
-                    </label>
-                    <label 
-                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg cursor-pointer border-2 transition-all text-sm ${
-                        formData.push_template_type === 'movie' 
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300' 
-                          : 'border-transparent bg-slate-100 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="template_type"
-                        value="movie"
-                        checked={formData.push_template_type === 'movie'}
-                        onChange={() => setFormData({ ...formData, push_template_type: 'movie' })}
-                        className="sr-only"
-                      />
-                      <span>🎬</span>
-                      <span>电影</span>
-                    </label>
-                  </div>
-                </div>
               </div>
               
               {/* 分隔线 */}
@@ -1151,7 +1106,7 @@ export default function FileMonitorPage() {
               <div className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium flex items-center gap-2">
-                    <span className="w-5 h-5 rounded bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center text-xs text-cyan-600 dark:text-cyan-400">5</span>
+                    <span className="w-5 h-5 rounded bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-xs text-orange-600 dark:text-orange-400">4</span>
                     选择监控目录
                     {!editingMonitor && <span className="text-destructive">*</span>}
                   </Label>
