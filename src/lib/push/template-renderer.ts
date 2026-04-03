@@ -56,6 +56,16 @@ export function renderTemplate(
   // 剧集信息
   result = formatSeasonEpisode(result, extra.season, extra.episode, extra.episode_end)
   
+  // 进度信息
+  result = result.replace(/{total_episodes}/g, String(extra.total_episodes || ''))
+  result = result.replace(/{progress_bar}/g, extra.progress_bar || '')
+  result = result.replace(/{progress_percent}/g, extra.progress_percent || '')
+  result = result.replace(/{status}/g, extra.status || '')
+  
+  // 完结状态文本
+  const statusText = extra.is_completed ? '完结' : '追更中'
+  result = result.replace(/{is_completed}/g, statusText)
+  
   // 分类
   result = result.replace(/{category}/g, extra.category || '')
   result = result.replace(/{category_tag}/g, (extra.category || '').replace(/\s+/g, ''))
