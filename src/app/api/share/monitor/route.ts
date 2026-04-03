@@ -33,20 +33,31 @@ export async function GET() {
         .select('id, channel_name, channel_type, target_name')
       
       // 创建渠道ID到渠道信息的映射
-      const channelMap = new Map<number, { id: number; channel_name: string; channel_type: string; target_name?: string }>()
+      const channelMap = new Map<string | number, { id: number; channel_name: string; channel_type: string; target_name?: string }>()
       for (const ch of allChannels || []) {
         channelMap.set(ch.id, ch)
+        channelMap.set(String(ch.id), ch)  // 同时存储字符串形式
       }
       
       // 为每个监控任务附加推送渠道信息
       for (const monitor of monitors) {
         // 解析 push_channel_ids (JSON 数组)
-        let channelIds = monitor.push_channel_ids as number[] | string[] | null
-        // 确保转换为数字数组
-        if (channelIds && Array.isArray(channelIds)) {
-          channelIds = channelIds.map(id => typeof id === 'string' ? parseInt(id) : id)
+        const rawChannelIds = monitor.push_channel_ids
+        let channelIds: (string | number)[] = []
+        
+        if (rawChannelIds) {
+          if (Array.isArray(rawChannelIds)) {
+            channelIds = rawChannelIds
+          } else if (typeof rawChannelIds === 'string') {
+            try {
+              channelIds = JSON.parse(rawChannelIds)
+            } catch {
+              channelIds = []
+            }
+          }
         }
-        if (channelIds && channelIds.length > 0) {
+        
+        if (channelIds.length > 0) {
           monitor.push_channels_list = channelIds
             .map(id => channelMap.get(id))
             .filter(Boolean) as Array<{ id: number; channel_name: string; channel_type: string; target_name?: string }>

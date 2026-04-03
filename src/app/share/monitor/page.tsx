@@ -783,13 +783,13 @@ export default function FileMonitorPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead className="w-[160px]">网盘</TableHead>
+                  <TableHead className="w-[140px]">网盘</TableHead>
                   <TableHead>监控目录</TableHead>
-                  <TableHead className="w-[120px]">检测频率</TableHead>
-                  <TableHead className="w-[200px]">推送渠道</TableHead>
-                  <TableHead className="w-[100px]">状态</TableHead>
-                  <TableHead className="w-[140px]">最近扫描</TableHead>
-                  <TableHead className="w-[60px] text-right">操作</TableHead>
+                  <TableHead className="w-[180px]">推送目标</TableHead>
+                  <TableHead className="w-[130px]">检测频率</TableHead>
+                  <TableHead className="w-[120px]">最近扫描</TableHead>
+                  <TableHead className="w-[80px]">状态</TableHead>
+                  <TableHead className="w-[120px] text-center">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -820,20 +820,14 @@ export default function FileMonitorPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm truncate max-w-[250px]" title={displayName}>
+                          <span className="font-medium text-sm truncate max-w-[200px]" title={displayName}>
                             {displayName}
                           </span>
                           {showPath && (
-                            <span className="text-xs text-muted-foreground truncate max-w-[250px]" title={monitor.path}>
+                            <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={monitor.path}>
                               {monitor.path}
                             </span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {getCronDescription(monitor.cron_expression)}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -849,7 +843,7 @@ export default function FileMonitorPage() {
                                 <span className="w-3 h-3 flex items-center justify-center">
                                   {getPushChannelIcon(ch.channel_type)}
                                 </span>
-                                <span className="truncate max-w-[60px]">{ch.target_name || ch.channel_name}</span>
+                                <span className="truncate max-w-[50px]">{ch.target_name || ch.channel_name}</span>
                               </Badge>
                             ))}
                           </div>
@@ -858,15 +852,9 @@ export default function FileMonitorPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={monitor.enabled}
-                            onCheckedChange={() => handleToggle(monitor)}
-                            className="data-[state=checked]:bg-green-500"
-                          />
-                          <span className={`text-xs ${monitor.enabled ? 'text-green-600' : 'text-muted-foreground'}`}>
-                            {monitor.enabled ? "运行" : "暂停"}
-                          </span>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {getCronDescription(monitor.cron_expression)}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -898,49 +886,74 @@ export default function FileMonitorPage() {
                           <span className="text-xs text-muted-foreground">暂无记录</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => handleManualScan(monitor.id)} disabled={scanning}>
-                              {isScanning ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : (
-                                <Play className="mr-2 h-4 w-4" />
-                              )}
-                              立即扫描
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleViewRecords(monitor)}>
-                              <FileText className="mr-2 h-4 w-4" />
-                              查看记录
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleTestPush(monitor)} disabled={testingPush}>
-                              <TestTube className="mr-2 h-4 w-4" />
-                              测试推送
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => openEditDialog(monitor)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              编辑配置
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleCopyMonitor(monitor)}>
-                              <Copy className="mr-2 h-4 w-4" />
-                              复制配置
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              onClick={() => openDeleteDialog(monitor)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              删除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={monitor.enabled}
+                            onCheckedChange={() => handleToggle(monitor)}
+                            className="data-[state=checked]:bg-green-500"
+                          />
+                          <span className={`text-xs ${monitor.enabled ? 'text-green-600' : 'text-muted-foreground'}`}>
+                            {monitor.enabled ? "运行" : "暂停"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => handleManualScan(monitor.id)}
+                            disabled={scanning}
+                            title="立即扫描"
+                          >
+                            {isScanning ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Play className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => handleViewRecords(monitor)}
+                            title="查看记录"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                            onClick={() => openDeleteDialog(monitor)}
+                            title="删除"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="更多操作">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem onClick={() => openEditDialog(monitor)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                编辑配置
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleCopyMonitor(monitor)}>
+                                <Copy className="mr-2 h-4 w-4" />
+                                复制配置
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleTestPush(monitor)} disabled={testingPush}>
+                                <TestTube className="mr-2 h-4 w-4" />
+                                测试推送
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
