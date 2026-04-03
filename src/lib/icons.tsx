@@ -10,26 +10,20 @@ import {
   TelegramIcon,
   QQIcon,
   WechatIcon,
-  Pan115Icon,
-  AliyunIcon,
-  QuarkIcon,
-  BaiduIcon,
-  TianyiIcon,
-  Pan123Icon,
-  GuangyaIcon,
 } from '@/components/icons'
 
 // 网盘图标配置
 export const driveIcons: Record<string, { 
   name: string
+  icon: string
 }> = {
-  '115': { name: '115网盘' },
-  '123': { name: '123云盘' },
-  'aliyun': { name: '阿里云盘' },
-  'quark': { name: '夸克网盘' },
-  'guangya': { name: '光鸭网盘' },
-  'tianyi': { name: '天翼网盘' },
-  'baidu': { name: '百度网盘' },
+  '115': { name: '115网盘', icon: '/icons/115.png' },
+  '123': { name: '123云盘', icon: '/icons/123.png' },
+  'aliyun': { name: '阿里云盘', icon: '/icons/aliyun.png' },
+  'quark': { name: '夸克网盘', icon: '/icons/quark.png' },
+  'guangya': { name: '光鸭网盘', icon: '/icons/guangya.png' },
+  'tianyi': { name: '天翼网盘', icon: '/icons/tianyi.png' },
+  'baidu': { name: '百度网盘', icon: '/icons/baidu.png' },
 }
 
 // 推送渠道图标配置
@@ -83,16 +77,27 @@ export function getPushChannelIcon(type: string): React.ReactNode {
 
 // 获取网盘图标组件
 export function getDriveIcon(type: string): React.ReactNode {
-  const icons: Record<string, React.ReactNode> = {
-    '115': <Pan115Icon className="h-4 w-4" />,
-    '123': <Pan123Icon className="h-4 w-4" />,
-    'aliyun': <AliyunIcon className="h-4 w-4" />,
-    'quark': <QuarkIcon className="h-4 w-4" />,
-    'guangya': <GuangyaIcon className="h-4 w-4" />,
-    'tianyi': <TianyiIcon className="h-4 w-4" />,
-    'baidu': <BaiduIcon className="h-4 w-4" />,
+  const lowerType = type?.toLowerCase() || ''
+  const drive = driveIcons[lowerType] || driveIcons[type]
+  
+  if (drive?.icon) {
+    return (
+      <img 
+        src={drive.icon} 
+        alt={drive.name}
+        className="h-4 w-4 object-contain"
+      />
+    )
   }
-  return icons[type?.toLowerCase()] || <BaiduIcon className="h-4 w-4" />
+  
+  // 默认返回一个占位图标
+  return (
+    <img 
+      src="/icons/baidu.png" 
+      alt="网盘"
+      className="h-4 w-4 object-contain"
+    />
+  )
 }
 
 // 获取网盘图标组件（别名）
