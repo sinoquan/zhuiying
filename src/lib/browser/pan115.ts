@@ -194,7 +194,26 @@ export async function access115ShareWithBrowser(
 
     // 等待页面内容加载 - 115网站可能需要更长时间
     console.log('[浏览器模拟] 等待页面加载...')
-    await new Promise(resolve => setTimeout(resolve, 5000))
+    await new Promise(resolve => setTimeout(resolve, 3000))
+    
+    // 点击"确定"按钮（115分享页面需要点击确认才能查看文件）
+    console.log('[浏览器模拟] 尝试点击"确定"按钮...')
+    const clicked = await page.evaluate(() => {
+      // 查找所有可能包含"确定"的按钮
+      const buttons = document.querySelectorAll('button, [role="button"], .btn, [class*="btn"], [class*="button"], [class*="confirm"]');
+      for (const btn of buttons) {
+        if (btn.textContent?.includes('确定') || btn.textContent?.includes('确认')) {
+          (btn as HTMLElement).click();
+          return true;
+        }
+      }
+      return false;
+    })
+    
+    if (clicked) {
+      console.log('[浏览器模拟] 已点击确定按钮，等待文件列表加载...')
+      await new Promise(resolve => setTimeout(resolve, 5000))
+    }
     
     // 检查是否捕获到数据
     if (capturedData.files.length > 0) {
@@ -472,6 +491,75 @@ async function extractFileInfoFromPage(
         files: files.slice(0, 50).map(f => ({
           ...f,
           file_id: 'unknown',
+          share_id: shareId,
+          share_code: shareCode,
+        })),
+      }
+    }
+
+    // 方法4：从页面文本中直接提取文件名（针对115新版页面）
+    const textContent = await page.evaluate(() => document.body.innerText)
+    console.log(`[浏览器模拟] 页面文本长度: ${textContent.length}`)
+    
+    // 从文本中提取可能的文件名
+    const fileNamePatterns = [
+      // 视频文件名格式
+      /[^\n]*?\.(mkv|mp4|avi|rmvb|wmv|mov|flv|webm)/gi,
+      // 包含季集信息的行
+      /[^\n]*?[Ss]\d+[Ee]\d+[^\n]*/g,
+      // 包含分辨率的行
+      /[^\n]*?\d{3,4}[pP][^\n]*/g,
+    ]
+    
+    const foundFiles: string[] = []
+    const lines = textContent.split('\n')
+    
+    for (const line of lines) {
+      const trimmed = line.trim()
+      // 跳过警告和协议内容
+      if (trimmed.includes('警告') || trimmed.includes('严禁') || trimmed.includes('协议')) continue
+      if (trimmed.includes('115生活') || trimmed.includes('云存储')) continue
+      if (trimmed.length < 5 || trimmed.length > 300) continue
+      
+      // 检查是否匹配文件名模式
+      if (/\.(mkv|mp4|avi|rmvb|wmv|mov|flv|webm)/i.test(trimmed) ||
+          /[Ss]\d+[Ee]\d+/i.test(trimmed) ||
+          /\d{3,4}[pP]/.test(trimmed)) {
+        // 清理文件名（移除前面的图标符号）
+        const cleanName = trimmed.replace(/^[^\w\u4e00-\u9fa5]+/, '')
+        if (cleanName && !foundFiles.includes(cleanName)) {
+          foundFiles.push(cleanName)
+        }
+      }
+    }
+    
+    console.log(`[浏览器模拟] 从页面文本找到 ${foundFiles.length} 个可能的文件`)
+    
+    if (foundFiles.length > 0) {
+      if (foundFiles.length === 1) {
+        return {
+          share_id: shareId,
+          share_code: shareCode,
+          file_id: 'unknown',
+          file_name: foundFiles[0],
+          file_size: 0,
+          is_dir: false,
+        }
+      }
+      
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: '0',
+        file_name: '分享文件夹',
+        file_size: 0,
+        is_dir: true,
+        file_count: foundFiles.length,
+        files: foundFiles.slice(0, 50).map(name => ({
+          file_id: 'unknown',
+          file_name: name,
+          file_size: 0,
+          is_dir: false,
           share_id: shareId,
           share_code: shareCode,
         })),
