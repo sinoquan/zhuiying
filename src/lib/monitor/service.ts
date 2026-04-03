@@ -52,7 +52,12 @@ interface FileInfo {
   path: string
   size: number
   created_at?: string
-  is_directory?: boolean
+  is_dir?: boolean  // CloudFile 使用的字段名
+}
+
+// 获取文件是否为目录
+function isFileDirectory(file: FileInfo): boolean {
+  return file.is_dir === true
 }
 
 // 内容信息
@@ -210,6 +215,16 @@ export class FileMonitorService {
       }
       
       console.log(`[Monitor] 目录中共有 ${allFiles.length} 个文件`)
+      
+      // 调试：打印文件的 is_dir 信息
+      if (allFiles.length > 0) {
+        console.log(`[Monitor] 文件列表示例:`, allFiles.slice(0, 3).map(f => ({
+          name: f.name,
+          is_dir: f.is_dir,
+          size: f.size,
+        })))
+      }
+      
       result.new_files = allFiles.length
       
       if (allFiles.length === 0) {
@@ -505,7 +520,7 @@ export class FileMonitorService {
       let fileSize = file.size || shareInfo.total_size || 0
       
       // 如果是文件夹且大小为0，尝试访问分享链接获取真实大小
-      if (file.is_directory && fileSize === 0 && shareInfo.share_url) {
+      if (isFileDirectory(file) && fileSize === 0 && shareInfo.share_url) {
         console.log(`[Monitor] 文件夹大小为0，尝试获取真实大小: ${file.name}`)
         try {
           // 提取分享ID
@@ -564,7 +579,7 @@ export class FileMonitorService {
           share_code: shareInfo.share_code,
           share_status: 'active',
           file_created_at: file.created_at,
-          content_type: file.is_directory ? 'folder' : 'video', // 文件类型：文件夹或视频
+          content_type: isFileDirectory(file) ? 'folder' : 'video', // 文件类型：文件夹或视频
           tmdb_id: seriesInfo.contentInfo.tmdbId,
           tmdb_title: seriesInfo.contentInfo.title,
           tmdb_info: tmdbInfo,
