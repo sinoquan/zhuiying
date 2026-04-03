@@ -501,8 +501,28 @@ export class FileMonitorService {
       // 创建分享
       const shareInfo = await driveService.createShare([file.id])
       
-      // 使用 shareInfo 的总大小，如果 file.size 为 0
-      const fileSize = file.size || shareInfo.total_size || 0
+      // 初始文件大小
+      let fileSize = file.size || shareInfo.total_size || 0
+      
+      // 如果是文件夹且大小为0，尝试访问分享链接获取真实大小
+      if (file.is_directory && fileSize === 0 && shareInfo.share_url) {
+        console.log(`[Monitor] 文件夹大小为0，尝试获取真实大小: ${file.name}`)
+        try {
+          // 提取分享ID
+          const shareIdMatch = shareInfo.share_url.match(/115cdn\.com\/s\/([a-z0-9]+)/i) || 
+                               shareInfo.share_url.match(/115\.com\/s\/([a-z0-9]+)/i)
+          if (shareIdMatch) {
+            const shareId = shareIdMatch[1]
+            const shareData = await driveService.getShareInfo(shareId, shareInfo.share_code)
+            if (shareData && shareData.file_size) {
+              fileSize = shareData.file_size
+              console.log(`[Monitor] 获取到真实大小: ${this.formatFileSize(fileSize)}`)
+            }
+          }
+        } catch (e) {
+          console.log('[Monitor] 获取文件夹大小失败:', e)
+        }
+      }
       
       // 构建TMDB信息，包含视频编码等
       const tmdbInfo = {

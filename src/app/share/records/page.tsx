@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -202,6 +202,7 @@ export default function ShareRecordsPage() {
   const [pushing, setPushing] = useState(false)
   const [renewingId, setRenewingId] = useState<number | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const isAutoRefreshing = useRef(false) // 防止重复自动刷新
   
   // 批量操作
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -302,12 +303,59 @@ export default function ShareRecordsPage() {
       setRecords(data.data || [])
       setTotal(data.pagination?.total || 0)
       setTotalPages(data.pagination?.totalPages || 0)
+      
+      // 自动刷新没有大小的文件夹记录（后台执行，不阻塞显示）
+      autoRefreshEmptyFolders(data.data || [])
     } catch (error) {
       console.error("获取分享记录失败:", error)
     } finally {
       setLoading(false)
     }
   }, [page, pageSize, filterCloudDrive, filterStatus, filterSource, searchQuery, monitorId])
+
+  // 自动刷新没有大小的文件夹记录
+  const autoRefreshEmptyFolders = async (records: ShareRecord[]) => {
+    // 防止重复刷新
+    if (isAutoRefreshing.current) return
+    
+    // 找出需要刷新的记录：文件夹类型且大小为空或0
+    const needRefresh = records.filter(r => 
+      r.content_type === 'folder' && 
+      (!r.file_size || r.file_size === '0' || r.file_size === '0 B')
+    )
+    
+    if (needRefresh.length === 0) return
+    
+    isAutoRefreshing.current = true
+    console.log(`[ShareRecords] 发现 ${needRefresh.length} 条需要刷新大小的记录`)
+    
+    // 后台静默刷新，每次最多刷新3条
+    const toRefresh = needRefresh.slice(0, 3)
+    let refreshed = 0
+    for (const record of toRefresh) {
+      try {
+        const res = await fetch('/api/share/refresh-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ share_record_id: record.id }),
+        })
+        const data = await res.json()
+        if (data.success) refreshed++
+      } catch (e) {
+        // 静默失败
+      }
+    }
+    
+    // 如果有刷新成功的，延迟重新加载列表
+    if (refreshed > 0) {
+      setTimeout(() => {
+        isAutoRefreshing.current = false
+        fetchRecords()
+      }, 2000)
+    } else {
+      isAutoRefreshing.current = false
+    }
+  }
 
   // 加载基础数据和分享记录
   useEffect(() => {
