@@ -83,7 +83,6 @@ interface FileMonitor {
     id: number
     channel_name: string
     channel_type: string
-    target_name?: string
   }>
   scan_stats?: ScanStats
 }
@@ -838,12 +837,11 @@ export default function FileMonitorPage() {
                                 key={ch.id} 
                                 variant="outline" 
                                 className="text-[10px] px-1.5 py-0 h-5 gap-1"
-                                title={ch.channel_name}
                               >
                                 <span className="w-3 h-3 flex items-center justify-center">
                                   {getPushChannelIcon(ch.channel_type)}
                                 </span>
-                                <span className="truncate max-w-[50px]">{ch.target_name || ch.channel_name}</span>
+                                <span className="truncate max-w-[50px]">{ch.channel_name}</span>
                               </Badge>
                             ))}
                           </div>

@@ -30,29 +30,33 @@ export async function GET() {
       // 获取所有推送渠道
       const { data: allChannels } = await client
         .from('push_channels')
-        .select('id, channel_name, channel_type, target_name')
+        .select('id, channel_name, channel_type')
       
       // 创建渠道ID到渠道信息的映射
-      const channelMap = new Map<string | number, { id: number; channel_name: string; channel_type: string; target_name?: string }>()
+      const channelMap = new Map<number, { id: number; channel_name: string; channel_type: string }>()
       for (const ch of allChannels || []) {
         channelMap.set(ch.id, ch)
-        channelMap.set(String(ch.id), ch)  // 同时存储字符串形式
       }
       
       // 为每个监控任务附加推送渠道信息
       for (const monitor of monitors) {
-        // 解析 push_channel_ids (JSON 数组)
+        // 解析 push_channel_ids (PostgreSQL 数组格式或 JSON 格式)
         const rawChannelIds = monitor.push_channel_ids
-        let channelIds: (string | number)[] = []
+        let channelIds: number[] = []
         
         if (rawChannelIds) {
           if (Array.isArray(rawChannelIds)) {
-            channelIds = rawChannelIds
+            channelIds = rawChannelIds.map(id => typeof id === 'string' ? parseInt(id) : id)
           } else if (typeof rawChannelIds === 'string') {
-            try {
-              channelIds = JSON.parse(rawChannelIds)
-            } catch {
-              channelIds = []
+            // PostgreSQL 数组格式: [15 14] 或 JSON 格式: [15, 14]
+            const str = rawChannelIds as string
+            if (str.startsWith('[') && str.endsWith(']')) {
+              // 移除方括号，分割得到数字
+              const inner = str.slice(1, -1).trim()
+              if (inner) {
+                // 分割可能是空格或逗号分隔
+                channelIds = inner.split(/[\s,]+/).map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+              }
             }
           }
         }
@@ -60,7 +64,7 @@ export async function GET() {
         if (channelIds.length > 0) {
           monitor.push_channels_list = channelIds
             .map(id => channelMap.get(id))
-            .filter(Boolean) as Array<{ id: number; channel_name: string; channel_type: string; target_name?: string }>
+            .filter(Boolean) as Array<{ id: number; channel_name: string; channel_type: string }>
         } else {
           monitor.push_channels_list = []
         }
