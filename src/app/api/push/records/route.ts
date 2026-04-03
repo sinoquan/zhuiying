@@ -34,6 +34,9 @@ export async function GET(request: NextRequest) {
           share_url,
           share_code,
           content_type,
+          share_status,
+          tmdb_id,
+          tmdb_title,
           cloud_drive_id,
           cloud_drives (id, name, alias)
         ),
@@ -176,5 +179,54 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('删除推送记录失败:', error)
     return NextResponse.json({ error: '删除失败' }, { status: 500 })
+  }
+}
+
+// PUT - 更新推送记录
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { id, content, push_channel_id, tmdb_id, tmdb_title, share_record_id } = body
+    
+    if (!id) {
+      return NextResponse.json({ error: '缺少记录ID' }, { status: 400 })
+    }
+    
+    const client = getSupabaseClient()
+    
+    // 更新推送记录
+    const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (content !== undefined) updateData.content = content
+    if (push_channel_id !== undefined) updateData.push_channel_id = push_channel_id
+    
+    const { error: pushError } = await client
+      .from('push_records')
+      .update(updateData)
+      .eq('id', id)
+    
+    if (pushError) {
+      throw new Error(`更新推送记录失败: ${pushError.message}`)
+    }
+    
+    // 更新分享记录的TMDB信息
+    if (share_record_id && (tmdb_id !== undefined || tmdb_title !== undefined)) {
+      const shareUpdateData: Record<string, unknown> = {}
+      if (tmdb_id !== undefined) shareUpdateData.tmdb_id = tmdb_id
+      if (tmdb_title !== undefined) shareUpdateData.tmdb_title = tmdb_title
+      
+      const { error: shareError } = await client
+        .from('share_records')
+        .update(shareUpdateData)
+        .eq('id', share_record_id)
+      
+      if (shareError) {
+        console.error('更新分享记录TMDB信息失败:', shareError)
+      }
+    }
+    
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('更新推送记录失败:', error)
+    return NextResponse.json({ error: '更新失败' }, { status: 500 })
   }
 }
