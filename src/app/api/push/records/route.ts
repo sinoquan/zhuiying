@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
           share_status,
           tmdb_id,
           tmdb_title,
+          tmdb_info,
           cloud_drive_id,
           cloud_drives (id, name, alias)
         ),
