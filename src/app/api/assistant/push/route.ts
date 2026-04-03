@@ -1,9 +1,20 @@
 /**
- * 智能助手API - 推送消息
+ * 推送 API - 重构版
+ * 
+ * 流程：
+ * 1. 从分享记录获取文件信息
+ * 2. 从 TMDB 获取完整数据（包含演员、海报等）
+ * 3. 缓存海报到本地
+ * 4. 使用模板渲染消息
+ * 5. 发送推送
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
+import { fetchTMDBFullData, fetchTMDBById, TMDBFullData } from '@/lib/tmdb/fetcher'
+import { cachePoster, cleanExpiredCache } from '@/lib/cache/poster-cache'
+import { renderTemplate } from '@/lib/push/template-renderer'
+import { DEFAULT_TEMPLATES, PushChannelType, TemplateContentType } from '@/lib/push/types'
 import { TelegramPushService } from '@/lib/push/telegram'
 import { QQPushService } from '@/lib/push/qq'
 import { WechatPushService } from '@/lib/push/wechat'
@@ -11,134 +22,221 @@ import { DingTalkPushService } from '@/lib/push/dingtalk'
 import { FeishuPushService } from '@/lib/push/feishu'
 import { BarkPushService } from '@/lib/push/bark'
 import { ServerChanPushService } from '@/lib/push/serverchan'
-import { TMDBService } from '@/lib/tmdb'
-import { PushChannelType } from '@/lib/push/types'
 
-// 推送请求
 interface PushRequest {
-  // 方式1: 直接使用分享记录ID（推荐）
-  share_record_id?: number
-  // 方式2: 手动构建数据（兼容旧接口）
-  link?: {
-    type: string
-    shareUrl: string
-    shareCode?: string
-  }
-  file?: {
-    name: string
-    type: 'movie' | 'tv' | 'unknown'
-  }
-  tmdb?: {
-    id: number
-    title: string
-    year?: string
-    poster_path?: string
-    rating?: number
-    genres?: string[]
-    cast?: string[]
-    overview?: string
-  }
-  channels: number[]  // 选中的推送渠道ID
-  customContent?: string  // 自定义推送内容
+  share_record_id: number
+  channels: number[]
 }
 
-// 补全 TMDB 信息
-async function enrichTMDBInfo(
-  client: ReturnType<typeof getSupabaseClient>,
-  tmdbInfo: Record<string, any>,
-  tmdbId: number | undefined
-): Promise<Record<string, any>> {
-  // 如果已有 cast 信息，直接返回
-  if (tmdbInfo.cast?.length > 0) {
-    return tmdbInfo
+// 获取系统配置
+async function getSystemConfig() {
+  const client = getSupabaseClient()
+  
+  const keys = ['tmdb_api_key', 'proxy_url', 'proxy_enabled', 'telegram_bot_token']
+  const { data } = await client
+    .from('system_settings')
+    .select('setting_key, setting_value')
+    .in('setting_key', keys)
+  
+  const config: Record<string, any> = {}
+  for (const item of (data || [])) {
+    config[item.setting_key] = item.setting_value
   }
   
-  // 如果没有 tmdbId，无法获取
-  if (!tmdbId) {
-    return tmdbInfo
+  const proxyEnabled = config.proxy_enabled === 'true' || config.proxy_enabled === true
+  
+  return {
+    tmdbApiKey: config.tmdb_api_key as string,
+    proxyUrl: proxyEnabled ? (config.proxy_url as string) : undefined,
+    telegramBotToken: config.telegram_bot_token as string,
+  }
+}
+
+// 获取 TMDB 配置
+async function getTMDBConfig() {
+  const config = await getSystemConfig()
+  return {
+    apiKey: config.tmdbApiKey,
+    proxyUrl: config.proxyUrl,
+  }
+}
+
+// 计算进度条
+function calculateProgress(current: number, total: number): { bar: string; percent: string } {
+  if (!total || total <= 0) return { bar: '○○○○○○○○○○', percent: '0%' }
+  
+  const percent = Math.round((current / total) * 100)
+  const filled = Math.floor(percent / 10)
+  const bar = '●'.repeat(filled) + '○'.repeat(10 - filled)
+  
+  return { bar, percent: `${percent}%` }
+}
+
+// 构建模板数据
+function buildTemplateData(
+  tmdbData: TMDBFullData | null,
+  shareRecord: any,
+  posterCacheUrl: string | null
+): Record<string, any> {
+  const driveName = shareRecord.cloud_drives?.alias || shareRecord.cloud_drives?.name || '网盘'
+  
+  // 确定类型
+  const contentType = tmdbData?.type || shareRecord.content_type || 'movie'
+  const isTV = contentType === 'tv' || contentType === 'tv_series'
+  
+  // 计算进度条（电视剧）
+  let progressBar = ''
+  let progressPercent = ''
+  if (isTV && tmdbData?.total_episodes) {
+    const progress = calculateProgress(
+      tmdbData.episode || shareRecord.tmdb_info?.episode || 1,
+      tmdbData.total_episodes
+    )
+    progressBar = progress.bar
+    progressPercent = progress.percent
   }
   
-  try {
-    // 获取系统设置
-    const { data: apiKeySetting } = await client
-      .from('system_settings')
-      .select('setting_value')
-      .eq('setting_key', 'tmdb_api_key')
-      .single()
+  // 状态文本
+  let statusText = ''
+  if (isTV && tmdbData?.status) {
+    statusText = tmdbData.status === 'Ended' ? '已完结' : '连载中'
+  }
+  
+  // 时长格式化
+  let runtimeText = ''
+  if (tmdbData?.runtime && tmdbData.runtime > 0) {
+    const hours = Math.floor(tmdbData.runtime / 60)
+    const mins = tmdbData.runtime % 60
+    runtimeText = hours > 0 ? `${hours}小时${mins}分钟` : `${mins}分钟`
+  }
+  
+  return {
+    // 基本信息
+    title: tmdbData?.title || shareRecord.tmdb_title || shareRecord.file_name,
+    year: tmdbData?.year || '',
+    tmdb_id: tmdbData?.tmdb_id || shareRecord.tmdb_id || '',
     
-    const { data: proxySetting } = await client
-      .from('system_settings')
-      .select('setting_value')
-      .eq('setting_key', 'proxy_url')
-      .single()
+    // 评分和类型（评分 0 也应该显示）
+    rating: (tmdbData?.rating !== undefined && tmdbData?.rating !== null) 
+      ? `${tmdbData.rating.toFixed(1)}/10` 
+      : '',
+    genres: tmdbData?.genres?.slice(0, 3).join(', ') || '',
     
-    const { data: proxyEnabledSetting } = await client
-      .from('system_settings')
-      .select('setting_value')
-      .eq('setting_key', 'proxy_enabled')
-      .single()
+    // 演员
+    cast: tmdbData?.cast?.slice(0, 5).join(', ') || '',
     
-    const apiKey = apiKeySetting?.setting_value as string
-    const proxyUrl = proxyEnabledSetting?.setting_value ? (proxySetting?.setting_value as string) : undefined
+    // 简介
+    overview: tmdbData?.overview || '',
     
-    if (!apiKey) {
-      console.log('[Enrich TMDB] 未配置 TMDB API Key')
-      return tmdbInfo
-    }
+    // 海报
+    poster_url: posterCacheUrl || tmdbData?.poster_url || '',
     
-    const tmdbService = new TMDBService({ apiKey, proxyUrl })
-    const type = tmdbInfo.type || 'movie'
+    // 剧集信息
+    season: tmdbData?.season || shareRecord.tmdb_info?.season || 1,
+    episode: tmdbData?.episode || shareRecord.tmdb_info?.episode || 1,
+    total_episodes: tmdbData?.total_episodes || 1,
+    progress_bar: progressBar,
+    progress_percent: progressPercent,
+    status: statusText,
     
-    console.log(`[Enrich TMDB] 获取 ${type} 详情: ${tmdbId}`)
+    // 电影时长
+    runtime: runtimeText,
     
-    if (type === 'movie') {
-      const details = await tmdbService.getMovieDetails(tmdbId, 'credits') as any
-      console.log('[Enrich TMDB] 电影详情返回:', JSON.stringify({
-        has_credits: !!details?.credits,
-        has_cast: !!details?.credits?.cast,
-        cast_length: details?.credits?.cast?.length,
-        cast_names: details?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
-        genres: details?.genres?.map((g: any) => g.name),
-        runtime: details?.runtime,
-      }))
-      if (details) {
-        tmdbInfo.cast = details.credits?.cast?.slice(0, 5).map((c: any) => c.name) || []
-        tmdbInfo.genres = details.genres?.map((g: any) => g.name) || tmdbInfo.genres
-        tmdbInfo.runtime = details.runtime || tmdbInfo.runtime
-        tmdbInfo.overview = details.overview || tmdbInfo.overview
-        console.log('[Enrich TMDB] 电影演员:', tmdbInfo.cast)
-      }
-    } else {
-      const details = await tmdbService.getTVDetails(tmdbId, 'credits') as any
-      if (details) {
-        tmdbInfo.cast = details.credits?.cast?.slice(0, 5).map((c: any) => c.name) || []
-        tmdbInfo.genres = details.genres?.map((g: any) => g.name) || tmdbInfo.genres
-        tmdbInfo.totalEpisodes = details.number_of_episodes || tmdbInfo.totalEpisodes
-        tmdbInfo.status = details.status || tmdbInfo.status
-        tmdbInfo.overview = details.overview || tmdbInfo.overview
-        console.log('[Enrich TMDB] 电视剧演员:', tmdbInfo.cast)
-      }
-    }
+    // 文件信息
+    file_name: shareRecord.file_name,
+    file_size: shareRecord.file_size || '未知',
+    file_count: shareRecord.file_count || 1,
+    quality: '', // TODO: 从文件名解析
     
-    return tmdbInfo
-  } catch (err) {
-    console.error('[Enrich TMDB] 获取失败:', err)
-    return tmdbInfo
+    // 分享链接
+    share_url: shareRecord.share_url,
+    share_code: shareRecord.share_code || '',
+    drive_name: driveName,
+    
+    // 分类标签
+    category_tag: isTV ? '追剧' : '电影',
+    
+    // 备注
+    note: shareRecord.remark || '',
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: PushRequest = await request.json()
-    const { share_record_id, link, file, tmdb, channels, customContent } = body
+    const { share_record_id, channels } = body
     
-    if (!channels || channels.length === 0) {
-      return NextResponse.json({ error: '请选择推送渠道' }, { status: 400 })
+    if (!share_record_id || !channels || channels.length === 0) {
+      return NextResponse.json({ error: '参数错误' }, { status: 400 })
     }
     
     const client = getSupabaseClient()
+    const config = await getSystemConfig()
     
-    // 获取推送渠道配置
+    // 清理过期缓存
+    cleanExpiredCache().catch(() => {})
+    
+    // 1. 获取分享记录
+    const { data: shareRecord, error: recordError } = await client
+      .from('share_records')
+      .select('*, cloud_drives(id, name, alias)')
+      .eq('id', share_record_id)
+      .single()
+    
+    if (recordError || !shareRecord) {
+      return NextResponse.json({ error: '分享记录不存在' }, { status: 404 })
+    }
+    
+    console.log('[Push] 分享记录:', {
+      file_name: shareRecord.file_name,
+      content_type: shareRecord.content_type,
+      tmdb_id: shareRecord.tmdb_id,
+    })
+    
+    // 2. 获取 TMDB 完整数据
+    let tmdbData: TMDBFullData | null = null
+    
+    // 优先使用已有的 TMDB ID
+    const existingTMDBId = shareRecord.tmdb_id || shareRecord.tmdb_info?.tmdbId || shareRecord.tmdb_info?.id
+    const contentType = shareRecord.content_type || 'movie'
+    const type = (contentType === 'tv' || contentType === 'tv_series') ? 'tv' : 'movie'
+    
+    if (existingTMDBId) {
+      console.log(`[Push] 使用已有 TMDB ID: ${existingTMDBId}`)
+      tmdbData = await fetchTMDBById(existingTMDBId, type, await getTMDBConfig())
+    }
+    
+    // 如果没有 TMDB ID 或获取失败，尝试搜索
+    if (!tmdbData && shareRecord.tmdb_title) {
+      console.log(`[Push] 搜索 TMDB: ${shareRecord.tmdb_title}`)
+      tmdbData = await fetchTMDBFullData(
+        shareRecord.tmdb_title,
+        type,
+        shareRecord.tmdb_info?.year?.toString(),
+        await getTMDBConfig()
+      )
+    }
+    
+    // 3. 缓存海报
+    let posterCacheUrl: string | null = null
+    if (tmdbData?.poster_url && tmdbData.tmdb_id) {
+      console.log(`[Push] 缓存海报: ${tmdbData.poster_url}`)
+      posterCacheUrl = await cachePoster(tmdbData.poster_url, tmdbData.tmdb_id)
+      console.log(`[Push] 海报缓存地址: ${posterCacheUrl}`)
+    }
+    
+    // 4. 构建模板数据
+    const templateData = buildTemplateData(tmdbData, shareRecord, posterCacheUrl)
+    
+    console.log('[Push] 模板数据:', {
+      title: templateData.title,
+      rating: templateData.rating,
+      genres: templateData.genres,
+      cast: templateData.cast?.substring(0, 30),
+      has_poster: !!templateData.poster_url,
+    })
+    
+    // 5. 获取推送渠道
     const { data: channelConfigs, error } = await client
       .from('push_channels')
       .select('*, cloud_drives(name, alias)')
@@ -149,260 +247,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '未找到有效的推送渠道' }, { status: 400 })
     }
     
-    // 构建推送消息数据
-    let messageData: {
-      title: string
-      content: string
-      year?: string | number
-      share_url: string
-      share_code?: string
-      extra: Record<string, any>
-    }
-    
-    // 方式1: 从分享记录获取完整数据（推荐）
-    if (share_record_id) {
-      const { data: shareRecord, error: recordError } = await client
-        .from('share_records')
-        .select('*, cloud_drives(id, name, alias)')
-        .eq('id', share_record_id)
-        .single()
-      
-      if (recordError || !shareRecord) {
-        return NextResponse.json({ error: '分享记录不存在' }, { status: 404 })
-      }
-      
-      // 解析 tmdb_info
-      let tmdbInfo = typeof shareRecord.tmdb_info === 'string' 
-        ? JSON.parse(shareRecord.tmdb_info) 
-        : shareRecord.tmdb_info || {}
-      
-      // 兼容 id 和 tmdbId
-      const tmdbId = tmdbInfo.tmdbId || tmdbInfo.id || shareRecord.tmdb_id
-      const driveName = shareRecord.cloud_drives?.alias || shareRecord.cloud_drives?.name || '网盘'
-      
-      // 补全 TMDB 信息（获取演员等）
-      tmdbInfo = await enrichTMDBInfo(client, tmdbInfo, tmdbId as number)
-      
-      // 构建标题
-      let title = ''
-      const contentType = shareRecord.content_type || tmdbInfo.type || 'unknown'
-      
-      if (contentType === 'tv' || contentType === 'tv_series') {
-        title = `📺 电视剧：${tmdbInfo.title || shareRecord.tmdb_title || shareRecord.file_name}`
-        if (tmdbInfo.year) title += ` (${tmdbInfo.year})`
-        if (tmdbInfo.season && tmdbInfo.episode) {
-          title += ` - S${String(tmdbInfo.season).padStart(2, '0')}E${String(tmdbInfo.episode).padStart(2, '0')}`
-        }
-      } else if (contentType === 'movie') {
-        title = `🎬 电影：${tmdbInfo.title || shareRecord.tmdb_title || shareRecord.file_name}`
-        if (tmdbInfo.year) title += ` (${tmdbInfo.year})`
-      } else {
-        title = `📁 ${shareRecord.file_name}`
-      }
-      
-      // 构建内容
-      const lines: string[] = []
-      
-      if (tmdbId) {
-        lines.push(`🍿 TMDB ID: ${tmdbId}`)
-      }
-      
-      // 评分（即使是0也显示）
-      if (tmdbInfo.rating !== undefined && tmdbInfo.rating !== null) {
-        lines.push(`⭐️ 评分: ${tmdbInfo.rating}/10`)
-      }
-      
-      if (tmdbInfo.genres?.length > 0) {
-        lines.push(`🎭 类型: ${tmdbInfo.genres.slice(0, 3).join(', ')}`)
-      }
-      
-      // 剧集进度
-      if ((contentType === 'tv' || contentType === 'tv_series') && tmdbInfo.totalEpisodes) {
-        const currentEp = tmdbInfo.episode || 1
-        const total = tmdbInfo.totalEpisodes
-        const progress = Math.round((currentEp / total) * 100)
-        const filled = Math.floor(progress / 10)
-        const progressBar = '●'.repeat(filled) + '○'.repeat(10 - filled)
-        lines.push(`📊 进度: ${progressBar} ${progress}% (${currentEp}/${total}集)`)
-        
-        if (tmdbInfo.status) {
-          const statusText = tmdbInfo.status === 'Ended' ? '✅ 已完结' : '🔄 连载中'
-          lines.push(`${statusText}`)
-        }
-      }
-      
-      // 电影时长
-      if (contentType === 'movie' && tmdbInfo.runtime && tmdbInfo.runtime > 0) {
-        const hours = Math.floor(tmdbInfo.runtime / 60)
-        const mins = tmdbInfo.runtime % 60
-        lines.push(`⏱️ 时长: ${hours > 0 ? `${hours}小时` : ''}${mins}分钟`)
-      }
-      
-      // 文件信息（排除无效值）
-      if (shareRecord.file_count && shareRecord.file_count > 1) {
-        lines.push(`📦 文件: ${shareRecord.file_count} 个`)
-      }
-      
-      // 文件大小（排除 0 B 和 0）
-      const fileSize = shareRecord.file_size
-      if (fileSize && fileSize !== '0 B' && fileSize !== '0' && fileSize !== '未知') {
-        lines.push(`💾 大小: ${fileSize}`)
-      }
-      
-      // 主演
-      if (tmdbInfo.cast?.length > 0) {
-        lines.push(`👥 主演: ${tmdbInfo.cast.slice(0, 5).join(', ')}`)
-      }
-      
-      // 简介
-      if (tmdbInfo.overview) {
-        const shortOverview = tmdbInfo.overview.length > 150 
-          ? tmdbInfo.overview.substring(0, 150) + '...' 
-          : tmdbInfo.overview
-        lines.push(`📝 简介: ${shortOverview}`)
-      }
-      
-      // 备注
-      if (shareRecord.remark) {
-        lines.push(`🏷️ 备注: ${shareRecord.remark}`)
-      }
-      
-      lines.push('')
-      lines.push(`🔗 ${driveName}: ${shareRecord.share_url}`)
-      
-      if (shareRecord.share_code) {
-        lines.push(`🔑 密码: ${shareRecord.share_code}`)
-      }
-      
-      messageData = {
-        title,
-        content: lines.join('\n'),
-        year: tmdbInfo.year,
-        share_url: shareRecord.share_url || '',
-        share_code: shareRecord.share_code || '',
-        extra: {
-          tmdb_id: tmdbId,
-          poster_url: tmdbInfo.poster_url,
-          rating: tmdbInfo.rating,
-          genres: tmdbInfo.genres,
-          cast: tmdbInfo.cast,
-          overview: tmdbInfo.overview,
-          file_name: shareRecord.file_name,
-          file_size: shareRecord.file_size,
-          file_count: shareRecord.file_count || 1,
-          season: tmdbInfo.season,
-          episode: tmdbInfo.episode,
-          total_episodes: tmdbInfo.totalEpisodes,
-          status: tmdbInfo.status,
-          type: contentType,
-        }
-      }
-      
-      console.log('[Assistant Push] 从分享记录构建消息:', {
-        title: messageData.title,
-        has_poster: !!messageData.extra.poster_url,
-        tmdb_id: messageData.extra.tmdb_id,
-      })
-    } 
-    // 方式2: 兼容旧接口
-    else if (link) {
-      messageData = {
-        title: tmdb?.title || file?.name || '未知内容',
-        content: customContent || '',
-        year: tmdb?.year || '',
-        share_url: link.shareUrl,
-        share_code: link.shareCode || '',
-        extra: {
-          tmdb_id: tmdb?.id,
-          poster_url: tmdb?.poster_path,
-          rating: tmdb?.rating,
-          genres: tmdb?.genres,
-          cast: tmdb?.cast,
-          overview: tmdb?.overview,
-          file_name: file?.name,
-          file_size: '',
-          file_count: 1,
-        }
-      }
-    } else {
-      return NextResponse.json({ error: '缺少必要参数' }, { status: 400 })
-    }
-    
-    // 推送结果
+    // 6. 推送结果
     const results: Array<{ channel: string; success: boolean; error?: string }> = []
     
-    // 遍历渠道发送推送
     for (const channel of channelConfigs) {
       const channelType = channel.channel_type as PushChannelType
       
       try {
+        // 确定内容类型（用于选择模板）
+        let templateType: TemplateContentType = 'movie'
+        if (type === 'tv') {
+          templateType = 'tv_series'
+        }
+        
+        // 获取模板
+        const template = DEFAULT_TEMPLATES[channelType]?.[templateType] || ''
+        
+        // 渲染消息
+        const platform = channelType === 'qq' ? 'qq' : channelType === 'dingtalk' ? 'dingtalk' : 'telegram'
+        const content = renderTemplate(template, templateData, platform as 'telegram' | 'qq' | 'dingtalk')
+        
         let success = false
         
         if (channelType === 'telegram') {
-          // 获取全局 Bot Token 和代理设置
-          const { data: tokenSetting } = await client
-            .from('system_settings')
-            .select('setting_value')
-            .eq('setting_key', 'telegram_bot_token')
-            .single()
-          
-          const { data: proxySetting } = await client
-            .from('system_settings')
-            .select('setting_value')
-            .eq('setting_key', 'proxy_url')
-            .single()
-          
-          const { data: proxyEnabledSetting } = await client
-            .from('system_settings')
-            .select('setting_value')
-            .eq('setting_key', 'proxy_enabled')
-            .single()
-          
-          const proxyEnabled = proxyEnabledSetting?.setting_value === 'true' || proxyEnabledSetting?.setting_value === true
-          const proxyUrl = proxyEnabled ? (proxySetting?.setting_value as string) : undefined
-          
-          console.log('[Assistant Push] 代理配置详情:', {
-            proxy_enabled_raw: proxyEnabledSetting?.setting_value,
-            proxy_enabled_parsed: proxyEnabled,
-            proxy_url_raw: proxySetting?.setting_value ? `${(proxySetting?.setting_value as string).substring(0, 20)}...` : null,
-            proxy_url_final: proxyUrl ? '已配置' : '未配置',
-          })
-          
           const service = new TelegramPushService({
-            bot_token: tokenSetting?.setting_value as string || '',
+            bot_token: config.telegramBotToken,
             chat_id: channel.config?.chat_id || '',
-            proxy_url: proxyUrl,
+            proxy_url: config.proxyUrl,
           })
           
-          console.log('[Assistant Push] Telegram 配置:', {
-            has_bot_token: !!tokenSetting?.setting_value,
-            chat_id: channel.config?.chat_id,
-            proxy_enabled: proxyEnabledSetting?.setting_value,
-            has_proxy_url: !!proxySetting?.setting_value,
-            has_poster: !!messageData.extra.poster_url,
-            content_length: messageData.content?.length,
-          })
-          
-          // 发送消息（带图片）
-          if (messageData.extra.poster_url) {
+          // 发送带图片的消息
+          if (posterCacheUrl) {
+            // 构建完整 URL
+            const baseUrl = process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'
+            const fullPosterUrl = posterCacheUrl.startsWith('http') 
+              ? posterCacheUrl 
+              : `${baseUrl}${posterCacheUrl}`
+            
+            console.log(`[Push] 发送带图片消息: ${fullPosterUrl}`)
             const result = await service.sendWithImage(
               { 
-                title: messageData.title, 
-                content: messageData.content,
-                url: messageData.share_url,
-                code: messageData.share_code,
-                extra: messageData.extra,
+                title: templateData.title, 
+                content,
+                url: templateData.share_url,
+                code: templateData.share_code,
               },
-              messageData.extra.poster_url
+              fullPosterUrl
             )
             success = result.success
           } else {
             const result = await service.send({ 
-              title: messageData.title, 
-              content: messageData.content,
-              url: messageData.share_url,
-              code: messageData.share_code,
-              extra: messageData.extra,
+              title: templateData.title, 
+              content,
+              url: templateData.share_url,
+              code: templateData.share_code,
             })
             success = result.success
           }
@@ -410,70 +308,49 @@ export async function POST(request: NextRequest) {
           const service = new QQPushService({
             webhook_url: channel.config?.webhook_url || '',
           })
-          const result = await service.send({ 
-            title: messageData.title, 
-            content: messageData.content 
-          })
+          const result = await service.send({ title: templateData.title, content })
           success = result.success
         } else if (channelType === 'wechat') {
           const service = new WechatPushService({
             webhook_url: channel.config?.webhook_url || '',
           })
-          const result = await service.send({ 
-            title: messageData.title, 
-            content: messageData.content 
-          })
+          const result = await service.send({ title: templateData.title, content })
           success = result.success
         } else if (channelType === 'dingtalk') {
           const service = new DingTalkPushService({
             webhook_url: channel.config?.webhook_url || '',
             secret: channel.config?.secret || '',
           })
-          const result = await service.send({ 
-            title: messageData.title, 
-            content: messageData.content 
-          })
+          const result = await service.send({ title: templateData.title, content })
           success = result.success
         } else if (channelType === 'feishu') {
           const service = new FeishuPushService({
             webhook_url: channel.config?.webhook_url || '',
           })
-          const result = await service.send({ 
-            title: messageData.title, 
-            content: messageData.content 
-          })
+          const result = await service.send({ title: templateData.title, content })
           success = result.success
         } else if (channelType === 'bark') {
           const service = new BarkPushService({
             server_url: channel.config?.server_url || '',
             device_key: channel.config?.device_key || '',
           })
-          const result = await service.send({ 
-            title: messageData.title, 
-            content: messageData.content 
-          })
+          const result = await service.send({ title: templateData.title, content })
           success = result.success
         } else if (channelType === 'serverchan') {
           const service = new ServerChanPushService({
             send_key: channel.config?.send_key || '',
           })
-          const result = await service.send({ 
-            title: messageData.title, 
-            content: messageData.content 
-          })
+          const result = await service.send({ title: templateData.title, content })
           success = result.success
         }
         
-        results.push({ 
-          channel: channel.channel_name, 
-          success 
-        })
+        results.push({ channel: channel.channel_name, success })
         
-        // 记录推送记录
+        // 记录推送
         await client.from('push_records').insert({
-          share_record_id: share_record_id || null,
+          share_record_id,
           push_channel_id: channel.id,
-          content: messageData.content,
+          content,
           push_status: success ? 'success' : 'failed',
           pushed_at: success ? new Date().toISOString() : null,
         })
@@ -494,8 +371,9 @@ export async function POST(request: NextRequest) {
       results,
       message: `成功推送 ${successCount}/${results.length} 个渠道`,
     })
+    
   } catch (error) {
-    console.error('推送失败:', error)
+    console.error('[Push] 推送失败:', error)
     return NextResponse.json({ 
       error: error instanceof Error ? error.message : '推送失败' 
     }, { status: 500 })
