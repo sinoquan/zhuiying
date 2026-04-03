@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 import { createPushService, PushChannelType, PushChannelConfig } from '@/lib/push'
 
-// GET - 测试推送渠道
+// GET - 测试推送渠道连接
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -48,6 +48,62 @@ export async function GET(
     console.error('测试推送渠道失败:', error)
     return NextResponse.json(
       { valid: false, error: error instanceof Error ? error.message : '测试失败' },
+      { status: 200 }
+    )
+  }
+}
+
+// POST - 发送自定义测试消息
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const client = getSupabaseClient()
+    
+    // 获取推送渠道配置
+    const { data: channel, error } = await client
+      .from('push_channels')
+      .select('*')
+      .eq('id', parseInt(id))
+      .single()
+    
+    if (error || !channel) {
+      return NextResponse.json({ success: false, error: '推送渠道不存在' }, { status: 404 })
+    }
+    
+    // 解析请求体
+    let message = { title: '测试推送', content: '这是一条测试消息' }
+    try {
+      const body = await request.json()
+      if (body.message) {
+        message = body.message
+      }
+    } catch {
+      // 使用默认消息
+    }
+    
+    // 创建推送服务
+    const pushService = createPushService(
+      channel.channel_type as PushChannelType,
+      (channel.config as PushChannelConfig) || {}
+    )
+    
+    // 发送测试消息
+    const sendResult = await pushService.send({
+      title: message.title,
+      content: message.content,
+    })
+    
+    return NextResponse.json({
+      success: true,
+      result: sendResult,
+    })
+  } catch (error) {
+    console.error('发送测试消息失败:', error)
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : '发送失败' },
       { status: 200 }
     )
   }
