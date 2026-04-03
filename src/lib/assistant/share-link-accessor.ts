@@ -12,6 +12,7 @@ import { SharedFileInfo } from '@/lib/cloud-drive/types'
 import { parseFileName, extractMainInfo, ParsedFileInfo } from './file-name-parser'
 import { LinkParseResult, LinkType } from './link-parser'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
+import { access115ShareWithBrowser } from '@/lib/browser/pan115'
 
 // 分享链接访问结果
 export interface ShareLinkResult {
@@ -634,23 +635,25 @@ function extractFileInfoFrom115Page(html: string, shareId: string, shareCode?: s
     }
     
     // 方法2：查找文件名（从title或meta标签）
+    // 注意：这种方法无法获取真实文件列表，返回null让浏览器模拟接管
     const titleMatch = html.match(/<title>([^<]+)<\/title>/)
     const metaMatch = html.match(/<meta[^>]+name="description"[^>]+content="([^"]+)"/)
     
-    if (titleMatch || metaMatch) {
-      const name = titleMatch?.[1]?.replace(' - 115网盘', '').trim() || 
-                   metaMatch?.[1]?.split('，')[0] || 
-                   '未知文件'
-      
-      return {
-        share_id: shareId,
-        share_code: shareCode,
-        file_id: '0',
-        file_name: name,
-        file_size: 0,
-        is_dir: true,
-        file_count: 0,
-        files: [],
+    // 只有当页面标题包含具体文件名时才返回（排除通用标题）
+    if (titleMatch) {
+      const title = titleMatch[1].replace(' - 115网盘', '').trim()
+      // 如果标题是通用的115生活，说明没有获取到具体文件信息
+      if (title && title !== '115生活' && !title.includes('云存储')) {
+        return {
+          share_id: shareId,
+          share_code: shareCode,
+          file_id: '0',
+          file_name: title,
+          file_size: 0,
+          is_dir: true,
+          file_count: 0,
+          files: [],
+        }
       }
     }
     
@@ -685,6 +688,17 @@ export async function accessShareLink(parseResult: LinkParseResult): Promise<Sha
     if (anonymousAccessors[parseResult.type]) {
       try {
         const shareInfo = await anonymousAccessors[parseResult.type](parseResult.shareId, parseResult.shareCode)
+        
+        // 检查是否获取到了有效的文件信息
+        // 如果是文件夹但文件列表为空，可能需要浏览器模拟
+        if (shareInfo.is_dir && (!shareInfo.files || shareInfo.files.length === 0)) {
+          // 对于115网盘，尝试浏览器模拟
+          if (parseResult.type === '115') {
+            console.log('[智能助手] 匿名访问返回空文件列表，尝试浏览器模拟...')
+            throw new Error('空文件列表，尝试浏览器模拟')
+          }
+        }
+        
         result.shareInfo = shareInfo
         result.success = true
         
@@ -702,8 +716,47 @@ export async function accessShareLink(parseResult: LinkParseResult): Promise<Sha
         
         return result
       } catch (error) {
-        // 匿名访问失败，尝试使用用户配置
-        console.log(`${parseResult.type}匿名访问失败，尝试使用用户配置...`, error)
+        // 匿名访问失败
+        console.log(`${parseResult.type}匿名访问失败`, error)
+        
+        // 对于115网盘，尝试使用浏览器模拟
+        if (parseResult.type === '115') {
+          try {
+            console.log('[智能助手] 尝试使用浏览器模拟访问115分享链接...')
+            const shareInfo = await access115ShareWithBrowser(parseResult.shareId, parseResult.shareCode)
+            result.shareInfo = shareInfo
+            result.success = true
+            
+            // 解析文件信息
+            if (shareInfo.is_dir && shareInfo.files && shareInfo.files.length > 0) {
+              const parsedInfo = extractMainInfo(shareInfo.files.map(f => ({
+                name: f.file_name,
+                size: f.file_size,
+                is_dir: f.is_dir,
+              })))
+              result.parsedInfo = parsedInfo || undefined
+            } else if (!shareInfo.is_dir) {
+              result.parsedInfo = parseFileName(shareInfo.file_name, shareInfo.file_size)
+            }
+            
+            return result
+          } catch (browserError) {
+            console.error('[智能助手] 浏览器模拟访问失败:', browserError)
+            // 如果浏览器模拟不可用，设置友好提示
+            const errorMessage = browserError instanceof Error ? browserError.message : String(browserError)
+            if (errorMessage.includes('浏览器') || errorMessage.includes('browser')) {
+              result.error = '115网盘分享链接需要登录Cookie才能访问，请在「网盘管理」中配置115网盘账号，或在链接下方提供文件名以辅助识别'
+              return result
+            }
+          }
+        }
+        
+        // 设置错误信息
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        if (errorMessage.includes('需要登录Cookie') || errorMessage.includes('需要提取码')) {
+          result.error = errorMessage
+          return result
+        }
       }
     }
     
