@@ -51,6 +51,17 @@ export async function DELETE(
     const { id } = await params
     const client = getSupabaseClient()
     
+    // 先删除相关的推送记录
+    const { error: deleteRecordsError } = await client
+      .from('push_records')
+      .delete()
+      .eq('push_channel_id', parseInt(id))
+    
+    if (deleteRecordsError) {
+      console.error('删除推送记录失败:', deleteRecordsError)
+    }
+    
+    // 再删除推送渠道
     const { error } = await client
       .from('push_channels')
       .delete()
