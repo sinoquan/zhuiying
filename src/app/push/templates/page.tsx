@@ -411,16 +411,16 @@ export default function PushTemplatesPage() {
 
       {/* 渠道选择 */}
       <Tabs value={activeChannel} onValueChange={(v) => handleChannelChange(v as PushChannelType)}>
-        <TabsList className="grid w-full grid-cols-3 h-12 mb-4">
-          <TabsTrigger value="telegram" className="flex items-center gap-2 text-sm">
+        <TabsList className="inline-flex h-10 items-center justify-center rounded-full bg-muted p-1 text-muted-foreground mb-4">
+          <TabsTrigger value="telegram" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
             <ChannelIcon type="telegram" />
             Telegram
           </TabsTrigger>
-          <TabsTrigger value="qq" className="flex items-center gap-2 text-sm">
+          <TabsTrigger value="qq" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
             <ChannelIcon type="qq" />
             QQ
           </TabsTrigger>
-          <TabsTrigger value="wechat" className="flex items-center gap-2 text-sm">
+          <TabsTrigger value="wechat" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
             <ChannelIcon type="wechat" />
             微信
           </TabsTrigger>

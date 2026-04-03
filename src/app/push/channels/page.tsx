@@ -511,17 +511,17 @@ export default function PushChannelsPage() {
 
       {/* 渠道配置区域 */}
       <Tabs defaultValue="telegram" className="mb-8">
-        <TabsList className="grid w-full grid-cols-3 h-12">
-          <TabsTrigger value="telegram" className="flex items-center gap-2">
-            <Image src={getPushChannelIcon('telegram')} alt="Telegram" width={20} height={20} unoptimized />
+        <TabsList className="inline-flex h-10 items-center justify-center rounded-full bg-muted p-1 text-muted-foreground">
+          <TabsTrigger value="telegram" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
+            <Image src={getPushChannelIcon('telegram')} alt="Telegram" width={18} height={18} unoptimized />
             Telegram
           </TabsTrigger>
-          <TabsTrigger value="qq" className="flex items-center gap-2">
-            <Image src={getPushChannelIcon('qq')} alt="QQ" width={20} height={20} unoptimized />
+          <TabsTrigger value="qq" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
+            <Image src={getPushChannelIcon('qq')} alt="QQ" width={18} height={18} unoptimized />
             QQ
           </TabsTrigger>
-          <TabsTrigger value="wechat" className="flex items-center gap-2">
-            <Image src={getPushChannelIcon('wechat')} alt="微信" width={20} height={20} unoptimized />
+          <TabsTrigger value="wechat" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
+            <Image src={getPushChannelIcon('wechat')} alt="微信" width={18} height={18} unoptimized />
             微信
           </TabsTrigger>
         </TabsList>
