@@ -208,14 +208,19 @@ export async function POST(request: NextRequest) {
     
     // 优先使用豆瓣API（不需要代理）
     const titleName = tmdb?.title || file?.name || ''
+    console.log('[预览] 开始获取详情, 标题:', titleName, 'TMDB ID:', tmdb?.id, '类型:', contentType)
+    
     if (titleName) {
       try {
         const doubanService = new DoubanService({ cookie: doubanCookie })
+        console.log('[预览] 尝试豆瓣搜索...')
         const doubanResults = await doubanService.search(titleName)
+        
+        console.log('[预览] 豆瓣搜索结果数量:', doubanResults?.length || 0)
         
         if (doubanResults && doubanResults.length > 0) {
           const doubanItem = doubanResults[0]
-          console.log('[预览] 豆瓣搜索结果:', doubanItem)
+          console.log('[预览] 豆瓣搜索结果:', JSON.stringify(doubanItem, null, 2))
           
           // 尝试获取豆瓣详情，如果失败则使用搜索结果中的基本信息
           try {
@@ -230,10 +235,10 @@ export async function POST(request: NextRequest) {
                 totalEpisodes: doubanDetail.episode_count,
                 status: doubanDetail.status,
               }
-              console.log('[预览] 豆瓣获取详情成功:', tmdbDetails)
+              console.log('[预览] 豆瓣获取详情成功:', JSON.stringify(tmdbDetails, null, 2))
             }
           } catch (detailErr) {
-            console.error('[预览] 豆瓣详情获取失败，使用搜索结果:', detailErr)
+            console.error('[预览] 豆瓣详情获取失败:', detailErr instanceof Error ? detailErr.message : detailErr)
           }
           
           // 如果详情获取失败，使用搜索结果中的基本信息
@@ -246,12 +251,15 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (err) {
-        console.error('[预览] 豆瓣获取详情失败:', err)
+        console.error('[预览] 豆瓣获取详情失败:', err instanceof Error ? err.message : err)
       }
     }
     
     // 如果豆瓣没有获取到信息，尝试TMDB
+    console.log('[预览] 豆瓣结果 - rating:', tmdbDetails.rating, 'genres:', tmdbDetails.genres?.length, 'cast:', tmdbDetails.cast?.length)
+    
     if (!tmdbDetails.rating && apiKey && tmdb?.id) {
+      console.log('[预览] 尝试TMDB获取详情, ID:', tmdb.id, '代理:', proxyUrl ? '已配置' : '未配置')
       try {
         // 设置全局代理环境变量
         if (proxyUrl) {
@@ -263,6 +271,7 @@ export async function POST(request: NextRequest) {
         
         if (file?.type === 'tv_series' || contentType === 'tv_series' || contentType === 'completed') {
           // 获取电视剧详情
+          console.log('[预览] 获取电视剧详情, ID:', tmdb.id)
           const details = await tmdbService.getTVDetails(tmdb.id, 'credits')
           tmdbDetails = {
             rating: details.vote_average,
@@ -272,9 +281,10 @@ export async function POST(request: NextRequest) {
             totalEpisodes: details.number_of_episodes,
             status: details.status,
           }
-          console.log('[预览] TMDB获取电视剧详情成功:', tmdbDetails)
+          console.log('[预览] TMDB获取电视剧详情成功:', JSON.stringify(tmdbDetails, null, 2))
         } else if (file?.type === 'movie' || contentType === 'movie') {
           // 获取电影详情
+          console.log('[预览] 获取电影详情, ID:', tmdb.id)
           const details = await tmdbService.getMovieDetails(tmdb.id, 'credits')
           tmdbDetails = {
             rating: details.vote_average,
@@ -283,11 +293,17 @@ export async function POST(request: NextRequest) {
             overview: details.overview,
             status: details.status,
           }
-          console.log('[预览] TMDB获取电影详情成功:', tmdbDetails)
+          console.log('[预览] TMDB获取电影详情成功:', JSON.stringify(tmdbDetails, null, 2))
         }
       } catch (err) {
-        console.error('[预览] TMDB获取详情失败:', err)
+        console.error('[预览] TMDB获取详情失败:', err instanceof Error ? err.message : err)
       }
+    } else if (!apiKey) {
+      console.log('[预览] 未配置TMDB API Key，跳过TMDB详情获取')
+    } else if (!tmdb?.id) {
+      console.log('[预览] 无TMDB ID，跳过TMDB详情获取')
+    } else {
+      console.log('[预览] 豆瓣已获取到信息，跳过TMDB')
     }
     
     // 计算进度信息

@@ -33,12 +33,13 @@ interface PushRequest {
     overview?: string
   }
   channels: number[]  // 选中的推送渠道ID
+  customContent?: string  // 自定义推送内容（用户编辑后的）
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: PushRequest = await request.json()
-    const { link, file, tmdb, channels } = body
+    const { link, file, tmdb, channels, customContent } = body
     
     if (!channels || channels.length === 0) {
       return NextResponse.json({ error: '请选择推送渠道' }, { status: 400 })
@@ -87,13 +88,19 @@ export async function POST(request: NextRequest) {
     for (const channel of channelConfigs) {
       const channelType = channel.channel_type as PushChannelType
       
-      // 获取模板
-      const contentType: 'movie' | 'tv_series' | 'completed' = 
-        file?.type === 'tv_series' ? 'tv_series' : 'movie'
-      const template = DEFAULT_TEMPLATES[channelType]?.[contentType] || ''
-      
-      // 渲染消息内容
-      const content = renderTemplate(template, messageData, channelType === 'qq' ? 'qq' : 'telegram')
+      // 优先使用自定义内容，否则使用模板渲染
+      let content: string
+      if (customContent && customContent.trim()) {
+        content = customContent
+      } else {
+        // 获取模板
+        const contentType: 'movie' | 'tv_series' | 'completed' = 
+          file?.type === 'tv_series' ? 'tv_series' : 'movie'
+        const template = DEFAULT_TEMPLATES[channelType]?.[contentType] || ''
+        
+        // 渲染消息内容
+        content = renderTemplate(template, messageData, channelType === 'qq' ? 'qq' : 'telegram')
+      }
       
       try {
         let success = false

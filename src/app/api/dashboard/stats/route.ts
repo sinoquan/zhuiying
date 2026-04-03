@@ -156,12 +156,12 @@ export async function GET() {
     sevenDaysLater.setDate(sevenDaysLater.getDate() + 7)
     const { data: expiringShares, error: expiringError } = await client
       .from('share_records')
-      .select('id, file_name, expire_time, share_url, cloud_drive_id, cloud_drives(name, alias)')
+      .select('id, file_name, expire_at, share_url, cloud_drive_id, cloud_drives(name, alias)')
       .eq('share_status', 'success')
-      .not('expire_time', 'is', null)
-      .gte('expire_time', todayISO)
-      .lte('expire_time', sevenDaysLater.toISOString())
-      .order('expire_time', { ascending: true })
+      .not('expire_at', 'is', null)
+      .gte('expire_at', todayISO)
+      .lte('expire_at', sevenDaysLater.toISOString())
+      .order('expire_at', { ascending: true })
       .limit(10)
     
     if (expiringError) throw new Error(`获取即将过期分享失败: ${expiringError.message}`)
@@ -177,7 +177,7 @@ export async function GET() {
     
     const { data: recentPushes, error: recentPushesError } = await client
       .from('push_records')
-      .select('id, push_status, created_at, push_channels(name, type), share_records(file_name, cloud_drives(name, alias))')
+      .select('id, push_status, created_at, push_channels(channel_name, channel_type), share_records(file_name, cloud_drives(name, alias))')
       .order('created_at', { ascending: false })
       .limit(5)
     
