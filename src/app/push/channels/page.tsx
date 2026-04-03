@@ -373,13 +373,15 @@ export default function PushChannelsPage() {
   }, {} as Record<ChannelType, PushTarget[]>)
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-8">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-2xl font-bold">推送渠道</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          管理各渠道的推送目标，在监控任务中选择使用
-        </p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold">推送渠道</h1>
+          <p className="text-muted-foreground mt-2">
+            管理各渠道的推送目标，在监控任务中选择使用
+          </p>
+        </div>
       </div>
 
       {/* TAB 切换 */}
