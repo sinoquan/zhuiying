@@ -171,6 +171,7 @@ export default function FileMonitorPage() {
   
   // 使用 ref 存储选择状态，避免 React Strict Mode 双重调用
   const selectedFoldersRef = useRef<{ path: string; name: string }[]>([])
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null)
   // 强制重新渲染
   const [, forceUpdate] = useState(0)
   
@@ -466,6 +467,12 @@ export default function FileMonitorPage() {
 
   // 双击进入文件夹
   const handleDoubleClick = (file: CloudFile) => {
+    // 清除单击定时器，防止单击事件执行
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
+    
     if (file.is_dir) {
       const newPath = file.path || file.id
       setPathHistory([...pathHistory, { path: newPath, name: file.name }])
@@ -474,18 +481,27 @@ export default function FileMonitorPage() {
     }
   }
 
-  // 切换文件夹选择
+  // 切换文件夹选择（延迟处理，避免双击时触发）
   const toggleFolderSelection = useCallback((file: CloudFile) => {
-    const folderPath = file.path || file.id
-    const current = selectedFoldersRef.current
-    const exists = current.some(f => f.path === folderPath)
-    
-    if (exists) {
-      selectedFoldersRef.current = current.filter(f => f.path !== folderPath)
-    } else {
-      selectedFoldersRef.current = [...current, { path: folderPath, name: file.name }]
+    // 清除之前的定时器
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current)
     }
-    forceUpdate(n => n + 1)
+    
+    // 延迟200ms执行，如果在这期间有双击则会被取消
+    clickTimerRef.current = setTimeout(() => {
+      const folderPath = file.path || file.id
+      const current = selectedFoldersRef.current
+      const exists = current.some(f => f.path === folderPath)
+      
+      if (exists) {
+        selectedFoldersRef.current = current.filter(f => f.path !== folderPath)
+      } else {
+        selectedFoldersRef.current = [...current, { path: folderPath, name: file.name }]
+      }
+      forceUpdate(n => n + 1)
+      clickTimerRef.current = null
+    }, 200)
   }, [])
 
   // 移除选中的文件夹
