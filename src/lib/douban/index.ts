@@ -4,7 +4,7 @@
  */
 
 export interface DoubanConfig {
-  // 豆瓣搜索需要Cookie才能正常访问
+  // 豆瓣搜索需要Cookie才能正常访问（可选，某些高级功能需要）
   cookie?: string
   timeout?: number
 }
@@ -32,11 +32,23 @@ export interface DoubanDetail extends DoubanSearchResult {
   air_date?: string
 }
 
+// 豆瓣suggest API返回的数据结构
+interface DoubanSuggestItem {
+  id: string
+  title: string
+  sub_title?: string
+  img?: string
+  url: string
+  type: string // 'movie' | 'tv'
+  year?: string
+  episode?: string
+}
+
 export class DoubanService {
   private cookie: string
   private timeout: number
   private baseUrl = 'https://movie.douban.com'
-  private searchUrl = 'https://search.douban.com/movie/subject_search'
+  private suggestUrl = 'https://movie.douban.com/j/subject_suggest'
 
   constructor(config?: DoubanConfig) {
     this.cookie = config?.cookie || ''
@@ -49,7 +61,7 @@ export class DoubanService {
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept': 'application/json, text/plain, */*',
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       'Referer': 'https://movie.douban.com/',
     }
@@ -62,12 +74,12 @@ export class DoubanService {
   }
 
   /**
-   * 搜索影视内容
+   * 使用豆瓣 suggest API 搜索影视内容（最可靠的方式）
    */
   async search(query: string): Promise<DoubanSearchResult[]> {
     try {
-      // 豆瓣搜索需要通过搜索页面
-      const url = `${this.searchUrl}?search_text=${encodeURIComponent(query)}&cat=1002` // 1002=电影, 1003=电视剧
+      // 使用豆瓣的 suggest API，这个API公开可用且稳定
+      const url = `${this.suggestUrl}?q=${encodeURIComponent(query)}`
       
       const response = await fetch(url, {
         headers: this.getHeaders(),
@@ -79,98 +91,19 @@ export class DoubanService {
         return []
       }
 
-      const html = await response.text()
-      return this.parseSearchResults(html)
+      const data: DoubanSuggestItem[] = await response.json()
+      
+      return data.map(item => ({
+        id: item.id,
+        title: item.title,
+        original_title: item.sub_title,
+        year: item.year,
+        type: item.type === 'tv' ? 'tv' : item.type === 'movie' ? 'movie' : 'unknown',
+        poster_url: item.img,
+        url: item.url || `https://movie.douban.com/subject/${item.id}/`,
+      }))
     } catch (error) {
       console.error('豆瓣搜索出错:', error)
-      return []
-    }
-  }
-
-  /**
-   * 解析搜索结果页面
-   */
-  private parseSearchResults(html: string): DoubanSearchResult[] {
-    const results: DoubanSearchResult[] = []
-    
-    try {
-      // 使用正则解析搜索结果（简单方式）
-      // 豆瓣搜索结果是动态加载的，这里用备用方案
-      const itemPattern = /<a[^>]+href="https:\/\/movie\.douban\.com\/subject\/(\d+)\/"[^>]*>([^<]+)<\/a>/g
-      let match
-      
-      while ((match = itemPattern.exec(html)) !== null) {
-        const id = match[1]
-        const title = match[2].trim()
-        
-        if (id && title && !results.find(r => r.id === id)) {
-          results.push({
-            id,
-            title,
-            type: 'unknown',
-            url: `https://movie.douban.com/subject/${id}/`,
-          })
-        }
-      }
-    } catch (error) {
-      console.error('解析豆瓣搜索结果失败:', error)
-    }
-    
-    return results
-  }
-
-  /**
-   * 通过 API 代理搜索（更可靠的方式）
-   * 使用公开的豆瓣 API 代理服务
-   */
-  async searchViaProxy(query: string): Promise<DoubanSearchResult[]> {
-    try {
-      // 使用豆瓣搜索 API（如果可用）
-      // 注意：豆瓣官方API已不对外，这里尝试一些公开代理
-      const proxyUrl = `https://douban-api-proxy.deno.dev/search?q=${encodeURIComponent(query)}`
-      
-      const headers: Record<string, string> = {
-        'Accept': 'application/json',
-      }
-      
-      // 如果有cookie，可以尝试直接访问豆瓣API
-      if (this.cookie) {
-        headers['Cookie'] = this.cookie
-      }
-      
-      const response = await fetch(proxyUrl, {
-        headers,
-        signal: AbortSignal.timeout(this.timeout),
-      })
-
-      if (!response.ok) {
-        console.error(`豆瓣代理搜索失败: ${response.status}`)
-        return []
-      }
-
-      const data = await response.json()
-      
-      if (data.subjects && Array.isArray(data.subjects)) {
-        return data.subjects.map((item: any) => ({
-          id: item.id?.toString() || '',
-          title: item.title || '',
-          original_title: item.original_title,
-          year: item.year,
-          type: item.type === 'movie' ? 'movie' : item.type === 'tv' ? 'tv' : 'unknown',
-          rating: item.rating?.average,
-          rating_count: item.rating?.numRaters,
-          poster_url: item.images?.medium || item.images?.small,
-          overview: item.summary,
-          genres: item.genres,
-          director: item.directors?.[0]?.name,
-          actors: item.casts?.slice(0, 5).map((c: any) => c.name),
-          url: item.alt || `https://movie.douban.com/subject/${item.id}/`,
-        }))
-      }
-
-      return []
-    } catch (error) {
-      console.error('豆瓣代理搜索出错:', error)
       return []
     }
   }
@@ -189,13 +122,8 @@ export class DoubanService {
       
       if (!cleanTitle) return null
 
-      // 尝试代理搜索
-      let results = await this.searchViaProxy(cleanTitle)
-      
-      // 如果代理失败，尝试直接搜索
-      if (results.length === 0) {
-        results = await this.search(cleanTitle)
-      }
+      // 使用 suggest API 搜索
+      const results = await this.search(cleanTitle)
 
       if (results.length === 0) return null
 
@@ -296,11 +224,6 @@ export class DoubanService {
         score += 20
       }
 
-      // 评分人数加分（热门内容优先）
-      if (result.rating_count) {
-        score += Math.min(result.rating_count / 1000, 10)
-      }
-
       return { result, score }
     })
 
@@ -313,6 +236,90 @@ export class DoubanService {
     }
 
     return null
+  }
+
+  /**
+   * 获取影视详情（可选，用于获取更多信息）
+   */
+  async getDetail(id: string): Promise<DoubanDetail | null> {
+    try {
+      const url = `${this.baseUrl}/subject/${id}/`
+      const response = await fetch(url, {
+        headers: this.getHeaders(),
+        signal: AbortSignal.timeout(this.timeout),
+      })
+
+      if (!response.ok) {
+        console.error(`豆瓣详情获取失败: ${response.status}`)
+        return null
+      }
+
+      const html = await response.text()
+      return this.parseDetailPage(html, id)
+    } catch (error) {
+      console.error('豆瓣详情获取出错:', error)
+      return null
+    }
+  }
+
+  /**
+   * 解析详情页面
+   */
+  private parseDetailPage(html: string, id: string): DoubanDetail | null {
+    try {
+      // 提取标题
+      const titleMatch = html.match(/<span[^>]+property="v:itemreviewed"[^>]*>([^<]+)<\/span>/)
+      const title = titleMatch?.[1]?.trim() || ''
+
+      // 提取年份
+      const yearMatch = html.match(/<span[^>]+class="year"[^>]*>\((\d{4})\)<\/span>/)
+      const year = yearMatch?.[1]
+
+      // 提取评分
+      const ratingMatch = html.match(/<strong[^>]+class="ll[^"]*rating_num"[^>]*>([^<]+)<\/strong>/)
+      const rating = ratingMatch ? parseFloat(ratingMatch[1]) : undefined
+
+      // 提取类型
+      const typeMatch = html.match(/<span[^>]+property="v:genre"[^>]*>([^<]+)<\/span>/g)
+      const genres = typeMatch?.map(m => m.replace(/<[^>]+>/g, ''))
+
+      // 提取简介
+      const summaryMatch = html.match(/<span[^>]+property="v:summary"[^>]*>([^<]+)<\/span>/)
+      const overview = summaryMatch?.[1]?.trim()
+
+      // 提取导演
+      const directorMatch = html.match(/<a[^>]+rel="v:directedBy"[^>]*>([^<]+)<\/a>/)
+      const director = directorMatch?.[1]?.trim()
+
+      // 提取主演
+      const actorMatches = html.match(/<a[^>]+rel="v:starring"[^>]*>([^<]+)<\/a>/g)
+      const actors = actorMatches?.slice(0, 5).map(m => m.replace(/<[^>]+>/g, ''))
+
+      // 提取海报
+      const posterMatch = html.match(/<img[^>]+src="([^"]+)"[^>]*title="点击看更多海报"/)
+      const poster_url = posterMatch?.[1]
+
+      // 判断类型
+      const isTV = html.includes('电视剧') || html.includes('集数')
+      const type = isTV ? 'tv' : 'movie'
+
+      return {
+        id,
+        title,
+        year,
+        type: type as 'movie' | 'tv',
+        rating,
+        genres,
+        director,
+        actors,
+        overview,
+        poster_url,
+        url: `https://movie.douban.com/subject/${id}/`,
+      }
+    } catch (error) {
+      console.error('解析豆瓣详情页面失败:', error)
+      return null
+    }
   }
 }
 

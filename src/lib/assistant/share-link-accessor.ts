@@ -541,6 +541,10 @@ async function access115ShareAnonymously(shareId: string, shareCode?: string): P
       if (fileListData.errno === 20001 || fileListData.errno === 20002) {
         throw new Error('需要提取码，请提供正确的提取码')
       }
+      // 如果是服务器错误，提示需要登录
+      if (shareInfoData.errno !== 0 || shareInfoData.state === false) {
+        throw new Error('115网盘分享链接需要登录Cookie才能访问，请在「网盘管理」中配置115网盘账号')
+      }
       throw new Error(fileListData.error || '获取文件列表失败')
     }
     

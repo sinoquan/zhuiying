@@ -302,7 +302,7 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
     // 回退到环境变量
     apiKey = apiKey || process.env.TMDB_API_KEY
     
-    // 尝试 TMDB 搜索
+    // 尝试 TMDB 搜索（如果配置了API Key）
     if (apiKey) {
       try {
         const tmdbService = new TMDBService({
@@ -315,6 +315,7 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
         )
         
         if (tmdbResult && tmdbResult.tmdb_id) {
+          console.log(`[智能助手] TMDB识别成功: ${title} -> ${tmdbResult.title} (ID: ${tmdbResult.tmdb_id})`)
           return {
             id: tmdbResult.tmdb_id,
             title: tmdbResult.title,
@@ -329,11 +330,14 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
           }
         }
       } catch (error) {
-        console.error('TMDB搜索失败:', error)
+        console.error('[智能助手] TMDB搜索失败:', error)
       }
+    } else {
+      console.log('[智能助手] 未配置TMDB API Key，跳过TMDB搜索')
     }
     
-    // TMDB 没有结果，尝试豆瓣
+    // TMDB 没有结果或未配置，尝试豆瓣
+    console.log(`[智能助手] 尝试豆瓣搜索: ${title}`)
     try {
       const doubanService = new DoubanService({ cookie: doubanCookie })
       const doubanResult = await doubanService.identifyFromFileName(
@@ -342,6 +346,7 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
       )
       
       if (doubanResult) {
+        console.log(`[智能助手] 豆瓣识别成功: ${title} -> ${doubanResult.title} (ID: ${doubanResult.id})`)
         return {
           id: parseInt(doubanResult.id) || 0,
           title: doubanResult.title,
@@ -358,9 +363,10 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
         }
       }
     } catch (error) {
-      console.error('豆瓣搜索失败:', error)
+      console.error('[智能助手] 豆瓣搜索失败:', error)
     }
     
+    console.log(`[智能助手] 未能识别: ${title}`)
     return null
   } catch (error) {
     console.error('影视搜索失败:', error)
