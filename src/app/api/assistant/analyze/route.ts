@@ -216,7 +216,12 @@ export async function POST(request: NextRequest) {
           }
         } else {
           // 没有文件名时，提供更明确的提示
-          result.warning = `无法访问分享链接获取文件信息。请在链接下方添加文件名以辅助识别，例如：\n\n${parseResult.originalUrl}\n剧名.S01E01.1080p.mp4`
+          // 针对115网盘提供特殊提示
+          if (parseResult.type === '115') {
+            result.warning = `115网盘分享链接需要登录才能访问文件信息。\n\n解决方法：\n1. 在「网盘管理」中配置115网盘账号\n2. 或在链接下方添加文件名：\n\n${parseResult.originalUrl}\n剧名.S01E01.1080p.mp4`
+          } else {
+            result.warning = `无法访问分享链接获取文件信息。请在链接下方添加文件名以辅助识别，例如：\n\n${parseResult.originalUrl}\n剧名.S01E01.1080p.mp4`
+          }
         }
       }
     } catch (error) {
