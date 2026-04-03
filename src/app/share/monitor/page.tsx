@@ -30,11 +30,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Textarea } from "@/components/ui/textarea"
 import { 
-  FolderOpen, Plus, MoreHorizontal, Edit, Trash2, Activity, 
-  Loader2, ChevronRight, ChevronLeft, RefreshCw, Home, File, X, Clock,
+  FolderOpen, Plus, MoreHorizontal, Edit, Trash2, 
+  Loader2, ChevronRight, ChevronLeft, Home, X, Clock,
   CheckCircle2, XCircle, AlertCircle
 } from "lucide-react"
 import {
@@ -61,7 +59,7 @@ interface FileMonitor {
   path_name?: string
   enabled: boolean
   cron_expression?: string
-  push_channel_id?: number
+  push_channel_ids?: number[]
   push_template_type?: string
   created_at: string
   cloud_drives?: {
@@ -69,11 +67,11 @@ interface FileMonitor {
     name: string
     alias: string | null
   }
-  push_channels?: {
+  push_channels_list?: Array<{
     id: number
     channel_name: string
     channel_type: string
-  }
+  }>
   scan_stats?: ScanStats
 }
 
@@ -88,6 +86,7 @@ interface PushChannel {
   id: number
   channel_name: string
   channel_type: string
+  cloud_drive_id: number
 }
 
 interface CloudFile {
@@ -125,7 +124,7 @@ export default function FileMonitorPage() {
   const [formData, setFormData] = useState({
     cloud_drive_id: "",
     cron_expression: "*/10 7-23 * * *",
-    push_channel_id: "",
+    push_channel_ids: [] as number[],
     push_template_type: "tv",
   })
   
@@ -136,12 +135,6 @@ export default function FileMonitorPage() {
   
   // 获取当前选择
   const getSelectedFolders = () => selectedFoldersRef.current
-  
-  // 清空选择
-  const clearSelectedFolders = useCallback(() => {
-    selectedFoldersRef.current = []
-    forceUpdate(n => n + 1)
-  }, [])
   
   // 文件浏览状态
   const [browsingFiles, setBrowsingFiles] = useState<CloudFile[]>([])
@@ -161,8 +154,16 @@ export default function FileMonitorPage() {
   useEffect(() => {
     if (formData.cloud_drive_id && dialogOpen) {
       fetchFiles("/")
+      // 默认选中该网盘下的所有渠道
+      const driveChannels = channels.filter(c => c.cloud_drive_id === parseInt(formData.cloud_drive_id))
+      if (driveChannels.length > 0 && formData.push_channel_ids.length === 0) {
+        setFormData(prev => ({
+          ...prev,
+          push_channel_ids: driveChannels.map(c => c.id)
+        }))
+      }
     }
-  }, [formData.cloud_drive_id, dialogOpen])
+  }, [formData.cloud_drive_id, dialogOpen, channels])
 
   const fetchData = async () => {
     try {
@@ -230,19 +231,22 @@ export default function FileMonitorPage() {
             path: folder.path,
             path_name: folder.name,
             cron_expression: cronExpr,
-            push_channel_id: formData.push_channel_id ? parseInt(formData.push_channel_id) : null,
+            push_channel_ids: formData.push_channel_ids,
             push_template_type: formData.push_template_type,
           }),
         })
-        if (!response.ok) throw new Error("创建失败")
+        if (!response.ok) {
+          const errData = await response.json()
+          throw new Error(errData.error || "创建失败")
+        }
       }
 
       toast.success(`成功创建 ${currentSelection.length} 个监控任务`)
       setDialogOpen(false)
       resetForm()
       fetchData()
-    } catch {
-      toast.error("操作失败")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "操作失败")
     }
   }
 
@@ -280,7 +284,7 @@ export default function FileMonitorPage() {
     setFormData({ 
       cloud_drive_id: "", 
       cron_expression: "*/10 7-23 * * *",
-      push_channel_id: "",
+      push_channel_ids: [],
       push_template_type: "tv",
     })
     setEditingMonitor(null)
@@ -298,7 +302,7 @@ export default function FileMonitorPage() {
     setFormData({
       cloud_drive_id: monitor.cloud_drive_id.toString(),
       cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
-      push_channel_id: monitor.push_channel_id?.toString() || "",
+      push_channel_ids: monitor.push_channel_ids || [],
       push_template_type: monitor.push_template_type || "tv",
     })
     selectedFoldersRef.current = [{ path: monitor.path, name: monitor.path_name || monitor.path.split('/').pop() || monitor.path }]
@@ -365,6 +369,26 @@ export default function FileMonitorPage() {
     }
   }
 
+  // 切换推送渠道
+  const toggleChannel = (channelId: number) => {
+    setFormData(prev => {
+      const newIds = prev.push_channel_ids.includes(channelId)
+        ? prev.push_channel_ids.filter(id => id !== channelId)
+        : [...prev.push_channel_ids, channelId]
+      return { ...prev, push_channel_ids: newIds }
+    })
+  }
+
+  // 全选/取消全选当前网盘的渠道
+  const toggleAllChannels = (selectAll: boolean) => {
+    if (!formData.cloud_drive_id) return
+    const driveChannels = channels.filter(c => c.cloud_drive_id === parseInt(formData.cloud_drive_id))
+    setFormData(prev => ({
+      ...prev,
+      push_channel_ids: selectAll ? driveChannels.map(c => c.id) : []
+    }))
+  }
+
   const getDriveName = (monitor: FileMonitor) => {
     return monitor.cloud_drives?.alias || monitor.cloud_drives?.name || "未知网盘"
   }
@@ -388,6 +412,17 @@ export default function FileMonitorPage() {
     const preset = CRON_PRESETS.find(p => p.value === cron)
     if (preset) return preset.label
     return cron
+  }
+
+  // 获取当前选中网盘的渠道，按类型分组
+  const currentDriveChannels = formData.cloud_drive_id 
+    ? channels.filter(c => c.cloud_drive_id === parseInt(formData.cloud_drive_id))
+    : []
+
+  const channelTypeLabels: Record<string, string> = {
+    telegram: 'Telegram',
+    qq: 'QQ',
+    wechat: '微信',
   }
 
   return (
@@ -476,19 +511,23 @@ export default function FileMonitorPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {monitor.push_channels ? (
-                          <div className="flex items-center gap-1.5">
-                            <Image 
-                              src={pushChannelIcons[monitor.push_channels.channel_type]?.icon || ''} 
-                              alt=""
-                              width={14}
-                              height={14}
-                              className="rounded"
-                              unoptimized
-                            />
-                            <span className="text-sm truncate max-w-[100px]" title={monitor.push_channels.channel_name}>
-                              {monitor.push_channels.channel_name}
-                            </span>
+                        {monitor.push_channels_list && monitor.push_channels_list.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {monitor.push_channels_list.map(ch => (
+                              <div key={ch.id} className="flex items-center gap-1 px-1.5 py-0.5 bg-muted rounded text-xs">
+                                <Image 
+                                  src={pushChannelIcons[ch.channel_type]?.icon || ''} 
+                                  alt=""
+                                  width={12}
+                                  height={12}
+                                  className="rounded"
+                                  unoptimized
+                                />
+                                <span className="truncate max-w-[60px]" title={ch.channel_name}>
+                                  {ch.channel_name}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">未配置</span>
@@ -546,7 +585,7 @@ export default function FileMonitorPage() {
                               <Edit className="mr-2 h-4 w-4" />
                               编辑
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDelete(monitor.id)}>
+                            <DropdownMenuItem onClick={() => handleDelete(monitor.id)} className="text-destructive">
                               <Trash2 className="mr-2 h-4 w-4" />
                               删除
                             </DropdownMenuItem>
@@ -564,7 +603,7 @@ export default function FileMonitorPage() {
 
       {/* 创建/编辑对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingMonitor ? "编辑监控任务" : "新建监控任务"}
@@ -581,7 +620,13 @@ export default function FileMonitorPage() {
                 <Select
                   value={formData.cloud_drive_id}
                   onValueChange={(value) => {
-                    setFormData({ ...formData, cloud_drive_id: value })
+                    // 获取该网盘的所有渠道并默认全选
+                    const driveChannels = channels.filter(c => c.cloud_drive_id === parseInt(value))
+                    setFormData({ 
+                      ...formData, 
+                      cloud_drive_id: value,
+                      push_channel_ids: driveChannels.map(c => c.id) // 默认全选
+                    })
                     selectedFoldersRef.current = []
                     forceUpdate(n => n + 1)
                     setPathHistory([{ path: "/", name: "根目录" }])
@@ -648,213 +693,237 @@ export default function FileMonitorPage() {
                 )}
               </div>
               
-              {/* 推送配置 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
+              {/* 推送渠道 - 多选开关 */}
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
                   <Label>推送渠道</Label>
-                  <Select
-                    value={formData.push_channel_id}
-                    onValueChange={(value) => setFormData({ ...formData, push_channel_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择推送渠道" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {channels.map((channel) => (
-                        <SelectItem key={channel.id} value={channel.id.toString()}>
-                          <div className="flex items-center gap-2">
+                  {currentDriveChannels.length > 0 && (
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => toggleAllChannels(formData.push_channel_ids.length !== currentDriveChannels.length)}
+                      className="text-xs h-7"
+                    >
+                      {formData.push_channel_ids.length === currentDriveChannels.length ? '取消全选' : '全选'}
+                    </Button>
+                  )}
+                </div>
+                {formData.cloud_drive_id ? (
+                  currentDriveChannels.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
+                      {Object.entries(
+                        currentDriveChannels.reduce((acc, ch) => {
+                          if (!acc[ch.channel_type]) acc[ch.channel_type] = []
+                          acc[ch.channel_type].push(ch)
+                          return acc
+                        }, {} as Record<string, PushChannel[]>)
+                      ).map(([type, typeChannels]) => (
+                        <div key={type} className="space-y-2">
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                             <Image 
-                              src={pushChannelIcons[channel.channel_type]?.icon || ''} 
+                              src={pushChannelIcons[type]?.icon || ''} 
                               alt=""
                               width={14}
                               height={14}
                               className="rounded"
                               unoptimized
                             />
-                            <span className="truncate">{channel.channel_name}</span>
+                            {channelTypeLabels[type] || type}
                           </div>
-                        </SelectItem>
+                          {typeChannels.map(ch => (
+                            <label 
+                              key={ch.id} 
+                              className="flex items-center gap-2 p-2 rounded border bg-background cursor-pointer hover:bg-accent"
+                            >
+                              <Switch
+                                checked={formData.push_channel_ids.includes(ch.id)}
+                                onCheckedChange={() => toggleChannel(ch.id)}
+                                className="data-[state=checked]:bg-blue-500"
+                              />
+                              <span className="text-sm truncate">{ch.channel_name}</span>
+                            </label>
+                          ))}
+                        </div>
                       ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    收到新文件时推送到此渠道
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label>内容类型</Label>
-                  <div className="flex gap-4 pt-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="template_type"
-                        value="tv"
-                        checked={formData.push_template_type === 'tv'}
-                        onChange={() => setFormData({ ...formData, push_template_type: 'tv' })}
-                        className="h-4 w-4"
-                      />
-                      <span className="text-sm">📺 剧集模板</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="template_type"
-                        value="movie"
-                        checked={formData.push_template_type === 'movie'}
-                        onChange={() => setFormData({ ...formData, push_template_type: 'movie' })}
-                        className="h-4 w-4"
-                      />
-                      <span className="text-sm">🎬 电影模板</span>
-                    </label>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/30">
+                      该网盘暂无推送渠道，请先在「推送管理」中创建
+                    </div>
+                  )
+                ) : (
+                  <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/30">
+                    请先选择网盘
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    系统自动判断追更/完结状态
-                  </p>
-                </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  开启后将推送到对应的渠道，支持同时推送到多个渠道
+                </p>
               </div>
               
-              {/* 文件浏览器 */}
-              {formData.cloud_drive_id && (
-                <div className="grid gap-2">
-                  <Label>选择监控目录（可多选）</Label>
-                  
-                  {/* 已选择的文件夹列表 */}
-                  {getSelectedFolders().length > 0 && (
-                    <div className="flex flex-wrap gap-2 p-2 bg-green-50 dark:bg-green-950 rounded-lg">
-                      {getSelectedFolders().map((folder) => (
-                        <Badge 
-                          key={folder.path} 
-                          variant="outline" 
-                          className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 pr-1"
-                        >
-                          <FolderOpen className="h-3 w-3 mr-1" />
-                          {folder.name}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-4 w-4 p-0 ml-1 hover:bg-transparent"
-                            onClick={() => removeSelectedFolder(folder.path)}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {/* 路径导航 */}
-                  <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={navigateBack}
-                      disabled={pathHistory.length <= 1}
-                      title="返回上一级"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={navigateToRoot}
-                      disabled={pathHistory.length <= 1}
-                      title="返回根目录"
-                    >
-                      <Home className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => fetchFiles(browsingPath)}
-                      disabled={loadingFiles}
-                      title="刷新"
-                    >
-                      <RefreshCw className={`h-4 w-4 ${loadingFiles ? "animate-spin" : ""}`} />
-                    </Button>
-                    <div className="flex items-center gap-1 text-sm overflow-x-auto flex-1">
-                      {pathHistory.map((p, i) => (
-                        <span key={i} className="flex items-center whitespace-nowrap">
-                          {i > 0 && <ChevronRight className="h-3 w-3 mx-1 text-muted-foreground" />}
-                          <span
-                            className={`cursor-pointer hover:text-primary ${
-                              i === pathHistory.length - 1 ? "font-medium text-primary" : ""
-                            }`}
-                            onClick={() => navigateToPath(i)}
-                          >
-                            {p.name}
-                          </span>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* 文件列表 */}
-                  <div className="border rounded-lg max-h-[300px] overflow-y-auto">
-                    {loadingFiles ? (
-                      <div className="p-8 text-center text-muted-foreground">
-                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                        加载中...
-                      </div>
-                    ) : browsingFiles.length === 0 ? (
-                      <div className="p-8 text-center text-muted-foreground">
-                        此目录为空或没有子文件夹
-                      </div>
-                    ) : (
-                      browsingFiles.filter(f => f.is_dir).map((file) => {
-                        const isSelected = getSelectedFolders().some(f => f.path === (file.path || file.id))
-                        return (
-                          <div
-                            key={file.id}
-                            className={`flex items-center gap-3 p-3 border-b last:border-b-0 cursor-pointer hover:bg-muted/30 ${
-                              isSelected ? "bg-primary/10" : ""
-                            }`}
-                            onDoubleClick={() => handleDoubleClick(file)}
-                          >
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 shrink-0 cursor-pointer rounded border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 accent-primary"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                e.stopPropagation()
-                                toggleFolderSelection(file)
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
-                            <span className="flex-1 truncate">{file.name}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDoubleClick(file)
-                              }}
-                            >
-                              <ChevronRight className="h-4 w-4" />
-                              进入
-                            </Button>
-                          </div>
-                        )
-                      })
-                    )}
-                  </div>
+              {/* 内容类型 */}
+              <div className="grid gap-2">
+                <Label>内容类型</Label>
+                <div className="flex gap-4 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="template_type"
+                      value="tv"
+                      checked={formData.push_template_type === 'tv'}
+                      onChange={() => setFormData({ ...formData, push_template_type: 'tv' })}
+                      className="h-4 w-4"
+                    />
+                    <span className="text-sm">📺 剧集模板</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="template_type"
+                      value="movie"
+                      checked={formData.push_template_type === 'movie'}
+                      onChange={() => setFormData({ ...formData, push_template_type: 'movie' })}
+                      className="h-4 w-4"
+                    />
+                    <span className="text-sm">🎬 电影模板</span>
+                  </label>
                 </div>
-              )}
+                <p className="text-xs text-muted-foreground">
+                  剧集模板会在完结时自动切换为完结模板
+                </p>
+              </div>
+              
+              {/* 目录选择 */}
+              <div className="grid gap-2">
+                <Label>选择监控目录 *</Label>
+                {!formData.cloud_drive_id ? (
+                  <div className="text-sm text-muted-foreground p-4 border rounded-lg bg-muted/30">
+                    请先选择网盘
+                  </div>
+                ) : (
+                  <>
+                    {/* 已选择的目录 */}
+                    {selectedFoldersRef.current.length > 0 && (
+                      <div className="flex flex-wrap gap-2 p-2 border rounded-lg bg-muted/30 mb-2">
+                        {selectedFoldersRef.current.map((folder) => (
+                          <Badge 
+                            key={folder.path} 
+                            variant="secondary"
+                            className="flex items-center gap-1 pr-1"
+                          >
+                            <FolderOpen className="h-3 w-3 mr-1" />
+                            {folder.name}
+                            <button
+                              type="button"
+                              onClick={() => removeSelectedFolder(folder.path)}
+                              className="ml-1 hover:bg-muted rounded-full p-0.5"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* 文件浏览器 */}
+                    <div className="border rounded-lg overflow-hidden">
+                      {/* 面包屑导航 */}
+                      <div className="flex items-center gap-1 p-2 bg-muted/50 border-b text-sm overflow-x-auto">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={navigateBack}
+                          disabled={pathHistory.length <= 1}
+                          className="h-7 px-2"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={navigateToRoot}
+                          className="h-7 px-2"
+                        >
+                          <Home className="h-4 w-4" />
+                        </Button>
+                        {pathHistory.map((item, index) => (
+                          <div key={item.path + index} className="flex items-center">
+                            {index > 0 && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                            <button
+                              type="button"
+                              onClick={() => navigateToPath(index)}
+                              className={`px-1 py-0.5 rounded hover:bg-muted ${
+                                index === pathHistory.length - 1 ? 'font-medium' : 'text-muted-foreground'
+                              }`}
+                            >
+                              {item.name}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* 文件列表 */}
+                      <div className="max-h-60 overflow-y-auto">
+                        {loadingFiles ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : browsingFiles.filter(f => f.is_dir).length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground text-sm">
+                            当前目录没有子文件夹
+                          </div>
+                        ) : (
+                          <div className="divide-y">
+                            {browsingFiles
+                              .filter(f => f.is_dir)
+                              .map((file) => {
+                                const folderPath = file.path || file.id
+                                const isSelected = selectedFoldersRef.current.some(f => f.path === folderPath)
+                                
+                                return (
+                                  <div
+                                    key={file.id}
+                                    className={`flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/50 ${
+                                      isSelected ? 'bg-blue-50 dark:bg-blue-950/30' : ''
+                                    }`}
+                                    onClick={() => toggleFolderSelection(file)}
+                                    onDoubleClick={() => handleDoubleClick(file)}
+                                  >
+                                    <div className={`w-4 h-4 border rounded flex items-center justify-center ${
+                                      isSelected ? 'bg-blue-500 border-blue-500' : 'border-muted-foreground'
+                                    }`}>
+                                      {isSelected && (
+                                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      )}
+                                    </div>
+                                    <FolderOpen className="h-4 w-4 text-yellow-500" />
+                                    <span className="text-sm truncate">{file.name}</span>
+                                  </div>
+                                )
+                              })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      单击选择/取消，双击进入文件夹。支持多选。
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
+            
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 取消
               </Button>
-              <Button 
-                type="submit" 
-                disabled={!formData.cloud_drive_id || getSelectedFolders().length === 0}
-              >
-                {editingMonitor ? "保存" : `创建 ${getSelectedFolders().length > 0 ? `(${getSelectedFolders().length}个目录)` : ''}`}
+              <Button type="submit" disabled={!formData.cloud_drive_id || selectedFoldersRef.current.length === 0}>
+                {editingMonitor ? "保存" : "创建"}
               </Button>
             </DialogFooter>
           </form>

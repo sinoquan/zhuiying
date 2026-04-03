@@ -16,7 +16,7 @@ interface MonitorTask {
   path: string
   enabled: boolean
   created_at: string
-  push_channel_id?: number | null
+  push_channel_ids?: number[] | null
   push_template_type?: 'movie' | 'tv' | 'completed' | null
   cloud_drives?: {
     id: number
@@ -24,12 +24,12 @@ interface MonitorTask {
     alias: string | null
     config: Record<string, unknown>
   }
-  push_channels?: {
+  push_channels_list?: Array<{
     id: number
     channel_name: string
     channel_type: string
     config: Record<string, unknown>
-  } | null
+  }>
 }
 
 // 扫描结果
@@ -139,12 +139,6 @@ export class FileMonitorService {
           name,
           alias,
           config
-        ),
-        push_channels (
-          id,
-          channel_name,
-          channel_type,
-          config
         )
       `)
       .eq('enabled', true)
@@ -152,6 +146,26 @@ export class FileMonitorService {
     if (error || !monitors) {
       console.error('获取监控任务失败:', error)
       return results
+    }
+    
+    // 获取所有推送渠道
+    const { data: allChannels } = await this.client
+      .from('push_channels')
+      .select('id, channel_name, channel_type, config')
+    
+    const channelMap = new Map<number, { id: number; channel_name: string; channel_type: string; config: Record<string, unknown> }>()
+    for (const ch of allChannels || []) {
+      channelMap.set(ch.id, ch)
+    }
+    
+    // 为每个监控任务附加推送渠道信息
+    for (const monitor of monitors as MonitorTask[]) {
+      const channelIds = monitor.push_channel_ids as number[] | null
+      if (channelIds && channelIds.length > 0) {
+        monitor.push_channels_list = channelIds
+          .map(id => channelMap.get(id))
+          .filter(Boolean) as Array<{ id: number; channel_name: string; channel_type: string; config: Record<string, unknown> }>
+      }
     }
     
     for (const monitor of monitors as MonitorTask[]) {
@@ -629,12 +643,10 @@ export class FileMonitorService {
   private async autoPush(monitor: MonitorTask, shareRecord: Record<string, unknown>): Promise<boolean> {
     try {
       // 如果监控任务没有配置推送渠道，跳过
-      if (!monitor.push_channel_id || !monitor.push_channels) {
+      if (!monitor.push_channels_list || monitor.push_channels_list.length === 0) {
         console.log(`[Monitor] 监控任务 ${monitor.id} 未配置推送渠道，跳过推送`)
         return false
       }
-      
-      const channel = monitor.push_channels
       
       // 获取推送模板
       let templateType: 'movie' | 'tv' | 'completed' = monitor.push_template_type || 'tv'
@@ -661,35 +673,42 @@ export class FileMonitorService {
       // 构建推送消息
       const message = await this.buildPushMessage(shareRecord, templates)
       
-      // 推送
-      const pushService = createPushService(
-        channel.channel_type as PushChannelType,
-        (channel.config as PushChannelConfig) || {}
-      )
+      // 对每个渠道推送
+      let anySuccess = false
+      for (const channel of monitor.push_channels_list) {
+        const pushService = createPushService(
+          channel.channel_type as PushChannelType,
+          (channel.config as PushChannelConfig) || {}
+        )
+        
+        const pushResult = await pushService.send(message)
+        
+        // 记录推送结果
+        await this.client.from('push_records').insert({
+          share_record_id: shareRecord.id as number,
+          push_channel_id: channel.id,
+          push_rule_id: null,
+          push_template_id: templates?.[0]?.id || null,
+          content: JSON.stringify(message),
+          push_status: pushResult.success ? 'success' : 'failed',
+          error_message: pushResult.error,
+          retry_count: 0,
+          pushed_at: pushResult.success ? new Date().toISOString() : null,
+        })
+        
+        if (pushResult.success) {
+          anySuccess = true
+        }
+      }
       
-      const pushResult = await pushService.send(message)
-      
-      // 记录推送结果
-      await this.client.from('push_records').insert({
-        share_record_id: shareRecord.id as number,
-        push_channel_id: channel.id,
-        push_rule_id: null,
-        push_template_id: templates?.[0]?.id || null,
-        content: JSON.stringify(message),
-        push_status: pushResult.success ? 'success' : 'failed',
-        error_message: pushResult.error,
-        retry_count: 0,
-        pushed_at: pushResult.success ? new Date().toISOString() : null,
-      })
-      
-      return pushResult.success
+      return anySuccess
     } catch (error) {
       console.error('自动推送失败:', error)
       return false
     }
   }
 
-  private checkPushRules(shareRecord: any, rules: any[]): boolean {
+  private checkPushRules(shareRecord: Record<string, unknown>, rules: Record<string, unknown>[]): boolean {
     for (const rule of rules) {
       // 内容类型过滤
       if (rule.content_type && rule.content_type !== 'all') {
@@ -705,8 +724,8 @@ export class FileMonitorService {
       
       // 文件大小过滤
       if (rule.min_size) {
-        const sizeBytes = this.parseFileSize(shareRecord.file_size)
-        if (sizeBytes < rule.min_size) {
+        const sizeBytes = this.parseFileSize(shareRecord.file_size as string)
+        if (sizeBytes < (rule.min_size as number)) {
           return false
         }
       }

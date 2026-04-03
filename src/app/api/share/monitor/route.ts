@@ -7,7 +7,9 @@ export async function GET() {
   const result = await withRetryOrDefault(
     async () => {
       const client = getSupabaseClient()
-      const { data, error } = await client
+      
+      // 获取监控任务
+      const { data: monitors, error: monitorError } = await client
         .from('file_monitors')
         .select(`
           *,
@@ -15,64 +17,85 @@ export async function GET() {
             id,
             name,
             alias
-          ),
-          push_channels (
-            id,
-            channel_name,
-            channel_type
           )
         `)
         .order('created_at', { ascending: false })
       
-      if (error) throw new Error(`获取监控任务失败: ${error.message}`)
+      if (monitorError) throw new Error(`获取监控任务失败: ${monitorError.message}`)
       
-      // 获取每个监控任务的最近扫描记录
-      if (data && data.length > 0) {
-        const monitorIds = data.map((m: Record<string, unknown>) => m.id)
-        
-        // 从operation_logs获取最近扫描记录
-        const { data: logs } = await client
-          .from('operation_logs')
-          .select('cloud_drive_id, operation_detail, status, created_at')
-          .eq('operation_type', 'monitor_scan')
-          .order('created_at', { ascending: false })
-          .limit(50)
-        
-        // 统计每个监控任务的分享和推送数量
-        const monitorStats = new Map<number, { shared: number; pushed: number; lastScan: string | null; lastScanStatus: string | null }>()
-        
-        for (const log of logs || []) {
-          try {
-            const detail = typeof log.operation_detail === 'string' 
-              ? JSON.parse(log.operation_detail) 
-              : log.operation_detail
-            
-            if (detail?.monitor_id && !monitorStats.has(detail.monitor_id)) {
-              monitorStats.set(detail.monitor_id, {
-                shared: detail.shared_files || 0,
-                pushed: detail.pushed_files || 0,
-                lastScan: log.created_at,
-                lastScanStatus: log.status
-              })
-            }
-          } catch {
-            // 忽略解析错误
-          }
-        }
-        
-        // 附加统计信息
-        data.forEach((monitor: Record<string, unknown>) => {
-          const stats = monitorStats.get(monitor.id as number)
-          monitor.scan_stats = stats || {
-            shared: 0,
-            pushed: 0,
-            lastScan: null,
-            lastScanStatus: null
-          }
-        })
+      if (!monitors || monitors.length === 0) {
+        return []
       }
       
-      return data
+      // 获取所有推送渠道
+      const { data: allChannels } = await client
+        .from('push_channels')
+        .select('id, channel_name, channel_type')
+      
+      // 创建渠道ID到渠道信息的映射
+      const channelMap = new Map<number, { id: number; channel_name: string; channel_type: string }>()
+      for (const ch of allChannels || []) {
+        channelMap.set(ch.id, ch)
+      }
+      
+      // 为每个监控任务附加推送渠道信息
+      for (const monitor of monitors) {
+        // 解析 push_channel_ids (JSON 数组)
+        const channelIds = monitor.push_channel_ids as number[] | null
+        if (channelIds && channelIds.length > 0) {
+          monitor.push_channels_list = channelIds
+            .map(id => channelMap.get(id))
+            .filter(Boolean)
+        } else {
+          monitor.push_channels_list = []
+        }
+      }
+      
+      // 获取每个监控任务的最近扫描记录
+      const monitorIds = monitors.map((m: Record<string, unknown>) => m.id)
+      
+      // 从operation_logs获取最近扫描记录
+      const { data: logs } = await client
+        .from('operation_logs')
+        .select('cloud_drive_id, operation_detail, status, created_at')
+        .eq('operation_type', 'monitor_scan')
+        .order('created_at', { ascending: false })
+        .limit(50)
+      
+      // 统计每个监控任务的分享和推送数量
+      const monitorStats = new Map<number, { shared: number; pushed: number; lastScan: string | null; lastScanStatus: string | null }>()
+      
+      for (const log of logs || []) {
+        try {
+          const detail = typeof log.operation_detail === 'string' 
+            ? JSON.parse(log.operation_detail) 
+            : log.operation_detail
+          
+          if (detail?.monitor_id && !monitorStats.has(detail.monitor_id)) {
+            monitorStats.set(detail.monitor_id, {
+              shared: detail.shared_files || 0,
+              pushed: detail.pushed_files || 0,
+              lastScan: log.created_at,
+              lastScanStatus: log.status
+            })
+          }
+        } catch {
+          // 忽略解析错误
+        }
+      }
+      
+      // 附加统计信息
+      monitors.forEach((monitor: Record<string, unknown>) => {
+        const stats = monitorStats.get(monitor.id as number)
+        monitor.scan_stats = stats || {
+          shared: 0,
+          pushed: 0,
+          lastScan: null,
+          lastScanStatus: null
+        }
+      })
+      
+      return monitors
     },
     [],
     { retries: 3, delay: 300 }
@@ -95,7 +118,7 @@ export async function POST(request: NextRequest) {
         path_name: body.path_name || body.path.split('/').pop() || body.path,
         enabled: true,
         cron_expression: body.cron_expression || '*/10 7-23 * * *',
-        push_channel_id: body.push_channel_id || null,
+        push_channel_ids: body.push_channel_ids || [],
         push_template_type: body.push_template_type || 'tv',
       })
       .select()

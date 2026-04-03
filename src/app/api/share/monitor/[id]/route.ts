@@ -17,7 +17,7 @@ export async function PUT(
     if (body.path_name !== undefined) updateData.path_name = body.path_name
     if (body.enabled !== undefined) updateData.enabled = body.enabled
     if (body.cron_expression !== undefined) updateData.cron_expression = body.cron_expression
-    if (body.push_channel_id !== undefined) updateData.push_channel_id = body.push_channel_id
+    if (body.push_channel_ids !== undefined) updateData.push_channel_ids = body.push_channel_ids
     if (body.push_template_type !== undefined) updateData.push_template_type = body.push_template_type
     
     const { data, error } = await client
