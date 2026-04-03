@@ -126,6 +126,7 @@ export async function GET(request: NextRequest) {
         limit: 100,
         allowed_updates: ['message', 'channel_post', 'my_chat_member'],
       }, proxyUrl)
+      console.log(`[Telegram] 获取到 ${updates.length} 条更新`)
     } catch (e) {
       console.error('[Telegram] 获取更新失败:', e)
       // 如果获取失败，返回空列表并提示用户
@@ -156,6 +157,16 @@ export async function GET(request: NextRequest) {
       } catch (e) {
         console.error('[Telegram] 恢复 Webhook 失败:', e)
       }
+    }
+    
+    // 如果没有更新，提示用户如何操作
+    if (updates.length === 0) {
+      return NextResponse.json({
+        channels: [],
+        groups: [],
+        all: [],
+        hint: '未获取到更新。请在频道/群组中发送消息给 Bot（如发送 /start），然后再次点击刷新。',
+      })
     }
     
     // 提取唯一的聊天/频道

@@ -97,6 +97,7 @@ export default function PushChannelsPage() {
   // Telegram 频道列表
   const [telegramChannels, setTelegramChannels] = useState<TelegramChannel[]>([])
   const [telegramGroups, setTelegramGroups] = useState<TelegramChannel[]>([])
+  const [telegramHint, setTelegramHint] = useState<string>("")
   const [loadingChannels, setLoadingChannels] = useState(false)
 
   useEffect(() => {
@@ -147,6 +148,7 @@ export default function PushChannelsPage() {
     }
     
     setLoadingChannels(true)
+    setTelegramHint("")
     try {
       const response = await fetch(`/api/telegram/channels?bot_token=${encodeURIComponent(botToken)}`)
       const data = await response.json()
@@ -156,11 +158,17 @@ export default function PushChannelsPage() {
       setTelegramChannels(data.channels || [])
       setTelegramGroups(data.groups || [])
       
-      const total = (data.channels?.length || 0) + (data.groups?.length || 0)
-      if (total === 0) {
-        toast.info("未发现频道或群组，请确保机器人已加入并有发言权限")
+      // 显示提示
+      if (data.hint) {
+        setTelegramHint(data.hint)
+        toast.info(data.hint)
       } else {
-        toast.success(`发现 ${total} 个频道/群组`)
+        const total = (data.channels?.length || 0) + (data.groups?.length || 0)
+        if (total === 0) {
+          setTelegramHint("未发现频道或群组。请将 Bot 添加到频道/群组后发送消息（如 /start），然后再次刷新。")
+        } else {
+          toast.success(`发现 ${total} 个频道/群组`)
+        }
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "获取频道列表失败")
@@ -521,6 +529,14 @@ export default function PushChannelsPage() {
                           )
                         })}
                       </div>
+                    </div>
+                  )}
+
+                  {/* 提示信息 */}
+                  {telegramHint && telegramChannels.length === 0 && telegramGroups.length === 0 && (
+                    <div className="text-center py-4 text-sm text-muted-foreground border-t">
+                      <p className="mb-2">{telegramHint}</p>
+                      <p className="text-xs">或直接点击"添加目标"手动输入 Chat ID</p>
                     </div>
                   )}
 
