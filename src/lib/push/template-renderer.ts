@@ -83,9 +83,9 @@ export function renderTemplate(
   const cast = Array.isArray(data.cast) ? data.cast.slice(0, 5).join(', ') : (data.cast || '')
   result = result.replace(/{cast}/g, cast)
   
-  // 简介（截断过长的文本）
+  // 简介（截断过长的文本，最多120字）
   const overview = data.overview || ''
-  const truncatedOverview = overview.length > 200 ? overview.substring(0, 200) + '...' : overview
+  const truncatedOverview = overview.length > 120 ? overview.substring(0, 120) + '...' : overview
   result = result.replace(/{overview}/g, truncatedOverview)
   
   // 文件信息
