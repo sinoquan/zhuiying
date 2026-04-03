@@ -571,14 +571,19 @@ export default function ShareRecordsPage() {
   
   // 批量删除
   const batchDelete = async () => {
-    if (selectedIds.size === 0) return
+    if (selectedIds.size === 0) {
+      toast.error("请先选择要删除的记录")
+      return
+    }
+    
+    const idsArray = Array.from(selectedIds)
     
     setSaving(true)
     try {
       const response = await fetch('/api/share/records', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+        body: JSON.stringify({ ids: idsArray }),
       })
       
       const data = await response.json()

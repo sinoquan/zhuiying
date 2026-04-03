@@ -150,21 +150,22 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id')
     const cancelShare = searchParams.get('cancel') === 'true'
     
-    // 检查是否为批量删除
+    // 检查是否为批量删除 - 尝试解析 JSON body
     let body: { ids?: number[] } = {}
+    
     try {
-      const text = await request.text()
-      if (text) {
-        body = JSON.parse(text)
+      const jsonBody = await request.json()
+      if (jsonBody && typeof jsonBody === 'object') {
+        body = jsonBody as { ids?: number[] }
       }
     } catch {
-      // 忽略解析错误，说明不是JSON body
+      // body 为空或不是有效 JSON，忽略
     }
     
     const client = getSupabaseClient()
     
     // 批量删除
-    if (body.ids && body.ids.length > 0) {
+    if (body.ids && Array.isArray(body.ids) && body.ids.length > 0) {
       // 先删除关联的推送记录
       await client
         .from('push_records')
