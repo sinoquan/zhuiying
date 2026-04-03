@@ -481,6 +481,7 @@ export class FileMonitorService {
         .from('share_records')
         .insert({
           cloud_drive_id: monitor.cloud_drive_id,
+          monitor_id: monitor.id,
           file_path: file.path,
           file_name: file.name,
           file_size: this.formatFileSize(file.size),
@@ -541,6 +542,7 @@ export class FileMonitorService {
         .from('share_records')
         .insert({
           cloud_drive_id: monitor.cloud_drive_id,
+          monitor_id: monitor.id,
           file_path: parentPath,
           file_name: `${seriesInfo.contentInfo.title} S${String(seriesInfo.contentInfo.season || 1).padStart(2, '0')}-E${String(minEp).padStart(2, '0')}-E${String(maxEp).padStart(2, '0')}（完结）`,
           file_size: this.formatFileSize(totalSize),

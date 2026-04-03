@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get('status')
   const source = searchParams.get('source')
   const search = searchParams.get('search')
+  const monitorId = searchParams.get('monitor_id')
   
   const result = await withRetryOrDefault(
     async () => {
@@ -45,6 +46,9 @@ export async function GET(request: NextRequest) {
       }
       if (source) {
         query = query.eq('source', source)
+      }
+      if (monitorId) {
+        query = query.eq('monitor_id', parseInt(monitorId))
       }
       if (search) {
         query = query.or(`file_name.ilike.%${search}%,share_url.ilike.%${search}%`)

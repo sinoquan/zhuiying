@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -144,6 +145,9 @@ interface PushChannel {
 }
 
 export default function ShareRecordsPage() {
+  const searchParams = useSearchParams()
+  const monitorId = searchParams.get('monitor_id')
+  
   const [records, setRecords] = useState<ShareRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [cloudDrives, setCloudDrives] = useState<CloudDrive[]>([])
@@ -206,6 +210,7 @@ export default function ShareRecordsPage() {
       if (filterStatus && filterStatus !== 'all') params.set('status', filterStatus)
       if (filterSource && filterSource !== 'all') params.set('source', filterSource)
       if (searchQuery) params.set('search', searchQuery)
+      if (monitorId) params.set('monitor_id', monitorId)
       
       const response = await fetch(`/api/share/records?${params}`)
       const data = await response.json()
@@ -218,7 +223,7 @@ export default function ShareRecordsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, filterCloudDrive, filterStatus, filterSource, searchQuery])
+  }, [page, pageSize, filterCloudDrive, filterStatus, filterSource, searchQuery, monitorId])
 
   // 加载基础数据和分享记录
   useEffect(() => {
@@ -333,6 +338,55 @@ export default function ShareRecordsPage() {
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "推送失败")
+    } finally {
+      setPushing(false)
+    }
+  }
+
+  // 重试推送
+  const retryPush = async (record: ShareRecord) => {
+    if (!record.push_info || record.push_info.length === 0) return
+    
+    const failedPushes = record.push_info.filter(p => p.push_status === 'failed')
+    if (failedPushes.length === 0) {
+      toast.info("没有需要重试的推送")
+      return
+    }
+    
+    setPushing(true)
+    try {
+      // 重试所有失败的推送
+      for (const push of failedPushes) {
+        const response = await fetch("/api/assistant/push", {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            link: {
+              type: record.cloud_drives?.name,
+              shareUrl: record.share_url,
+              shareCode: record.share_code,
+            },
+            file: {
+              name: record.tmdb_title || record.file_name,
+              type: record.content_type || 'unknown',
+            },
+            channels: [push.push_channels?.channel_name], // 这里需要channel id
+            edit: {
+              title: record.tmdb_title || record.file_name,
+              note: record.remark || '',
+            },
+          }),
+        })
+        
+        if (!response.ok) {
+          throw new Error(`推送到 ${push.push_channels?.channel_name} 失败`)
+        }
+      }
+      
+      toast.success("重试推送成功")
+      fetchRecords()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "重试推送失败")
     } finally {
       setPushing(false)
     }
@@ -834,6 +888,19 @@ export default function ShareRecordsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
+                          {/* 显示重试按钮：当有推送失败时 */}
+                          {record.push_info && record.push_info.some(p => p.push_status === 'failed') && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-orange-500 hover:text-orange-600"
+                              onClick={() => retryPush(record)}
+                              title="重试推送"
+                              disabled={pushing}
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button 
                             variant="ghost" 
                             size="icon" 

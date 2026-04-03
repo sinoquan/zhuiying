@@ -46,6 +46,7 @@ export const shareRecords = pgTable(
   {
     id: serial().primaryKey(),
     cloud_drive_id: integer("cloud_drive_id").references(() => cloudDrives.id), // 智能助手推送时可能为null
+    monitor_id: integer("monitor_id").references(() => fileMonitors.id), // 关联的监控任务
     file_path: varchar("file_path", { length: 1000 }).notNull(),
     file_name: varchar("file_name", { length: 500 }).notNull(),
     file_size: varchar("file_size", { length: 50 }), // 文件大小
@@ -72,6 +73,7 @@ export const shareRecords = pgTable(
   },
   (table) => [
     index("share_records_cloud_drive_id_idx").on(table.cloud_drive_id),
+    index("share_records_monitor_id_idx").on(table.monitor_id),
     index("share_records_status_idx").on(table.share_status),
     index("share_records_source_idx").on(table.source),
     index("share_records_created_at_idx").on(table.created_at),

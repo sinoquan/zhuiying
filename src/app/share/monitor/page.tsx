@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,7 @@ import {
   FolderOpen, Plus, MoreHorizontal, Edit, Trash2, 
   Loader2, ChevronRight, ChevronLeft, Home, X, Clock,
   CheckCircle2, XCircle, AlertCircle, RefreshCw, Play, Search,
-  Activity, Share2, Send, Monitor
+  Activity, Share2, Send, Monitor, Copy, FileText, TestTube
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -123,6 +124,7 @@ const channelTypeLabels: Record<string, string> = {
 }
 
 export default function FileMonitorPage() {
+  const router = useRouter()
   const [monitors, setMonitors] = useState<FileMonitor[]>([])
   const [drives, setDrives] = useState<CloudDrive[]>([])
   const [channels, setChannels] = useState<PushChannel[]>([])
@@ -142,6 +144,15 @@ export default function FileMonitorPage() {
   
   // 扫描状态
   const [scanning, setScanning] = useState(false)
+  const [scanningId, setScanningId] = useState<number | null>(null)
+  
+  // 测试推送状态
+  const [testingPush, setTestingPush] = useState(false)
+  
+  // 筛选状态
+  const [filterDrive, setFilterDrive] = useState<string>("all")
+  const [filterStatus, setFilterStatus] = useState<string>("all")
+  const [searchQuery, setSearchQuery] = useState("")
   
   // 使用 ref 存储选择状态，避免 React Strict Mode 双重调用
   const selectedFoldersRef = useRef<{ path: string; name: string }[]>([])
@@ -168,7 +179,7 @@ export default function FileMonitorPage() {
 
   // 当选择网盘时，加载文件列表
   useEffect(() => {
-    if (formData.cloud_drive_id && dialogOpen) {
+    if (formData.cloud_drive_id && dialogOpen && !editingMonitor) {
       fetchFiles("/")
       // 默认选中该网盘下的所有渠道
       const driveChannels = channels.filter(c => c.cloud_drive_id === parseInt(formData.cloud_drive_id))
@@ -179,7 +190,7 @@ export default function FileMonitorPage() {
         }))
       }
     }
-  }, [formData.cloud_drive_id, dialogOpen, channels])
+  }, [formData.cloud_drive_id, dialogOpen, channels, editingMonitor])
 
   const fetchData = async () => {
     setLoading(true)
@@ -229,6 +240,7 @@ export default function FileMonitorPage() {
   // 手动触发扫描
   const handleManualScan = async (monitorId?: number) => {
     setScanning(true)
+    setScanningId(monitorId || null)
     try {
       const response = await fetch("/api/monitor/scan", {
         method: "POST",
@@ -251,7 +263,64 @@ export default function FileMonitorPage() {
       toast.error(err instanceof Error ? err.message : "扫描失败")
     } finally {
       setScanning(false)
+      setScanningId(null)
     }
+  }
+
+  // 测试推送
+  const handleTestPush = async (monitor: FileMonitor) => {
+    if (!monitor.push_channels_list || monitor.push_channels_list.length === 0) {
+      toast.error("该监控任务未配置推送渠道")
+      return
+    }
+    
+    setTestingPush(true)
+    try {
+      // 发送测试推送到第一个渠道
+      const channel = monitor.push_channels_list[0]
+      const response = await fetch(`/api/push/channels/${channel.id}/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: {
+            title: `🔔 测试推送 - ${monitor.path_name}`,
+            content: `来自「${monitor.path_name}」监控任务的测试消息\n\n如果您收到此消息，说明推送配置正确。`,
+          }
+        }),
+      })
+      
+      const result = await response.json()
+      if (response.ok && result.success) {
+        toast.success(`测试消息已发送到 ${channel.channel_name}`)
+      } else {
+        throw new Error(result.error || "发送失败")
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "测试推送失败")
+    } finally {
+      setTestingPush(false)
+    }
+  }
+
+  // 复制任务配置
+  const handleCopyMonitor = (monitor: FileMonitor) => {
+    setEditingMonitor(null)
+    setFormData({
+      cloud_drive_id: monitor.cloud_drive_id.toString(),
+      cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
+      push_channel_ids: monitor.push_channel_ids || [],
+      push_template_type: monitor.push_template_type || "tv",
+    })
+    selectedFoldersRef.current = []
+    forceUpdate(n => n + 1)
+    setCronPreset(monitor.cron_expression || "*/10 7-23 * * *")
+    setDialogOpen(true)
+    toast.info("已复制配置，请选择新的监控目录")
+  }
+
+  // 查看分享记录
+  const handleViewRecords = (monitor: FileMonitor) => {
+    router.push(`/share/records?monitor_id=${monitor.id}`)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -497,6 +566,32 @@ export default function FileMonitorPage() {
     f.is_dir && (!fileSearchQuery || f.name.toLowerCase().includes(fileSearchQuery.toLowerCase()))
   )
 
+  // 筛选监控任务
+  const filteredMonitors = monitors.filter(m => {
+    // 网盘筛选
+    if (filterDrive !== "all" && m.cloud_drive_id !== parseInt(filterDrive)) {
+      return false
+    }
+    // 状态筛选
+    if (filterStatus === "active" && !m.enabled) {
+      return false
+    }
+    if (filterStatus === "paused" && m.enabled) {
+      return false
+    }
+    // 搜索
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      const pathName = (m.path_name || "").toLowerCase()
+      const path = m.path.toLowerCase()
+      const driveName = getDriveName(m).toLowerCase()
+      if (!pathName.includes(query) && !path.includes(query) && !driveName.includes(query)) {
+        return false
+      }
+    }
+    return true
+  })
+
   // 统计数据
   const stats = {
     total: monitors.length,
@@ -578,7 +673,7 @@ export default function FileMonitorPage() {
             onClick={() => handleManualScan()}
             disabled={scanning || stats.active === 0}
           >
-            {scanning ? (
+            {scanning && !scanningId ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Play className="mr-2 h-4 w-4" />
@@ -601,6 +696,47 @@ export default function FileMonitorPage() {
         </div>
       </div>
 
+      {/* 筛选栏 */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索目录名称..."
+            className="pl-9 h-9"
+          />
+        </div>
+        <Select value={filterDrive} onValueChange={setFilterDrive}>
+          <SelectTrigger className="w-[140px] h-9">
+            <SelectValue placeholder="全部网盘" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部网盘</SelectItem>
+            {drives.map(d => (
+              <SelectItem key={d.id} value={d.id.toString()}>
+                {d.alias || d.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-[120px] h-9">
+            <SelectValue placeholder="全部状态" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部状态</SelectItem>
+            <SelectItem value="active">运行中</SelectItem>
+            <SelectItem value="paused">已暂停</SelectItem>
+          </SelectContent>
+        </Select>
+        {filteredMonitors.length !== monitors.length && (
+          <span className="text-sm text-muted-foreground">
+            显示 {filteredMonitors.length} / {monitors.length} 条
+          </span>
+        )}
+      </div>
+
       {/* 监控任务列表 */}
       <Card>
         <CardContent className="p-0">
@@ -609,19 +745,23 @@ export default function FileMonitorPage() {
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
               加载中...
             </div>
-          ) : monitors.length === 0 ? (
+          ) : filteredMonitors.length === 0 ? (
             <div className="text-center py-12">
               <FolderOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground mb-4">暂无监控任务</p>
-              <Button size="sm" onClick={openCreateDialog}>
-                创建第一个监控
-              </Button>
+              <p className="text-muted-foreground mb-4">
+                {monitors.length === 0 ? "暂无监控任务" : "没有符合条件的监控任务"}
+              </p>
+              {monitors.length === 0 && (
+                <Button size="sm" onClick={openCreateDialog}>
+                  创建第一个监控
+                </Button>
+              )}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead className="w-[180px]">网盘</TableHead>
+                  <TableHead className="w-[160px]">网盘</TableHead>
                   <TableHead>监控目录</TableHead>
                   <TableHead className="w-[120px]">检测频率</TableHead>
                   <TableHead className="w-[160px]">推送渠道</TableHead>
@@ -632,7 +772,7 @@ export default function FileMonitorPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {monitors.map((monitor) => {
+                {filteredMonitors.map((monitor) => {
                   const scanStats = monitor.scan_stats
                   const lastScanTime = scanStats?.lastScan 
                     ? new Date(scanStats.lastScan).toLocaleString("zh-CN", { 
@@ -640,6 +780,7 @@ export default function FileMonitorPage() {
                       })
                     : null
                   const scanStatus = scanStats?.lastScanStatus
+                  const isScanning = scanningId === monitor.id
                   
                   return (
                     <TableRow key={monitor.id}>
@@ -679,6 +820,7 @@ export default function FileMonitorPage() {
                                 key={ch.id} 
                                 variant="outline" 
                                 className="text-[10px] px-1.5 py-0 h-5 gap-1"
+                                title={ch.channel_name}
                               >
                                 <Image 
                                   src={pushChannelIcons[ch.channel_type]?.icon || ''} 
@@ -714,7 +856,12 @@ export default function FileMonitorPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {scanStats && lastScanTime ? (
+                        {isScanning ? (
+                          <div className="flex items-center gap-1 text-xs text-blue-600">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            扫描中...
+                          </div>
+                        ) : scanStats && lastScanTime ? (
                           <div className="flex flex-col gap-0.5">
                             <div className="flex items-center gap-1 text-xs">
                               {scanStatus === 'success' ? (
@@ -744,14 +891,31 @@ export default function FileMonitorPage() {
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem onClick={() => handleManualScan(monitor.id)} disabled={scanning}>
-                              <Play className="mr-2 h-4 w-4" />
+                              {isScanning ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Play className="mr-2 h-4 w-4" />
+                              )}
                               立即扫描
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleViewRecords(monitor)}>
+                              <FileText className="mr-2 h-4 w-4" />
+                              查看记录
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleTestPush(monitor)} disabled={testingPush}>
+                              <TestTube className="mr-2 h-4 w-4" />
+                              测试推送
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => openEditDialog(monitor)}>
                               <Edit className="mr-2 h-4 w-4" />
                               编辑配置
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleCopyMonitor(monitor)}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              复制配置
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
@@ -781,7 +945,9 @@ export default function FileMonitorPage() {
               {editingMonitor ? "编辑监控任务" : "新建监控任务"}
             </DialogTitle>
             <DialogDescription>
-              {editingMonitor ? "修改监控配置" : "选择网盘和要监控的目录，系统会自动分享新文件"}
+              {editingMonitor 
+                ? "修改监控配置（监控目录不可更改）" 
+                : "选择网盘和要监控的目录，系统会自动分享新文件"}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
@@ -960,7 +1126,14 @@ export default function FileMonitorPage() {
               {/* 目录选择 - 仅创建模式显示 */}
               {!editingMonitor && (
                 <div className="grid gap-2">
-                  <Label>选择监控目录 *</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>选择监控目录 *</Label>
+                    {selectedFoldersRef.current.length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        已选择 {selectedFoldersRef.current.length} 个目录
+                      </span>
+                    )}
+                  </div>
                   {!formData.cloud_drive_id ? (
                     <div className="text-sm text-muted-foreground p-4 border rounded-lg bg-muted/30">
                       请先选择网盘
