@@ -15,8 +15,8 @@ interface LogEntry {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '500')
-    const level = searchParams.get('level') || 'all' // all, info, error, warn
+    const limit = parseInt(searchParams.get('limit') || '100')
+    const level = searchParams.get('level') || 'all'
     const search = searchParams.get('search') || ''
     
     // 检查日志文件是否存在
@@ -24,39 +24,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ logs: [], message: '日志文件不存在' })
     }
     
-    // 读取日志文件
+    // 读取日志文件最后部分
     const content = await readFile(LOG_FILE, 'utf-8')
-    const lines = content.trim().split('\n').filter(line => line.trim())
+    const lines = content.trim().split('\n')
+    
+    // 只处理最后 500 行
+    const lastLines = lines.slice(-500)
     
     // 解析日志
-    let logs: LogEntry[] = lines.map(line => {
+    let logs: LogEntry[] = []
+    for (const line of lastLines) {
+      if (!line.trim()) continue
       try {
-        return JSON.parse(line)
+        const log = JSON.parse(line) as LogEntry
+        // 级别过滤
+        if (level !== 'all' && log.level !== level) continue
+        // 关键词过滤
+        if (search && !log.message.toLowerCase().includes(search.toLowerCase())) continue
+        logs.push(log)
       } catch {
-        return null
+        // 忽略解析失败的行
       }
-    }).filter((log): log is LogEntry => log !== null)
-    
-    // 按级别过滤
-    if (level !== 'all') {
-      logs = logs.filter(log => log.level === level)
     }
     
-    // 按关键词搜索
-    if (search) {
-      const searchLower = search.toLowerCase()
-      logs = logs.filter(log => 
-        log.message.toLowerCase().includes(searchLower)
-      )
-    }
-    
-    // 返回最新的 N 条
+    // 返回最新的 N 条（倒序）
     logs = logs.slice(-limit).reverse()
     
-    return NextResponse.json({ 
-      logs,
-      total: logs.length 
-    })
+    return NextResponse.json({ logs })
   } catch (error) {
     console.error('读取日志失败:', error)
     return NextResponse.json({ 
