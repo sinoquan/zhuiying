@@ -812,26 +812,104 @@ export class Pan115Service implements ICloudDriveService {
         }
       }
       
-      // 2. 获取文件列表
-      const fileListUrl = `https://webapi.115.com/share/list?share_code=${shareId}${shareCode ? `&receive_code=${shareCode}` : ''}&cid=0`
-      const fileListRes = await fetch(fileListUrl, {
-        headers: {
-          'Cookie': this.cookie,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      })
-      const fileListData = await fileListRes.json()
+      // 2. 获取文件列表 - 尝试多个API端点
+      let fileListData: any = null
       
+      // 方法1: 使用 proapi.115.com (Android API)
+      try {
+        const proApiUrl = `https://proapi.115.com/android/2.0/share/shareinfo?share_code=${shareId}${shareCode ? `&receive_code=${shareCode}` : ''}`
+        console.log('[115] 尝试 proapi:', proApiUrl)
+        
+        const proApiRes = await fetch(proApiUrl, {
+          headers: {
+            'Cookie': this.cookie,
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/114.0.0.0 Mobile Safari/537.36',
+          },
+        })
+        const proApiData = await proApiRes.json()
+        console.log('[115] proapi 响应:', JSON.stringify(proApiData).substring(0, 500))
+        
+        if (proApiData.state === true || proApiData.errno === 0) {
+          fileListData = proApiData
+        }
+      } catch (e) {
+        console.log('[115] proapi 请求失败:', e)
+      }
+      
+      // 方法2: 使用 webapi.115.com
+      if (!fileListData || !fileListData.data) {
+        const fileListUrl = `https://webapi.115.com/share/list?share_code=${shareId}${shareCode ? `&receive_code=${shareCode}` : ''}&cid=0`
+        console.log('[115] 尝试 webapi:', fileListUrl)
+        
+        const fileListRes = await fetch(fileListUrl, {
+          headers: {
+            'Cookie': this.cookie,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+        })
+        fileListData = await fileListRes.json()
+        console.log('[115] webapi 响应:', JSON.stringify(fileListData).substring(0, 500))
+      }
+      
+      // 方法3: 尝试 files/api
+      if (!fileListData?.data?.length && !fileListData?.data?.file_list) {
+        try {
+          const filesApiUrl = `https://webapi.115.com/files/api?share_code=${shareId}${shareCode ? `&receive_code=${shareCode}` : ''}`
+          console.log('[115] 尝试 files/api:', filesApiUrl)
+          
+          const filesApiRes = await fetch(filesApiUrl, {
+            headers: {
+              'Cookie': this.cookie,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          })
+          const filesApiData = await filesApiRes.json()
+          console.log('[115] files/api 响应:', JSON.stringify(filesApiData).substring(0, 500))
+          
+          if (filesApiData.state === true && filesApiData.data) {
+            // 合并到 fileListData
+            fileListData = { state: true, data: filesApiData.data }
+          }
+        } catch (e) {
+          console.log('[115] files/api 请求失败:', e)
+        }
+      }
+      
+      // 检查错误
       if (!fileListData.state && fileListData.errno !== 0) {
         throw new Error(fileListData.error || '获取文件列表失败')
       }
       
-      const files = (fileListData.data || []).map((item: any) => ({
-        file_id: item.fid || item.cid,
-        file_name: item.n || item.name,
-        file_size: item.s || item.size || 0,
-        is_dir: !!item.pc, // pc 字段存在表示是目录
-      }))
+      // 处理不同API的响应格式
+      let files: any[] = []
+      let totalSize = 0
+      
+      // proapi 格式
+      if (fileListData.data?.file_list) {
+        files = fileListData.data.file_list.map((item: any) => ({
+          file_id: item.fid || item.cid || item.file_id,
+          file_name: item.n || item.name || item.file_name,
+          file_size: item.s || item.size || item.file_size || 0,
+          is_dir: item.pc || item.is_dir || false,
+        }))
+        totalSize = parseInt(fileListData.data.total_size || '0')
+      } 
+      // webapi 格式
+      else if (Array.isArray(fileListData.data)) {
+        files = fileListData.data.map((item: any) => ({
+          file_id: item.fid || item.cid,
+          file_name: item.n || item.name,
+          file_size: item.s || item.size || 0,
+          is_dir: !!item.pc,
+        }))
+      }
+      // proapi 返回了总大小但没有文件列表
+      else if (fileListData.data?.total_size) {
+        totalSize = parseInt(fileListData.data.total_size)
+        console.log('[115] proapi 返回总大小:', totalSize, '字节')
+      }
+      
+      console.log('[115] 解析文件列表:', files.length, '个文件, 总大小:', totalSize)
       
       // 如果是单个文件
       if (files.length === 1 && !files[0].is_dir) {
@@ -846,13 +924,16 @@ export class Pan115Service implements ICloudDriveService {
       }
       
       // 如果是目录或多个文件
-      const folderName = shareInfoData.data?.name || shareInfoData.data?.share_name || '未知文件夹'
+      const folderName = fileListData.data?.share_title || shareInfoData.data?.name || shareInfoData.data?.share_name || '未知文件夹'
+      // 优先使用 API 返回的 total_size，否则计算文件大小总和
+      const calculatedSize = files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0)
+      
       return {
         share_id: shareId,
         share_code: shareCode,
         file_id: '0',
         file_name: folderName,
-        file_size: files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0),
+        file_size: totalSize || calculatedSize,
         is_dir: true,
         file_count: files.length,
         files: files.map((f: { file_id: string; file_name: string; file_size: number; is_dir: boolean }) => ({

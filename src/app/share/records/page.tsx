@@ -238,6 +238,32 @@ export default function ShareRecordsPage() {
     }
   }
 
+  // 刷新单个记录的文件信息（大小、质量参数等）
+  const refreshInfo = async (recordId: number) => {
+    setRefreshing(true)
+    try {
+      const response = await fetch('/api/share/refresh-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ share_record_id: recordId }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        const sizeGB = data.data?.file_size ? (data.data.file_size / (1024 * 1024 * 1024)).toFixed(2) : '0'
+        toast.success(`已更新文件信息: ${sizeGB} GB`)
+        fetchRecords() // 刷新列表
+      } else {
+        toast.error(data.error || '刷新信息失败')
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '刷新信息失败')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   const fetchCloudDrives = async () => {
     try {
       const response = await fetch("/api/cloud-drives")
@@ -985,8 +1011,21 @@ export default function ShareRecordsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
+                          {/* 刷新信息按钮：文件夹类型或大小为0时显示 */}
+                          {(record.content_type === 'folder' || record.file_size === '0') && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-blue-500 hover:text-blue-600"
+                              onClick={() => refreshInfo(record.id)}
+                              title="刷新文件信息"
+                              disabled={refreshing}
+                            >
+                              <RotateCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                            </Button>
+                          )}
                           {/* 显示重试按钮：当有推送失败时 */}
-                          {record.push_info && record.push_info.some(p => p.push_status === 'failed') && (
+                          {record.push_info && record.push_info.some((p: { push_status: string }) => p.push_status === 'failed') && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
