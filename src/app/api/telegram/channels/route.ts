@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
+import { fetchWithProxy } from '@/lib/proxy'
 
 interface TelegramChat {
   id: number
@@ -23,14 +24,26 @@ interface TelegramUpdate {
   }
 }
 
-async function callTelegramAPI(botToken: string, method: string, params?: Record<string, unknown>) {
+async function callTelegramAPI(botToken: string, method: string, params?: Record<string, unknown>, proxyUrl?: string) {
   const url = `https://api.telegram.org/bot${botToken}/${method}`
   
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: params ? JSON.stringify(params) : undefined,
-  })
+  let response: Response
+  
+  if (proxyUrl) {
+    // 使用代理
+    response = await fetchWithProxy(url, proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: params ? JSON.stringify(params) : undefined,
+    })
+  } else {
+    // 直连
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: params ? JSON.stringify(params) : undefined,
+    })
+  }
   
   const data = await response.json()
   
@@ -45,11 +58,12 @@ async function callTelegramAPI(botToken: string, method: string, params?: Record
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const botToken = searchParams.get('bot_token')
+    let botToken = searchParams.get('bot_token')
+    
+    const client = getSupabaseClient()
     
     if (!botToken) {
       // 尝试从系统设置获取
-      const client = getSupabaseClient()
       const { data: setting } = await client
         .from('system_settings')
         .select('setting_value')
@@ -57,22 +71,40 @@ export async function GET(request: NextRequest) {
         .single()
       
       if (!setting?.setting_value) {
-        return NextResponse.json({ error: '未配置 Telegram Bot Token' }, { status: 400 })
+        return NextResponse.json({ error: '未配置 Telegram Bot Token，请在系统设置中配置' }, { status: 400 })
       }
       
-      const config = setting.setting_value as { bot_token: string }
-      if (!config.bot_token) {
-        return NextResponse.json({ error: '未配置 Telegram Bot Token' }, { status: 400 })
+      // setting_value 可能是字符串或对象
+      const config = setting.setting_value
+      if (typeof config === 'string') {
+        botToken = config
+      } else if (typeof config === 'object' && config !== null && 'bot_token' in config) {
+        botToken = (config as { bot_token: string }).bot_token
+      }
+      
+      if (!botToken) {
+        return NextResponse.json({ error: '未配置 Telegram Bot Token，请在系统设置中配置' }, { status: 400 })
       }
     }
     
-    const token = botToken || ''
+    // 获取代理配置
+    let proxyUrl: string | undefined
+    const { data: proxySetting } = await client
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'proxy_url')
+      .single()
+    
+    proxyUrl = proxySetting?.setting_value as string | undefined
+    
+    console.log(`[Telegram] 使用 Bot Token: ${botToken.substring(0, 10)}...`)
+    console.log(`[Telegram] 使用代理: ${proxyUrl ? '是' : '否'}`)
     
     // 获取更新来提取频道/群组信息
-    const updates: TelegramUpdate[] = await callTelegramAPI(token, 'getUpdates', {
+    const updates: TelegramUpdate[] = await callTelegramAPI(botToken, 'getUpdates', {
       limit: 100,
       allowed_updates: ['message', 'channel_post', 'my_chat_member'],
-    })
+    }, proxyUrl)
     
     // 提取唯一的聊天/频道
     const chatsMap = new Map<number, TelegramChat>()
@@ -126,12 +158,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 })
     }
     
+    // 获取代理配置
+    const client = getSupabaseClient()
+    let proxyUrl: string | undefined
+    const { data: proxySetting } = await client
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'proxy_url')
+      .single()
+    
+    proxyUrl = proxySetting?.setting_value as string | undefined
+    
     // 发送测试消息
     await callTelegramAPI(bot_token, 'sendMessage', {
       chat_id,
       text: message || '🤖 追影系统测试消息 - 频道连接成功！',
       parse_mode: 'HTML',
-    })
+    }, proxyUrl)
     
     return NextResponse.json({ success: true, message: '测试消息发送成功' })
   } catch (error) {

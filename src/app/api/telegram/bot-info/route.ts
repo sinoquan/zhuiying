@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
+import { fetchWithProxy } from '@/lib/proxy'
 
 interface TelegramBotInfo {
   id: number
@@ -11,10 +12,17 @@ interface TelegramBotInfo {
   supports_inline_queries: boolean
 }
 
-async function callTelegramAPI(botToken: string, method: string) {
+async function callTelegramAPI(botToken: string, method: string, proxyUrl?: string) {
   const url = `https://api.telegram.org/bot${botToken}/${method}`
   
-  const response = await fetch(url)
+  let response: Response
+  
+  if (proxyUrl) {
+    response = await fetchWithProxy(url, proxyUrl)
+  } else {
+    response = await fetch(url)
+  }
+  
   const data = await response.json()
   
   if (!data.ok) {
@@ -30,11 +38,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const botToken = searchParams.get('bot_token')
     
+    const client = getSupabaseClient()
     let token = botToken
     
     if (!token) {
       // 从系统设置获取
-      const client = getSupabaseClient()
       const { data: setting } = await client
         .from('system_settings')
         .select('setting_value')
@@ -45,21 +53,39 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: '未配置 Telegram Bot Token' }, { status: 400 })
       }
       
-      const config = setting.setting_value as { bot_token: string }
-      token = config.bot_token
+      // setting_value 可能是字符串或对象
+      const config = setting.setting_value
+      if (typeof config === 'string') {
+        token = config
+      } else if (typeof config === 'object' && config !== null && 'bot_token' in config) {
+        token = (config as { bot_token: string }).bot_token
+      }
     }
     
     if (!token) {
       return NextResponse.json({ error: '未配置 Telegram Bot Token' }, { status: 400 })
     }
     
+    // 获取代理配置
+    let proxyUrl: string | undefined
+    const { data: proxySetting } = await client
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'proxy_url')
+      .single()
+    
+    proxyUrl = proxySetting?.setting_value as string | undefined
+    
+    console.log(`[Telegram] 获取机器人信息, Token: ${token.substring(0, 10)}...`)
+    console.log(`[Telegram] 使用代理: ${proxyUrl ? '是' : '否'}`)
+    
     // 获取机器人信息
-    const botInfo: TelegramBotInfo = await callTelegramAPI(token, 'getMe')
+    const botInfo: TelegramBotInfo = await callTelegramAPI(token, 'getMe', proxyUrl)
     
     // 获取webhook信息
     let webhookInfo = null
     try {
-      webhookInfo = await callTelegramAPI(token, 'getWebhookInfo')
+      webhookInfo = await callTelegramAPI(token, 'getWebhookInfo', proxyUrl)
     } catch {
       // 忽略webhook错误
     }
