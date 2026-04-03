@@ -25,6 +25,16 @@ export interface TMDBFullData {
   // 剧集特有
   season?: number
   episode?: number
+  // 产地信息
+  original_language?: string
+  production_countries?: string[]
+  // 质量参数（从文件名解析）
+  resolution?: string
+  source?: string
+  video_codec?: string
+  audio_codec?: string
+  hdr_format?: string
+  bit_depth?: string
 }
 
 export interface TMDBConfig {

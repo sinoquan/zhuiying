@@ -23,6 +23,7 @@ import { FeishuPushService } from '@/lib/push/feishu'
 import { BarkPushService } from '@/lib/push/bark'
 import { ServerChanPushService } from '@/lib/push/serverchan'
 import { TMDBService } from '@/lib/tmdb'
+import { parseFileName } from '@/lib/assistant/file-name-parser'
 
 interface PushRequest {
   share_record_id: number
@@ -77,7 +78,15 @@ function calculateProgress(current: number, total: number): { bar: string; perce
 function buildTemplateData(
   tmdbData: TMDBFullData | null,
   shareRecord: any,
-  posterCacheUrl: string | null
+  posterCacheUrl: string | null,
+  parsedQuality?: {
+    resolution?: string
+    source?: string
+    video_codec?: string
+    audio_codec?: string
+    hdr_format?: string
+    bit_depth?: string
+  } | null
 ): Record<string, any> {
   const driveName = shareRecord.cloud_drives?.alias || shareRecord.cloud_drives?.name || '网盘'
   
@@ -113,13 +122,13 @@ function buildTemplateData(
     runtimeText = hours > 0 ? `${hours}小时${mins}分钟` : `${mins}分钟`
   }
   
-  // 构建质量信息字符串（优先使用 tmdbData，其次 tmdbInfo）
+  // 构建质量信息字符串（优先使用 tmdbData，其次 parsedQuality，最后 tmdbInfo）
   const qualityParts: string[] = []
-  const resolution = tmdbData?.resolution || tmdbInfo.resolution
-  const hdrFormat = tmdbData?.hdr_format || tmdbInfo.hdr_format
-  const source = tmdbData?.source || tmdbInfo.source
-  const videoCodec = tmdbData?.video_codec || tmdbInfo.video_codec
-  const audioCodec = tmdbData?.audio_codec || tmdbInfo.audio_codec
+  const resolution = tmdbData?.resolution || parsedQuality?.resolution || tmdbInfo.resolution
+  const hdrFormat = tmdbData?.hdr_format || parsedQuality?.hdr_format || tmdbInfo.hdr_format
+  const source = tmdbData?.source || parsedQuality?.source || tmdbInfo.source
+  const videoCodec = tmdbData?.video_codec || parsedQuality?.video_codec || tmdbInfo.video_codec
+  const audioCodec = tmdbData?.audio_codec || parsedQuality?.audio_codec || tmdbInfo.audio_codec
   
   if (resolution) qualityParts.push(resolution)
   if (hdrFormat) qualityParts.push(hdrFormat)
@@ -128,10 +137,26 @@ function buildTemplateData(
   if (audioCodec) qualityParts.push(audioCodec)
   const qualityText = qualityParts.join(' | ') || ''
   
-  // 文件大小（排除无效值）
-  let fileSizeText = shareRecord.file_size || ''
-  if (fileSizeText === '0 B' || fileSizeText === '0' || fileSizeText === '未知') {
-    fileSizeText = ''
+  // 文件大小格式化
+  let fileSizeText = ''
+  const rawFileSize = shareRecord.file_size
+  if (rawFileSize && rawFileSize !== '0' && rawFileSize !== '未知') {
+    // 如果是数字（字节数），格式化为可读格式
+    const bytes = typeof rawFileSize === 'string' ? parseInt(rawFileSize) : rawFileSize
+    if (bytes > 0 && !isNaN(bytes)) {
+      if (bytes >= 1024 * 1024 * 1024) {
+        fileSizeText = (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+      } else if (bytes >= 1024 * 1024) {
+        fileSizeText = (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+      } else if (bytes >= 1024) {
+        fileSizeText = (bytes / 1024).toFixed(2) + ' KB'
+      } else {
+        fileSizeText = bytes + ' B'
+      }
+    } else if (typeof rawFileSize === 'string' && rawFileSize.includes('GB') || rawFileSize.includes('MB')) {
+      // 已经是格式化的字符串
+      fileSizeText = rawFileSize
+    }
   }
   
   return {
@@ -177,12 +202,38 @@ function buildTemplateData(
     share_code: shareRecord.share_code || '',
     drive_name: driveName,
     
-    // 分类标签
-    category_tag: isTV ? '追剧' : '电影',
+    // 分类标签（根据产地细化）
+    category_tag: getCategoryTag(tmdbData, isTV),
     
     // 备注
     note: shareRecord.remark || '',
   }
+}
+
+// 根据产地获取分类标签
+function getCategoryTag(tmdbData: TMDBFullData | null, isTV: boolean): string {
+  let categoryTag = isTV ? '追剧' : '电影'
+  
+  const originalLanguage = tmdbData?.original_language
+  const productionCountries = tmdbData?.production_countries
+  
+  // 判断地区
+  let regionTag = ''
+  if (productionCountries?.includes('CN') || originalLanguage === 'zh') {
+    regionTag = isTV ? '华语剧' : '华语电影'
+  } else if (productionCountries?.includes('KR') || originalLanguage === 'ko') {
+    regionTag = isTV ? '韩剧' : '韩影'
+  } else if (productionCountries?.includes('JP') || originalLanguage === 'ja') {
+    regionTag = isTV ? '日剧' : '日影'
+  } else if (productionCountries?.includes('US') || originalLanguage === 'en') {
+    regionTag = isTV ? '美剧' : '欧美电影'
+  }
+  
+  if (regionTag) {
+    categoryTag = regionTag
+  }
+  
+  return categoryTag
 }
 
 export async function POST(request: NextRequest) {
@@ -242,7 +293,28 @@ export async function POST(request: NextRequest) {
     }
     
     // 如果还是没有数据，使用 TMDBService 进行识别（更准确）
-    if (!tmdbData && shareRecord.file_name) {
+    // 同时无论是否识别成功，都从文件名解析质量参数
+    let parsedQuality: {
+      resolution?: string
+      source?: string
+      video_codec?: string
+      audio_codec?: string
+      hdr_format?: string
+      bit_depth?: string
+    } | null = null
+    
+    if (shareRecord.file_name) {
+      // 从文件名解析质量参数（始终执行）
+      parsedQuality = parseFileName(shareRecord.file_name)
+      console.log(`[Push] 文件名解析结果:`, {
+        resolution: parsedQuality?.resolution,
+        source: parsedQuality?.source,
+        video_codec: parsedQuality?.video_codec,
+        audio_codec: parsedQuality?.audio_codec,
+        hdr_format: parsedQuality?.hdr_format,
+      })
+      
+      // 尝试 TMDB 识别
       console.log(`[Push] 使用 TMDBService 识别: ${shareRecord.file_name}`)
       
       try {
@@ -274,7 +346,19 @@ export async function POST(request: NextRequest) {
             total_episodes: undefined,
             season: identifyResult.season || undefined,
             episode: identifyResult.episode || undefined,
+            // 产地信息
+            original_language: identifyResult.original_language,
+            production_countries: identifyResult.production_countries,
+            // 从文件名解析的质量参数
+            resolution: parsedQuality?.resolution,
+            source: parsedQuality?.source,
+            video_codec: parsedQuality?.video_codec,
+            audio_codec: parsedQuality?.audio_codec,
+            hdr_format: parsedQuality?.hdr_format,
+            bit_depth: parsedQuality?.bit_depth,
           }
+          
+          console.log(`[Push] TMDB 数据: 语言=${identifyResult.original_language}, 国家=${JSON.stringify(identifyResult.production_countries)}`)
         } else {
           console.log(`[Push] TMDBService 未识别到 TMDB ID`)
         }
@@ -292,7 +376,7 @@ export async function POST(request: NextRequest) {
     }
     
     // 4. 构建模板数据
-    const templateData = buildTemplateData(tmdbData, shareRecord, posterCacheUrl)
+    const templateData = buildTemplateData(tmdbData, shareRecord, posterCacheUrl, parsedQuality)
     
     console.log('[Push] 模板数据:', {
       title: templateData.title,
@@ -303,6 +387,7 @@ export async function POST(request: NextRequest) {
       has_poster: !!templateData.poster_url,
       file_size: templateData.file_size,
       quality: templateData.quality,
+      category_tag: templateData.category_tag,
       share_url: templateData.share_url,
     })
     

@@ -82,6 +82,9 @@ export interface ContentIdentifyResult {
   rating?: number // 评分
   genres?: string[] // 类型
   cast?: string[] // 主演
+  // 产地信息
+  original_language?: string // 原始语言 (如 'zh', 'ko', 'ja', 'en')
+  production_countries?: string[] // 制片国家 (如 ['CN'], ['KR'], ['JP'])
 }
 
 // TMDB 服务类
@@ -295,6 +298,8 @@ export class TMDBService {
             rating: show.vote_average,
             genres: details.genres?.map((g: { name: string }) => g.name),
             cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
+            original_language: show.original_language,
+            production_countries: details.production_countries?.map((c: { iso_3166_1: string }) => c.iso_3166_1),
           }
         }
       } else {
@@ -319,6 +324,8 @@ export class TMDBService {
             rating: movie.vote_average,
             genres: details.genres?.map((g: { name: string }) => g.name),
             cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
+            original_language: movie.original_language,
+            production_countries: details.production_countries?.map((c: { iso_3166_1: string }) => c.iso_3166_1),
           }
         }
         
@@ -343,6 +350,8 @@ export class TMDBService {
             rating: show.vote_average,
             genres: details.genres?.map((g: { name: string }) => g.name),
             cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
+            original_language: show.original_language,
+            production_countries: details.production_countries?.map((c: { iso_3166_1: string }) => c.iso_3166_1),
           }
         }
       }
