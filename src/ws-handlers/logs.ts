@@ -3,10 +3,10 @@ import { watch } from 'fs';
 import { existsSync, statSync } from 'fs';
 import { readFile } from 'fs/promises';
 
-const LOG_FILE = '/app/work/logs/bypass/app.log';
+const LOG_FILE = '/app/work/logs/bypass/console.log';
 
 interface LogEntry {
-  level: 'info' | 'error' | 'warn';
+  level: 'info' | 'error' | 'warn' | 'log';
   message: string;
   timestamp: number;
 }
@@ -148,7 +148,19 @@ async function readNewLogs() {
     for (const line of newLines) {
       if (!line.trim()) continue;
       try {
-        const log = JSON.parse(line) as LogEntry;
+        let log = JSON.parse(line) as LogEntry;
+        
+        // 跳过 Fast Refresh 等无关日志
+        if (log.message?.includes('[Fast Refresh]') || 
+            log.message?.includes('compiled successfully')) {
+          continue;
+        }
+        
+        // 将 log 级别转换为 info
+        if (log.level === 'log') {
+          log.level = 'info';
+        }
+        
         newLogs.push(log);
       } catch {
         // 忽略解析错误
@@ -168,19 +180,33 @@ async function sendRecentLogs(ws: WebSocket, limit: number = 50) {
     if (!existsSync(LOG_FILE)) return;
     
     const content = await readFile(LOG_FILE, 'utf-8');
-    const lines = content.trim().split('\n').slice(-limit);
+    const lines = content.trim().split('\n').slice(-limit * 2); // 多读一些，因为会过滤
     
     const logs: LogEntry[] = [];
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
-        logs.push(JSON.parse(line) as LogEntry);
+        let log = JSON.parse(line) as LogEntry;
+        
+        // 跳过 Fast Refresh 等无关日志
+        if (log.message?.includes('[Fast Refresh]') || 
+            log.message?.includes('compiled successfully')) {
+          continue;
+        }
+        
+        // 将 log 级别转换为 info
+        if (log.level === 'log') {
+          log.level = 'info';
+        }
+        
+        logs.push(log);
       } catch {
         // 忽略解析错误
       }
     }
     
-    ws.send(JSON.stringify({ type: 'logs_init', payload: logs }));
+    // 只返回最后 limit 条
+    ws.send(JSON.stringify({ type: 'logs_init', payload: logs.slice(-limit) }));
   } catch (error) {
     console.error('发送最近日志失败:', error);
   }
