@@ -115,15 +115,40 @@ function formatSeasonEpisode(
   return template
 }
 
-// 清理模板中的空行
+// 清理模板中的空行和空值行
 function cleanTemplate(template: string): string {
-  // 移除连续的空行（保留最多一个空行）
-  let result = template.replace(/\n{3,}/g, '\n\n')
-  
-  // 移除只有空格的行
-  result = result.split('\n')
-    .map(line => line.trim() === '' ? '' : line)
+  // 移除包含空值的行（如 "⭐️ 评分: " 这种只有前缀没有值的行）
+  let result = template.split('\n')
+    .filter(line => {
+      // 检查是否是空值行（以冒号或特定符号结尾的行）
+      const trimmed = line.trim()
+      
+      // 空行保留
+      if (trimmed === '') return true
+      
+      // 检查常见的空值模式
+      const emptyPatterns = [
+        /[:：]\s*$/,           // 以冒号结尾（如 "评分: "）
+        /\s+[:：]\s*$/,        // 以冒号结尾（有前缀）
+        /[:：]\s*$/,           // 中文冒号
+      ]
+      
+      // 如果行匹配空值模式，移除该行
+      for (const pattern of emptyPatterns) {
+        if (pattern.test(trimmed)) {
+          return false
+        }
+      }
+      
+      return true
+    })
     .join('\n')
+  
+  // 移除连续的空行（保留最多一个空行）
+  result = result.replace(/\n{3,}/g, '\n\n')
+  
+  // 移除首尾空行
+  result = result.trim()
   
   return result
 }

@@ -2,57 +2,57 @@
  * 网盘和推送渠道图标配置
  */
 
-// 网盘图标
+// 网盘图标（保留URL用于某些场景）
 export const driveIcons: Record<string, { 
   name: string
   icon: string 
 }> = {
   '115': {
     name: '115网盘',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/115-drive-1.png',
+    icon: '/icons/115.png',
   },
   '123': {
     name: '123云盘',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/123-drive-1.png',
+    icon: '/icons/123.png',
   },
   'aliyun': {
     name: '阿里云盘',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/ali-drive-1.png',
+    icon: '/icons/aliyun.png',
   },
   'quark': {
     name: '夸克网盘',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/quark-1.png',
+    icon: '/icons/quark.png',
   },
   'guangya': {
     name: '光鸭网盘',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/cloudcmd-1.png',
+    icon: '/icons/guangya.png',
   },
   'tianyi': {
     name: '天翼网盘',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/lanzouyun-2.png',
+    icon: '/icons/tianyi.png',
   },
   'baidu': {
     name: '百度网盘',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/baidu-drive-2.png',
+    icon: '/icons/baidu.png',
   },
 }
 
-// 推送渠道图标
+// 推送渠道图标（本地路径）
 export const pushChannelIcons: Record<string, {
   name: string
   icon: string
 }> = {
   'telegram': {
     name: 'Telegram',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/telegram-1.png',
+    icon: '/icons/telegram.png',
   },
   'qq': {
     name: 'QQ',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/qq-1.png',
+    icon: '/icons/qq.png',
   },
   'wechat': {
     name: '微信',
-    icon: 'https://ghfast.top/https://raw.githubusercontent.com/xushier/HD-Icons/main/border-radius/wechat-1.png',
+    icon: '/icons/wechat.png',
   },
 }
 

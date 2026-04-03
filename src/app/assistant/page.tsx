@@ -30,7 +30,16 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import Image from "next/image"
-import { getPushChannelIcon } from "@/lib/icons"
+
+// 推送渠道图标组件（使用Lucide图标）
+function ChannelIcon({ type }: { type: string }) {
+  const icons: Record<string, React.ReactNode> = {
+    'telegram': <Send className="h-4 w-4" />,
+    'qq': <MessageCircle className="h-4 w-4" />,
+    'wechat': <MessageSquare className="h-4 w-4" />,
+  }
+  return <>{icons[type] || <Send className="h-4 w-4" />}</>
+}
 
 interface PushChannel {
   id: number
@@ -609,7 +618,7 @@ https://115cdn.com/s/swfp0113wkx?password=1234#
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          {getPushChannelIcon(channel.channel_type)}
+                          <ChannelIcon type={channel.channel_type} />
                           <span className="text-sm font-medium truncate">{channel.channel_name}</span>
                         </div>
                         {channel.cloud_drives && (

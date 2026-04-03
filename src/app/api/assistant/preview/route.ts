@@ -210,6 +210,35 @@ export async function POST(request: NextRequest) {
     const titleName = tmdb?.title || file?.name || ''
     console.log('[预览] 开始获取详情, 标题:', titleName, 'TMDB ID:', tmdb?.id, '类型:', contentType)
     
+    // 从文件名提取画质信息
+    const extractQuality = (fileName: string): string => {
+      const parts: string[] = []
+      
+      // 分辨率
+      if (fileName.match(/2160p|4K/i)) parts.push('4K')
+      else if (fileName.match(/1080p/i)) parts.push('1080p')
+      else if (fileName.match(/720p/i)) parts.push('720p')
+      
+      // 编码
+      if (fileName.match(/HEVC|H\.?265/i)) parts.push('H.265')
+      else if (fileName.match(/AVC|H\.?264/i)) parts.push('H.264')
+      
+      // 来源
+      if (fileName.match(/WEB-DL/i)) parts.push('WEB-DL')
+      else if (fileName.match(/BluRay/i)) parts.push('蓝光')
+      else if (fileName.match(/HDTV/i)) parts.push('HDTV')
+      
+      // 音频
+      if (fileName.match(/DTS|Atmos/i)) parts.push('DTS')
+      else if (fileName.match(/AAC/i)) parts.push('AAC')
+      else if (fileName.match(/AC3|DDP/i)) parts.push('AC3')
+      
+      return parts.join(' | ') || ''
+    }
+    
+    const qualityInfo = file?.name ? extractQuality(file.name) : ''
+    console.log('[预览] 提取画质信息:', qualityInfo)
+    
     if (titleName) {
       try {
         const doubanService = new DoubanService({ cookie: doubanCookie })
@@ -222,6 +251,9 @@ export async function POST(request: NextRequest) {
           const doubanItem = doubanResults[0]
           console.log('[预览] 豆瓣搜索结果:', JSON.stringify(doubanItem, null, 2))
           
+          // 使用搜索结果中的基本信息
+          tmdbDetails.totalEpisodes = doubanItem.episode_count
+          
           // 尝试获取豆瓣详情，如果失败则使用搜索结果中的基本信息
           try {
             const doubanDetail = await doubanService.getDetail(doubanItem.id)
@@ -232,7 +264,7 @@ export async function POST(request: NextRequest) {
                 genres: doubanDetail.genres,
                 cast: doubanDetail.actors,
                 overview: doubanDetail.overview,
-                totalEpisodes: doubanDetail.episode_count,
+                totalEpisodes: doubanDetail.episode_count || tmdbDetails.totalEpisodes,
                 status: doubanDetail.status,
               }
               console.log('[预览] 豆瓣获取详情成功:', JSON.stringify(tmdbDetails, null, 2))
@@ -354,6 +386,7 @@ export async function POST(request: NextRequest) {
         progress_bar: progressBar,
         progress_percent: progressPercent,
         status: statusText,
+        quality: qualityInfo,
       }
     }
 
