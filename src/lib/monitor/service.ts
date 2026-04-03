@@ -375,14 +375,9 @@ export class FileMonitorService {
       episode: parsed.episode,
     }
     
-    // 如果是电影，直接返回
-    if (parsed.type !== 'tv') {
-      return { contentInfo, isCompleted: false, isLastEpisode: false }
-    }
-    
-    // 获取 TMDB 信息
+    // 获取 TMDB 信息（电影和电视剧都需要）
     try {
-      const tmdbInfo = await this.getTMDBInfo(parsed.title, parsed.year)
+      const tmdbInfo = await this.getTMDBInfo(parsed.title, parsed.year, parsed.type)
       if (tmdbInfo) {
         contentInfo.tmdbId = tmdbInfo.tmdbId
         contentInfo.totalEpisodes = tmdbInfo.totalEpisodes
@@ -392,55 +387,25 @@ export class FileMonitorService {
         contentInfo.overview = tmdbInfo.overview
         contentInfo.poster_url = tmdbInfo.poster_url
         contentInfo.cast = tmdbInfo.cast
+        contentInfo.runtime = tmdbInfo.runtime
         
-        // 判断完结
-        const isEnded = tmdbInfo.status === 'Ended' || tmdbInfo.status === 'Released'
-        const maxEpisode = Math.max(...files.map(f => parseFileName(f.name).episode || 0))
-        const isLastEpisode = maxEpisode === tmdbInfo.totalEpisodes
-        
-        // 完结条件：TMDB显示已完结 + 当前是最后一集
-        const isCompleted = isEnded && isLastEpisode
-        
-        return { contentInfo, isCompleted, isLastEpisode }
+        // 如果是电视剧，判断完结
+        if (parsed.type === 'tv') {
+          const isEnded = tmdbInfo.status === 'Ended' || tmdbInfo.status === 'Released'
+          const maxEpisode = Math.max(...files.map(f => parseFileName(f.name).episode || 0))
+          const isLastEpisode = maxEpisode === tmdbInfo.totalEpisodes
+          const isCompleted = isEnded && isLastEpisode
+          return { contentInfo, isCompleted, isLastEpisode }
+        }
       }
     } catch (error) {
       console.error('获取 TMDB 信息失败:', error)
     }
     
-    // 查询数据库中已分享的集数
-    const { data: existingShares } = await this.client
-      .from('share_records')
-      .select('file_name, tmdb_info')
-      .eq('cloud_drive_id', cloudDriveId)
-      .not('tmdb_info', 'is', null)
-    
-    if (existingShares && existingShares.length > 0) {
-      const existingEpisodes = new Set<number>()
-      let existingTmdbInfo: any = null
-      
-      for (const share of existingShares) {
-        if (share.tmdb_info) {
-          const info = typeof share.tmdb_info === 'string' ? JSON.parse(share.tmdb_info) : share.tmdb_info
-          if (info.title === contentInfo.title) {
-            existingTmdbInfo = info
-            if (info.episode) {
-              existingEpisodes.add(info.episode)
-            }
-          }
-        }
-      }
-      
-      if (existingTmdbInfo?.totalEpisodes) {
-        contentInfo.totalEpisodes = existingTmdbInfo.totalEpisodes
-        const isLastEpisode = existingEpisodes.size === existingTmdbInfo.totalEpisodes
-        return { contentInfo, isCompleted: isLastEpisode, isLastEpisode }
-      }
-    }
-    
     return { contentInfo, isCompleted: false, isLastEpisode: false }
   }
 
-  private async getTMDBInfo(title: string, year?: number): Promise<{
+  private async getTMDBInfo(title: string, year?: number, type?: string): Promise<{
     tmdbId: number
     totalEpisodes: number
     status: string
@@ -449,39 +414,71 @@ export class FileMonitorService {
     overview?: string
     poster_url?: string
     cast?: string[]
+    runtime?: number
   } | null> {
     try {
-      const { data: settings } = await this.client
+      // 获取系统设置（正确的转换格式）
+      const { data: settingsData } = await this.client
         .from('system_settings')
-        .select('setting_value')
-        .eq('setting_key', 'tmdb')
-        .single()
+        .select('*')
       
-      const tmdbConfig = settings?.setting_value as any
-      const apiKey = tmdbConfig?.api_key || process.env.TMDB_API_KEY
+      const settings: Record<string, any> = {}
+      settingsData?.forEach((item: { setting_key: string; setting_value: any }) => {
+        settings[item.setting_key] = item.setting_value
+      })
+      
+      const apiKey = settings.tmdb_api_key
+      const language = settings.tmdb_language || 'zh-CN'
+      const proxyUrl = settings.proxy_enabled ? settings.proxy_url : undefined
+      
+      console.log(`[Monitor] TMDB 配置: apiKey=${apiKey ? '已配置' : '未配置'}, language=${language}, proxyUrl=${proxyUrl ? '已配置' : '未配置'}`)
       
       if (!apiKey) return null
       
       const tmdbService = new TMDBService({
         apiKey,
-        language: tmdbConfig?.language || 'zh-CN',
+        language,
+        proxyUrl,
       })
       
-      const results = await tmdbService.searchTV(title, year)
-      
-      if (results && results.length > 0) {
-        const show = results[0]
-        const details = await tmdbService.getTVDetails(show.id)
+      // 根据 type 选择搜索方法
+      if (type === 'movie') {
+        const results = await tmdbService.searchMovie(title, year)
         
-        return {
-          tmdbId: show.id,
-          totalEpisodes: details?.number_of_episodes || 0,
-          status: details?.status || 'Returning Series',
-          rating: show.vote_average,
-          genres: (details as any)?.genres?.map((g: any) => g.name) || [],
-          overview: show.overview,
-          poster_url: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : undefined,
-          cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
+        if (results && results.length > 0) {
+          const movie = results[0]
+          const details = await tmdbService.getMovieDetails(movie.id)
+          
+          return {
+            tmdbId: movie.id,
+            totalEpisodes: 1,
+            status: 'Released',
+            rating: movie.vote_average,
+            genres: (details as any)?.genres?.map((g: any) => g.name) || [],
+            overview: movie.overview,
+            poster_url: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
+            cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
+            runtime: (details as any)?.runtime,
+          }
+        }
+      } else {
+        // 电视剧
+        const results = await tmdbService.searchTV(title, year)
+        
+        if (results && results.length > 0) {
+          const show = results[0]
+          const details = await tmdbService.getTVDetails(show.id)
+          
+          return {
+            tmdbId: show.id,
+            totalEpisodes: details?.number_of_episodes || 0,
+            status: details?.status || 'Returning Series',
+            rating: show.vote_average,
+            genres: (details as any)?.genres?.map((g: any) => g.name) || [],
+            overview: show.overview,
+            poster_url: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : undefined,
+            cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
+          }
         }
       }
     } catch (error) {
@@ -528,6 +525,24 @@ export class FileMonitorService {
           share_status: 'active',
           file_created_at: file.created_at,
           content_type: seriesInfo.contentInfo.type,
+          tmdb_id: seriesInfo.contentInfo.tmdbId,
+          tmdb_title: seriesInfo.contentInfo.title,
+          tmdb_info: {
+            id: seriesInfo.contentInfo.tmdbId,
+            title: seriesInfo.contentInfo.title,
+            year: seriesInfo.contentInfo.year,
+            type: seriesInfo.contentInfo.type,
+            season: seriesInfo.contentInfo.season,
+            episode: seriesInfo.contentInfo.episode,
+            rating: seriesInfo.contentInfo.rating,
+            genres: seriesInfo.contentInfo.genres,
+            overview: seriesInfo.contentInfo.overview,
+            poster_url: seriesInfo.contentInfo.poster_url,
+            cast: seriesInfo.contentInfo.cast,
+            status: seriesInfo.contentInfo.status,
+            totalEpisodes: seriesInfo.contentInfo.totalEpisodes,
+            runtime: seriesInfo.contentInfo.runtime,
+          },
           source: 'monitor',
         })
         .select(`
