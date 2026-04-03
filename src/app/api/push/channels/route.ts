@@ -2,20 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 import { withRetryOrDefault } from '@/lib/db-retry'
 
-// GET - 获取推送渠道
+// GET - 获取推送渠道列表（不绑定网盘）
 export async function GET() {
   const result = await withRetryOrDefault(
     async () => {
       const client = getSupabaseClient()
       const { data, error } = await client
         .from('push_channels')
-        .select(`
-          *,
-          cloud_drives (
-            name,
-            alias
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
       
       if (error) throw new Error(`获取推送渠道失败: ${error.message}`)
@@ -28,7 +22,7 @@ export async function GET() {
   return NextResponse.json(result)
 }
 
-// POST - 创建推送渠道
+// POST - 创建推送渠道（无需绑定网盘）
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -37,11 +31,10 @@ export async function POST(request: NextRequest) {
     const { data, error } = await client
       .from('push_channels')
       .insert({
-        cloud_drive_id: parseInt(body.cloud_drive_id),
         channel_type: body.channel_type,
         channel_name: body.channel_name,
-        config: body.config || null,
-        is_active: true,
+        config: body.config || {},
+        is_active: body.is_active ?? true,
       })
       .select()
       .single()

@@ -88,7 +88,7 @@ interface PushChannel {
   id: number
   channel_name: string
   channel_type: string
-  cloud_drive_id: number
+  cloud_drive_id?: number | null
 }
 
 interface CloudFile {
@@ -180,16 +180,8 @@ export default function FileMonitorPage() {
   useEffect(() => {
     if (formData.cloud_drive_id && dialogOpen && !editingMonitor) {
       fetchFiles("/")
-      // 默认选中该网盘下的所有渠道
-      const driveChannels = channels.filter(c => c.cloud_drive_id === parseInt(formData.cloud_drive_id))
-      if (driveChannels.length > 0 && formData.push_channel_ids.length === 0) {
-        setFormData(prev => ({
-          ...prev,
-          push_channel_ids: driveChannels.map(c => c.id)
-        }))
-      }
     }
-  }, [formData.cloud_drive_id, dialogOpen, channels, editingMonitor])
+  }, [formData.cloud_drive_id, dialogOpen, editingMonitor])
 
   const fetchData = async () => {
     setLoading(true)
@@ -520,13 +512,11 @@ export default function FileMonitorPage() {
     })
   }
 
-  // 全选/取消全选当前网盘的渠道
+  // 全选/取消全选所有渠道
   const toggleAllChannels = (selectAll: boolean) => {
-    if (!formData.cloud_drive_id) return
-    const driveChannels = channels.filter(c => c.cloud_drive_id === parseInt(formData.cloud_drive_id))
     setFormData(prev => ({
       ...prev,
-      push_channel_ids: selectAll ? driveChannels.map(c => c.id) : []
+      push_channel_ids: selectAll ? availableChannels.map(c => c.id) : []
     }))
   }
 
@@ -555,10 +545,8 @@ export default function FileMonitorPage() {
     return cron
   }
 
-  // 获取当前选中网盘的渠道，按类型分组
-  const currentDriveChannels = formData.cloud_drive_id 
-    ? channels.filter(c => c.cloud_drive_id === parseInt(formData.cloud_drive_id))
-    : []
+  // 获取所有可用的推送渠道，按类型分组
+  const availableChannels = channels
 
   // 过滤文件列表
   const filteredFiles = browsingFiles.filter(f => 
@@ -948,11 +936,9 @@ export default function FileMonitorPage() {
                 <Select
                   value={formData.cloud_drive_id}
                   onValueChange={(value) => {
-                    const driveChannels = channels.filter(c => c.cloud_drive_id === parseInt(value))
                     setFormData({ 
                       ...formData, 
-                      cloud_drive_id: value,
-                      push_channel_ids: driveChannels.map(c => c.id)
+                      cloud_drive_id: value
                     })
                     selectedFoldersRef.current = []
                     forceUpdate(n => n + 1)
@@ -1015,59 +1001,53 @@ export default function FileMonitorPage() {
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
                   <Label>推送渠道</Label>
-                  {currentDriveChannels.length > 0 && (
+                  {availableChannels.length > 0 && (
                     <Button 
                       type="button" 
                       variant="ghost" 
                       size="sm"
-                      onClick={() => toggleAllChannels(formData.push_channel_ids.length !== currentDriveChannels.length)}
+                      onClick={() => toggleAllChannels(formData.push_channel_ids.length !== availableChannels.length)}
                       className="text-xs h-6"
                     >
-                      {formData.push_channel_ids.length === currentDriveChannels.length ? '取消全选' : '全选'}
+                      {formData.push_channel_ids.length === availableChannels.length ? '取消全选' : '全选'}
                     </Button>
                   )}
                 </div>
-                {formData.cloud_drive_id ? (
-                  currentDriveChannels.length > 0 ? (
-                    <div className="grid grid-cols-3 gap-2 p-3 border rounded-lg bg-muted/30">
-                      {Object.entries(
-                        currentDriveChannels.reduce((acc, ch) => {
-                          if (!acc[ch.channel_type]) acc[ch.channel_type] = []
-                          acc[ch.channel_type].push(ch)
-                          return acc
-                        }, {} as Record<string, PushChannel[]>)
-                      ).map(([type, typeChannels]) => (
-                        <div key={type} className="space-y-1.5">
-                          <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                            <span className="w-3 h-3 flex items-center justify-center">
-                              {getPushChannelIcon(type)}
-                            </span>
-                            {channelTypeLabels[type]}
-                          </div>
-                          {typeChannels.map(ch => (
-                            <label 
-                              key={ch.id} 
-                              className="flex items-center gap-2 p-2 rounded border bg-background cursor-pointer hover:bg-accent text-sm"
-                            >
-                              <Switch
-                                checked={formData.push_channel_ids.includes(ch.id)}
-                                onCheckedChange={() => toggleChannel(ch.id)}
-                                className="data-[state=checked]:bg-blue-500"
-                              />
-                              <span className="truncate">{ch.channel_name}</span>
-                            </label>
-                          ))}
+                {availableChannels.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-2 p-3 border rounded-lg bg-muted/30">
+                    {Object.entries(
+                      availableChannels.reduce((acc, ch) => {
+                        if (!acc[ch.channel_type]) acc[ch.channel_type] = []
+                        acc[ch.channel_type].push(ch)
+                        return acc
+                      }, {} as Record<string, PushChannel[]>)
+                    ).map(([type, typeChannels]) => (
+                      <div key={type} className="space-y-1.5">
+                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                          <span className="w-3 h-3 flex items-center justify-center">
+                            {getPushChannelIcon(type)}
+                          </span>
+                          {channelTypeLabels[type]}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/30">
-                      该网盘暂无推送渠道，请先在「推送管理」中创建
-                    </div>
-                  )
+                        {typeChannels.map(ch => (
+                          <label 
+                            key={ch.id} 
+                            className="flex items-center gap-2 p-2 rounded border bg-background cursor-pointer hover:bg-accent text-sm"
+                          >
+                            <Switch
+                              checked={formData.push_channel_ids.includes(ch.id)}
+                              onCheckedChange={() => toggleChannel(ch.id)}
+                              className="data-[state=checked]:bg-blue-500"
+                            />
+                            <span className="truncate">{ch.channel_name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/30">
-                    请先选择网盘
+                    暂无推送渠道，请先在「推送管理」中创建
                   </div>
                 )}
               </div>

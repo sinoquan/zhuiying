@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 import { createPushService, PushChannelType, PushChannelConfig } from '@/lib/push'
 
+// 获取全局 Bot Token
+async function getGlobalBotToken(): Promise<string | undefined> {
+  try {
+    const client = getSupabaseClient()
+    const { data: setting } = await client
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'telegram_bot_token')
+      .single()
+    
+    return setting?.setting_value as string | undefined
+  } catch {
+    return undefined
+  }
+}
+
 // GET - 测试推送渠道连接
 export async function GET(
   request: Request,
@@ -22,10 +38,16 @@ export async function GET(
       return NextResponse.json({ error: '推送渠道不存在' }, { status: 404 })
     }
     
+    // 构建配置（Telegram 使用全局 Bot Token）
+    const config: PushChannelConfig = (channel.config as PushChannelConfig) || {}
+    if (channel.channel_type === 'telegram') {
+      config.bot_token = config.bot_token || await getGlobalBotToken()
+    }
+    
     // 创建推送服务
     const pushService = createPushService(
       channel.channel_type as PushChannelType,
-      (channel.config as PushChannelConfig) || {}
+      config
     )
     
     // 测试连接
@@ -84,10 +106,16 @@ export async function POST(
       // 使用默认消息
     }
     
+    // 构建配置（Telegram 使用全局 Bot Token）
+    const config: PushChannelConfig = (channel.config as PushChannelConfig) || {}
+    if (channel.channel_type === 'telegram') {
+      config.bot_token = config.bot_token || await getGlobalBotToken()
+    }
+    
     // 创建推送服务
     const pushService = createPushService(
       channel.channel_type as PushChannelType,
-      (channel.config as PushChannelConfig) || {}
+      config
     )
     
     // 发送测试消息

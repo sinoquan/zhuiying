@@ -80,11 +80,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '推送渠道已禁用' }, { status: 400 })
     }
     
+    // 构建配置（Telegram 使用全局 Bot Token）
+    const pushConfig: PushChannelConfig = (channel.config as PushChannelConfig) || {}
+    if (channel.channel_type === 'telegram') {
+      // 获取全局 Bot Token
+      const { data: tokenSetting } = await client
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'telegram_bot_token')
+        .single()
+      
+      pushConfig.bot_token = pushConfig.bot_token || (tokenSetting?.setting_value as string)
+    }
+    
     // 创建推送服务
-    console.log('[Push Send] Creating push service:', { type: channel.channel_type, config: channel.config })
+    console.log('[Push Send] Creating push service:', { type: channel.channel_type })
     const pushService = createPushService(
       channel.channel_type as PushChannelType,
-      (channel.config as PushChannelConfig) || {}
+      pushConfig
     )
     
     // 发送消息（支持图片）
@@ -137,7 +150,7 @@ export async function POST(request: NextRequest) {
     
     // 更新操作日志
     await client.from('operation_logs').insert({
-      cloud_drive_id: channel.cloud_drive_id,
+      cloud_drive_id: null, // 推送渠道不再绑定网盘
       operation_type: 'push',
       operation_detail: JSON.stringify({
         channel: channel.channel_name,
