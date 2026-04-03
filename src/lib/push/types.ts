@@ -32,7 +32,11 @@ export interface PushMessageExtra {
   season?: number
   episode?: number
   episode_end?: number
+  total_episodes?: number
   is_completed?: boolean
+  progress_bar?: string
+  progress_percent?: string
+  status?: string
   
   // 分类信息
   category?: string
@@ -42,7 +46,7 @@ export interface PushMessageExtra {
   note?: string
   
   // 其他
-  [key: string]: any
+  [key: string]: unknown
 }
 
 // 推送结果
@@ -57,7 +61,7 @@ export interface PushChannelConfig {
   bot_token?: string
   chat_id?: string
   webhook_url?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 // 推送服务接口
@@ -91,6 +95,37 @@ export interface PushTemplate {
   created_at: string
 }
 
+// 渠道能力配置
+export const CHANNEL_CAPABILITIES: Record<PushChannelType, {
+  name: string
+  supportsImage: boolean
+  supportsMarkdown: boolean
+  maxContentLength: number
+  description: string
+}> = {
+  telegram: {
+    name: 'Telegram',
+    supportsImage: true,
+    supportsMarkdown: true,
+    maxContentLength: 4096,
+    description: '支持图片和Markdown富文本'
+  },
+  qq: {
+    name: 'QQ',
+    supportsImage: false,
+    supportsMarkdown: false,
+    maxContentLength: 500,
+    description: '纯文本，字数限制500字'
+  },
+  wechat: {
+    name: '微信',
+    supportsImage: false,
+    supportsMarkdown: false,
+    maxContentLength: 2048,
+    description: '纯文本，建议精简内容'
+  }
+}
+
 // 渠道默认模板
 export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentType, string>> = {
   telegram: {
@@ -100,8 +135,7 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 ⭐️ 评分: {rating}
 🎭 类型: {genres}
 📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
+🎥 画质: {quality}
 💾 大小: {file_size}
 👥 主演: {cast}
 📝 简介: {overview}
@@ -115,8 +149,9 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 ⭐️ 评分: {rating}
 🎭 类型: {genres}
 📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
+📊 进度: {progress_bar} {progress_percent}
+🔄 状态: {status}
+🎥 画质: {quality}
 💾 大小: {file_size}
 👥 主演: {cast}
 📝 简介: {overview}
@@ -130,7 +165,7 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 ⭐️ 评分: {rating}
 🎭 类型: {genres}
 📂 分类: {category}
-🎞️ 质量: {quality}
+🎥 画质: {quality}
 📦 文件: {file_count} 个
 💾 大小: {file_size}
 👥 主演: {cast}
@@ -144,102 +179,56 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
     movie: `【电影推送】
 🎬 {title} ({year})
 {note}
-⭐️ 评分: {rating}
-🎭 类型: {genres}
-📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
-💾 大小: {file_size}
-👥 主演: {cast}
-📝 简介: {overview}
+⭐️ {rating} | 🎭 {genres} | 🎥 {quality}
 
-🔗 链接: {share_url}
-
-#{category_tag}`,
+🔗 {share_url}`,
     tv_series: `【剧集更新】
-📺 {title} ({year}) - 第{season}季第{episode}集
+📺 {title} S{season:02d}E{episode:02d}
 {note}
-⭐️ 评分: {rating}
-🎭 类型: {genres}
-📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
-💾 大小: {file_size}
-👥 主演: {cast}
-📝 简介: {overview}
+⭐️ {rating} | 🎭 {genres} | 🎥 {quality}
 
-🔗 链接: {share_url}
-
-#{category_tag}`,
+🔗 {share_url}`,
     completed: `【完结剧集】
-📺 {title} ({year}) - 第{season}季 第{episode}-{episode_end}集(完结)
+📺 {title} S{season:02d}E{episode:02d}-E{episode_end:02d}(完结)
 {note}
-⭐️ 评分: {rating}
-🎭 类型: {genres}
-📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
-💾 大小: {file_size}
-👥 主演: {cast}
-📝 简介: {overview}
+⭐️ {rating} | 🎭 {genres} | 🎥 {quality}
 
-🔗 链接: {share_url}
-
-#{category_tag}`,
+🔗 {share_url}`,
   },
   wechat: {
-    movie: `🎬 电影推送
-{title} ({year})
+    movie: `🎬 {title} ({year})
 {note}
 ━━━━━━━━━━━━
-⭐️ 评分: {rating}
-🎭 类型: {genres}
-📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
-💾 大小: {file_size}
+⭐️ {rating} | 🎭 {genres}
+🎥 {quality}
 ━━━━━━━━━━━━
-👥 主演: {cast}
-📝 简介: {overview}
-━━━━━━━━━━━━
-🔗 链接: {share_url}`,
-    tv_series: `📺 剧集更新
-{title} ({year})
-第{season}季第{episode}集
+🔗 {share_url}`,
+    tv_series: `📺 {title} S{season:02d}E{episode:02d}
 {note}
 ━━━━━━━━━━━━
-⭐️ 评分: {rating}
-🎭 类型: {genres}
-📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
-💾 大小: {file_size}
+⭐️ {rating} | 🎭 {genres}
+🎥 {quality}
 ━━━━━━━━━━━━
-👥 主演: {cast}
-📝 简介: {overview}
-━━━━━━━━━━━━
-🔗 链接: {share_url}`,
-    completed: `📺 完结剧集
-{title} ({year})
-第{season}季 第{episode}-{episode_end}集(完结)
+🔗 {share_url}`,
+    completed: `📺 {title} S{season:02d}E{episode:02d}-E{episode_end:02d}
+✅ 全剧完结
 {note}
 ━━━━━━━━━━━━
-⭐️ 评分: {rating}
-🎭 类型: {genres}
-📂 分类: {category}
-🎞️ 质量: {quality}
-📦 文件: {file_count} 个
-💾 大小: {file_size}
+⭐️ {rating} | 🎭 {genres}
+🎥 {quality}
 ━━━━━━━━━━━━
-👥 主演: {cast}
-📝 简介: {overview}
-━━━━━━━━━━━━
-🔗 链接: {share_url}`,
+🔗 {share_url}`,
   },
 }
 
 // 模板变量说明
-export const TEMPLATE_VARIABLES = [
+export const TEMPLATE_VARIABLES: Array<{
+  key: string
+  description: string
+  example: string
+  supportedChannels?: PushChannelType[] // 不指定则所有渠道都支持
+}> = [
+  // 基础信息
   { key: '{title}', description: '影视标题', example: '权力的游戏' },
   { key: '{year}', description: '年份', example: '2024' },
   { key: '{tmdb_id}', description: 'TMDB ID', example: '1399' },
@@ -247,17 +236,45 @@ export const TEMPLATE_VARIABLES = [
   { key: '{genres}', description: '类型', example: '剧情,奇幻,动作' },
   { key: '{category}', description: '分类', example: '欧美剧' },
   { key: '{category_tag}', description: '分类标签(无空格)', example: '欧美剧' },
+  
+  // 文件信息
   { key: '{quality}', description: '画质', example: 'WEB-DL 1080p' },
   { key: '{file_name}', description: '文件名', example: 'Game.of.Thrones.S08E06.mkv' },
   { key: '{file_size}', description: '文件大小', example: '4.5 GB' },
   { key: '{file_count}', description: '文件数量', example: '1' },
+  
+  // 剧集信息
   { key: '{season}', description: '季数', example: '1' },
   { key: '{episode}', description: '集数', example: '1' },
   { key: '{episode_end}', description: '结束集数', example: '12' },
+  { key: '{total_episodes}', description: '总集数', example: '24' },
+  { key: '{progress_bar}', description: '进度条', example: '████████░░' },
+  { key: '{progress_percent}', description: '进度百分比', example: '80%' },
+  { key: '{status}', description: '状态', example: '连载中/已完结' },
+  
+  // 人员信息
   { key: '{cast}', description: '主演', example: '艾米莉亚·克拉克,基特·哈灵顿' },
   { key: '{overview}', description: '简介', example: '故事发生在...' },
+  
+  // 备注
   { key: '{note}', description: '备注信息', example: '内封中文字幕' },
+  
+  // 链接
   { key: '{share_url}', description: '分享链接', example: 'https://115cdn.com/s/xxx' },
   { key: '{share_code}', description: '提取码', example: 'abc1' },
-  { key: '{poster_url}', description: '海报图片URL', example: 'https://image.tmdb.org/...' },
+  
+  // 图片（仅Telegram支持）
+  { 
+    key: '{poster_url}', 
+    description: '海报图片URL', 
+    example: 'https://image.tmdb.org/...',
+    supportedChannels: ['telegram']
+  },
 ]
+
+// 获取指定渠道支持的变量
+export function getSupportedVariables(channelType: PushChannelType): typeof TEMPLATE_VARIABLES {
+  return TEMPLATE_VARIABLES.filter(v => 
+    !v.supportedChannels || v.supportedChannels.includes(channelType)
+  )
+}
