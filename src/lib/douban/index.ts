@@ -23,6 +23,7 @@ export interface DoubanSearchResult {
   director?: string
   actors?: string[]
   url: string
+  episode_count?: number
 }
 
 export interface DoubanDetail extends DoubanSearchResult {
@@ -111,6 +112,8 @@ export class DoubanService {
         type: item.type === 'tv' ? 'tv' : item.type === 'movie' ? 'movie' : 'unknown',
         poster_url: item.img,
         url: item.url || `https://movie.douban.com/subject/${item.id}/`,
+        // 从episode字段推断总集数
+        episode_count: item.episode ? parseInt(item.episode) : undefined,
       }))
     } catch (error) {
       console.error('豆瓣搜索出错:', error)

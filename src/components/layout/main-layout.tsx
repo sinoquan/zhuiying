@@ -12,10 +12,17 @@ interface MainLayoutProps {
 export function MainLayout({ children }: MainLayoutProps) {
   const pathname = usePathname()
   const isLoginPage = pathname === "/login"
-  const [checking, setChecking] = useState(true)
-  const [authenticated, setAuthenticated] = useState(false)
+  // 开发环境默认已认证
+  const isDev = process.env.NODE_ENV === 'development' || process.env.COZE_PROJECT_ENV === 'DEV'
+  const [checking, setChecking] = useState(isDev ? false : true)
+  const [authenticated, setAuthenticated] = useState(isDev ? true : false)
 
   useEffect(() => {
+    // 开发环境跳过认证检查
+    if (isDev) {
+      return
+    }
+    
     const checkAuth = async () => {
       // 登录页面不需要检查认证
       if (isLoginPage) {
@@ -37,7 +44,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     }
 
     checkAuth()
-  }, [isLoginPage])
+  }, [isLoginPage, isDev])
 
   // 登录页面 - 不显示侧边栏
   if (isLoginPage) {

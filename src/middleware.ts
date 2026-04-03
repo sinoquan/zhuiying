@@ -16,7 +16,8 @@ export function middleware(request: NextRequest) {
   
   // 检查是否禁用认证（通过环境变量或数据库设置）
   // 开发环境默认禁用认证以便调试
-  const disableAuth = process.env.DISABLE_AUTH === 'true' || process.env.NODE_ENV === 'development'
+  const isDev = process.env.NODE_ENV === 'development' || process.env.COZE_PROJECT_ENV === 'DEV'
+  const disableAuth = process.env.DISABLE_AUTH === 'true' || isDev
   
   if (disableAuth) {
     return NextResponse.next()

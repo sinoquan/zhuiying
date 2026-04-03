@@ -240,6 +240,10 @@ export async function POST(request: NextRequest) {
           if (!tmdbDetails.rating && doubanItem.rating) {
             tmdbDetails.rating = doubanItem.rating
           }
+          // 使用搜索结果中的总集数
+          if (!tmdbDetails.totalEpisodes && doubanItem.episode_count) {
+            tmdbDetails.totalEpisodes = doubanItem.episode_count
+          }
         }
       } catch (err) {
         console.error('[预览] 豆瓣获取详情失败:', err)
