@@ -924,7 +924,7 @@ export default function FileMonitorPage() {
 
       {/* 创建/编辑对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               {editingMonitor ? "编辑监控任务" : "新建监控任务"}
@@ -935,13 +935,13 @@ export default function FileMonitorPage() {
                 : "选择网盘和要监控的目录，系统会自动分享新文件"}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-2 gap-6 py-4">
+          <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+            <div className="grid grid-cols-5 gap-4 flex-1 min-h-0 overflow-hidden py-2">
               {/* 左侧：配置区域 */}
-              <div className="space-y-4">
+              <div className="col-span-2 space-y-3 overflow-y-auto pr-2">
                 {/* 网盘选择 */}
-                <div className="grid gap-2">
-                  <Label>选择网盘 *</Label>
+                <div className="grid gap-1.5">
+                  <Label className="text-sm">选择网盘</Label>
                   <Select
                     value={formData.cloud_drive_id}
                     onValueChange={(value) => {
@@ -955,7 +955,7 @@ export default function FileMonitorPage() {
                     }}
                     disabled={!!editingMonitor}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-8">
                       <SelectValue placeholder="选择网盘" />
                     </SelectTrigger>
                     <SelectContent>
@@ -974,8 +974,8 @@ export default function FileMonitorPage() {
                 </div>
                 
                 {/* 检测频率 */}
-                <div className="grid gap-2">
-                  <Label>检测频率</Label>
+                <div className="grid gap-1.5">
+                  <Label className="text-sm">检测频率</Label>
                   <Select
                     value={cronPreset}
                     onValueChange={(value) => {
@@ -985,7 +985,7 @@ export default function FileMonitorPage() {
                       }
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-8">
                       <SelectValue placeholder="选择检测频率" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1000,25 +1000,24 @@ export default function FileMonitorPage() {
                     <Input
                       value={customCron}
                       onChange={(e) => setCustomCron(e.target.value)}
-                      placeholder="输入cron表达式，如: */10 7-23 * * *"
-                      className="mt-1"
+                      placeholder="输入cron表达式"
+                      className="h-8 text-sm"
                     />
                   )}
                 </div>
                 
-                {/* 推送渠道 - 直接显示所有渠道目标 */}
-                <div className="grid gap-2">
+                {/* 推送渠道 */}
+                <div className="grid gap-1.5">
                   <div className="flex items-center justify-between">
-                    <Label>推送目标</Label>
-                    {availableChannels.length > 0 && (
+                    <Label className="text-sm">推送目标</Label>
+                    {availableChannels.length > 0 && formData.push_channel_ids.length > 0 && (
                       <span className="text-xs text-muted-foreground">
                         已选 {formData.push_channel_ids.length} 个
                       </span>
                     )}
                   </div>
                   {availableChannels.length > 0 ? (
-                    <div className="border rounded-lg max-h-64 overflow-y-auto">
-                      {/* 按渠道类型分组 */}
+                    <div className="border rounded-lg max-h-48 overflow-y-auto">
                       {['telegram', 'qq', 'wechat', 'dingtalk', 'feishu', 'bark', 'serverchan'].map(channelType => {
                         const typeChannels = availableChannels.filter(c => c.channel_type === channelType)
                         if (typeChannels.length === 0) return null
@@ -1035,16 +1034,18 @@ export default function FileMonitorPage() {
                         
                         return (
                           <div key={channelType} className="border-b last:border-b-0">
-                            <div className="flex items-center gap-2 p-2 bg-muted/30 font-medium text-sm">
+                            <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/30 text-xs font-medium">
                               <span>{typeLabels[channelType]}</span>
+                              <span className="text-muted-foreground">({typeChannels.length})</span>
                             </div>
-                            <div className="p-1">
+                            <div className="py-0.5">
                               {typeChannels.map(ch => (
                                 <label
                                   key={ch.id}
-                                  className="flex items-center gap-2 p-1.5 rounded cursor-pointer hover:bg-muted/50 text-sm"
+                                  className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-muted/50 text-xs"
                                 >
                                   <Checkbox
+                                    className="h-3.5 w-3.5"
                                     checked={formData.push_channel_ids.includes(ch.id)}
                                     onCheckedChange={() => toggleChannel(ch.id)}
                                   />
@@ -1057,74 +1058,74 @@ export default function FileMonitorPage() {
                       })}
                     </div>
                   ) : (
-                    <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/30">
+                    <div className="text-xs text-muted-foreground p-2 border rounded-lg bg-muted/30">
                       暂无推送渠道，请先在「推送管理」中创建
                     </div>
                   )}
                 </div>
                 
                 {/* 内容类型 */}
-                <div className="grid gap-2">
-                  <Label>内容类型</Label>
+                <div className="grid gap-1.5">
+                  <Label className="text-sm">内容类型</Label>
                   <div className="flex gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-sm">
                       <input
                         type="radio"
                         name="template_type"
                         value="tv"
                         checked={formData.push_template_type === 'tv'}
                         onChange={() => setFormData({ ...formData, push_template_type: 'tv' })}
-                        className="h-4 w-4"
+                        className="h-3.5 w-3.5"
                       />
-                      <span className="text-sm">📺 剧集</span>
+                      <span>📺 剧集</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-sm">
                       <input
                         type="radio"
                         name="template_type"
                         value="movie"
                         checked={formData.push_template_type === 'movie'}
                         onChange={() => setFormData({ ...formData, push_template_type: 'movie' })}
-                        className="h-4 w-4"
+                        className="h-3.5 w-3.5"
                       />
-                      <span className="text-sm">🎬 电影</span>
+                      <span>🎬 电影</span>
                     </label>
                   </div>
                 </div>
               </div>
               
               {/* 右侧：目录选择 */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>选择监控目录 *</Label>
+              <div className="col-span-3 flex flex-col min-h-0">
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className="text-sm">选择监控目录 {!editingMonitor && <span className="text-destructive">*</span>}</Label>
                   {!editingMonitor && selectedFoldersRef.current.length > 0 && (
                     <span className="text-xs text-muted-foreground">
-                      已选择 {selectedFoldersRef.current.length} 个目录
+                      已选择 {selectedFoldersRef.current.length} 个
                     </span>
                   )}
                 </div>
                 {!editingMonitor ? (
                   !formData.cloud_drive_id ? (
-                    <div className="text-sm text-muted-foreground p-4 border rounded-lg bg-muted/30 h-80 flex items-center justify-center">
+                    <div className="flex-1 text-sm text-muted-foreground p-4 border rounded-lg bg-muted/30 flex items-center justify-center">
                       请先选择网盘
                     </div>
                   ) : (
-                    <>
+                    <div className="flex-1 flex flex-col min-h-0 border rounded-lg overflow-hidden">
                       {/* 已选择的目录 */}
                       {selectedFoldersRef.current.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 p-2 border rounded-lg bg-muted/30 mb-2">
+                        <div className="flex flex-wrap gap-1 p-2 bg-muted/30 border-b">
                           {selectedFoldersRef.current.map((folder) => (
                             <Badge 
                               key={folder.path} 
                               variant="secondary"
-                              className="flex items-center gap-1 pr-1"
+                              className="flex items-center gap-1 pr-1 text-xs"
                             >
-                              <FolderOpen className="h-3 w-3 mr-1" />
+                              <FolderOpen className="h-3 w-3" />
                               {folder.name}
                               <button
                                 type="button"
                                 onClick={() => removeSelectedFolder(folder.path)}
-                                className="ml-1 hover:bg-muted rounded-full p-0.5"
+                                className="ml-0.5 hover:bg-muted rounded-full p-0.5"
                               >
                                 <X className="h-3 w-3" />
                               </button>
@@ -1133,113 +1134,112 @@ export default function FileMonitorPage() {
                         </div>
                       )}
                       
-                      {/* 文件浏览器 */}
-                      <div className="border rounded-lg overflow-hidden">
-                        {/* 面包屑导航 + 搜索 */}
-                        <div className="flex items-center gap-2 p-2 bg-muted/50 border-b">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={navigateBack}
-                            disabled={pathHistory.length <= 1}
-                            className="h-6 px-2"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={navigateToRoot}
-                            className="h-6 px-2"
-                          >
-                            <Home className="h-4 w-4" />
-                          </Button>
-                          <div className="flex items-center gap-0.5 text-sm overflow-x-auto flex-1">
-                            {pathHistory.map((item, index) => (
-                              <div key={item.path + index} className="flex items-center">
-                                {index > 0 && <ChevronRight className="h-4 w-4 text-muted-foreground mx-0.5" />}
-                                <button
-                                  type="button"
-                                  onClick={() => navigateToPath(index)}
-                                  className={`px-1 py-0.5 rounded hover:bg-muted text-xs ${
-                                    index === pathHistory.length - 1 ? 'font-medium' : 'text-muted-foreground'
-                                  }`}
-                                >
-                                  {item.name}
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="relative">
-                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                            <Input
-                              value={fileSearchQuery}
-                              onChange={(e) => setFileSearchQuery(e.target.value)}
-                              placeholder="搜索"
-                              className="h-7 w-24 pl-6 text-xs"
-                            />
-                          </div>
+                      {/* 面包屑导航 */}
+                      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-muted/50 border-b">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={navigateBack}
+                          disabled={pathHistory.length <= 1}
+                          className="h-6 w-6 p-0"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={navigateToRoot}
+                          className="h-6 w-6 p-0"
+                        >
+                          <Home className="h-4 w-4" />
+                        </Button>
+                        <div className="flex items-center gap-0.5 text-xs overflow-x-auto flex-1">
+                          {pathHistory.map((item, index) => (
+                            <div key={item.path + index} className="flex items-center flex-shrink-0">
+                              {index > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground mx-0.5" />}
+                              <button
+                                type="button"
+                                onClick={() => navigateToPath(index)}
+                                className={`px-1 py-0.5 rounded hover:bg-muted ${
+                                  index === pathHistory.length - 1 ? 'font-medium' : 'text-muted-foreground'
+                                }`}
+                              >
+                                {item.name}
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                        
-                        {/* 文件列表 */}
-                        <div className="max-h-64 overflow-y-auto">
-                          {loadingFiles ? (
-                            <div className="flex items-center justify-center py-8">
-                              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                            </div>
-                          ) : filteredFiles.length === 0 ? (
-                            <div className="text-center py-8 text-muted-foreground text-sm">
-                              {fileSearchQuery ? '没有匹配的文件夹' : '当前目录没有子文件夹'}
-                            </div>
-                          ) : (
-                            <div className="divide-y">
-                              {filteredFiles.map((file) => {
-                                const folderPath = file.path || file.id
-                                const isSelected = selectedFoldersRef.current.some(f => f.path === folderPath)
-                                
-                                return (
-                                  <div
-                                    key={file.id}
-                                    className={`flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/50 ${
-                                      isSelected ? 'bg-blue-50 dark:bg-blue-950/30' : ''
-                                    }`}
-                                    onClick={() => toggleFolderSelection(file)}
-                                    onDoubleClick={() => handleDoubleClick(file)}
-                                  >
-                                    <div className={`w-4 h-4 border rounded flex items-center justify-center ${
-                                      isSelected ? 'bg-blue-500 border-blue-500' : 'border-muted-foreground'
-                                    }`}>
-                                      {isSelected && (
-                                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                      )}
-                                    </div>
-                                    <FolderOpen className="h-4 w-4 text-yellow-500 flex-shrink-0" />
-                                    <span className="text-sm truncate">{file.name}</span>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
+                        <div className="relative flex-shrink-0">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                          <Input
+                            value={fileSearchQuery}
+                            onChange={(e) => setFileSearchQuery(e.target.value)}
+                            placeholder="搜索"
+                            className="h-6 w-20 pl-5 text-xs"
+                          />
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        单击选择/取消，双击进入文件夹
-                      </p>
-                    </>
+                      
+                      {/* 文件列表 - 使用flex-1让它填充剩余空间 */}
+                      <div className="flex-1 overflow-y-auto min-h-0">
+                        {loadingFiles ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : filteredFiles.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground text-sm">
+                            {fileSearchQuery ? '没有匹配的文件夹' : '当前目录没有子文件夹'}
+                          </div>
+                        ) : (
+                          <div className="divide-y">
+                            {filteredFiles.map((file) => {
+                              const folderPath = file.path || file.id
+                              const isSelected = selectedFoldersRef.current.some(f => f.path === folderPath)
+                              
+                              return (
+                                <div
+                                  key={file.id}
+                                  className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 ${
+                                    isSelected ? 'bg-blue-50 dark:bg-blue-950/30' : ''
+                                  }`}
+                                  onClick={() => toggleFolderSelection(file)}
+                                  onDoubleClick={() => handleDoubleClick(file)}
+                                >
+                                  <div className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${
+                                    isSelected ? 'bg-blue-500 border-blue-500' : 'border-muted-foreground'
+                                  }`}>
+                                    {isSelected && (
+                                      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                  <FolderOpen className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                                  <span className="text-sm truncate">{file.name}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* 底部提示 */}
+                      <div className="px-3 py-1.5 bg-muted/30 border-t text-xs text-muted-foreground">
+                        单击选择/取消 · 双击进入文件夹
+                      </div>
+                    </div>
                   )
                 ) : (
-                  <div className="border rounded-lg p-4 bg-muted/30 h-80 flex items-center justify-center text-muted-foreground text-sm">
+                  <div className="flex-1 text-sm text-muted-foreground p-4 border rounded-lg bg-muted/30 flex items-center justify-center">
                     编辑模式下不可更改监控目录
                   </div>
                 )}
               </div>
             </div>
             
-            <DialogFooter>
+            <DialogFooter className="mt-4 pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 取消
               </Button>
