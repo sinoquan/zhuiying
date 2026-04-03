@@ -203,8 +203,8 @@ export function parseFileName(fileName: string, fileSize?: number): ParsedFileIn
     cleanName = cleanName.replace(bitMatch[0], '').trim()
   }
   
-  // 提取年份
-  const yearMatch = cleanName.match(/\b(19\d{2}|20\d{2})\b/)
+  // 提取年份（支持括号格式如 "(2026)" 和普通格式 "2026"）
+  const yearMatch = cleanName.match(/[\(\[]?(19\d{2}|20\d{2})[\)\]]?/)
   if (yearMatch) {
     result.year = parseInt(yearMatch[1])
     cleanName = cleanName.replace(yearMatch[0], '').trim()

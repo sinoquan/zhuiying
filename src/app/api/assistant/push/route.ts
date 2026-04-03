@@ -22,6 +22,7 @@ import { DingTalkPushService } from '@/lib/push/dingtalk'
 import { FeishuPushService } from '@/lib/push/feishu'
 import { BarkPushService } from '@/lib/push/bark'
 import { ServerChanPushService } from '@/lib/push/serverchan'
+import { TMDBService } from '@/lib/tmdb'
 
 interface PushRequest {
   share_record_id: number
@@ -112,13 +113,19 @@ function buildTemplateData(
     runtimeText = hours > 0 ? `${hours}小时${mins}分钟` : `${mins}分钟`
   }
   
-  // 构建质量信息字符串
+  // 构建质量信息字符串（优先使用 tmdbData，其次 tmdbInfo）
   const qualityParts: string[] = []
-  if (tmdbInfo.resolution) qualityParts.push(tmdbInfo.resolution)
-  if (tmdbInfo.hdr_format) qualityParts.push(tmdbInfo.hdr_format)
-  if (tmdbInfo.source) qualityParts.push(tmdbInfo.source)
-  if (tmdbInfo.video_codec) qualityParts.push(tmdbInfo.video_codec)
-  if (tmdbInfo.audio_codec) qualityParts.push(tmdbInfo.audio_codec)
+  const resolution = tmdbData?.resolution || tmdbInfo.resolution
+  const hdrFormat = tmdbData?.hdr_format || tmdbInfo.hdr_format
+  const source = tmdbData?.source || tmdbInfo.source
+  const videoCodec = tmdbData?.video_codec || tmdbInfo.video_codec
+  const audioCodec = tmdbData?.audio_codec || tmdbInfo.audio_codec
+  
+  if (resolution) qualityParts.push(resolution)
+  if (hdrFormat) qualityParts.push(hdrFormat)
+  if (source) qualityParts.push(source)
+  if (videoCodec) qualityParts.push(videoCodec)
+  if (audioCodec) qualityParts.push(audioCodec)
   const qualityText = qualityParts.join(' | ') || ''
   
   // 文件大小（排除无效值）
@@ -232,6 +239,48 @@ export async function POST(request: NextRequest) {
         shareRecord.tmdb_info?.year?.toString(),
         await getTMDBConfig()
       )
+    }
+    
+    // 如果还是没有数据，使用 TMDBService 进行识别（更准确）
+    if (!tmdbData && shareRecord.file_name) {
+      console.log(`[Push] 使用 TMDBService 识别: ${shareRecord.file_name}`)
+      
+      try {
+        const config = await getTMDBConfig()
+        const tmdbService = new TMDBService({
+          apiKey: config.apiKey,
+          proxyUrl: config.proxyUrl,
+        })
+        
+        const identifyResult = await tmdbService.identifyFromFileName(shareRecord.file_name)
+        
+        if (identifyResult.tmdb_id) {
+          console.log(`[Push] TMDBService 识别成功: ID=${identifyResult.tmdb_id}, 标题=${identifyResult.title}`)
+          
+          // 转换为 TMDBFullData 格式
+          tmdbData = {
+            tmdb_id: identifyResult.tmdb_id,
+            title: identifyResult.title || '',
+            year: identifyResult.year || undefined,
+            type: identifyResult.type === 'tv' ? 'tv' : 'movie',
+            poster_url: identifyResult.poster_url || undefined,
+            backdrop_url: identifyResult.backdrop_url || undefined,
+            overview: identifyResult.overview || undefined,
+            rating: identifyResult.rating || undefined,
+            genres: identifyResult.genres || undefined,
+            cast: identifyResult.cast || undefined,
+            runtime: undefined,
+            status: undefined,
+            total_episodes: undefined,
+            season: identifyResult.season || undefined,
+            episode: identifyResult.episode || undefined,
+          }
+        } else {
+          console.log(`[Push] TMDBService 未识别到 TMDB ID`)
+        }
+      } catch (err) {
+        console.error('[Push] TMDBService 识别失败:', err)
+      }
     }
     
     // 3. 缓存海报

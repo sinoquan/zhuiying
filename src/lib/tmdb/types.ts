@@ -389,18 +389,18 @@ export class TMDBService {
     // 移除扩展名
     name = name.replace(/\.[^.]+$/, '')
     
-    // 移除常见的资源标签
+    // 先提取年份（支持括号格式和普通格式）
+    let year: number | null = null
+    const yearMatch = name.match(/[\(\[]?((19|20)\d{2})[\)\]]?/)
+    if (yearMatch) {
+      year = parseInt(yearMatch[1])
+      name = name.replace(yearMatch[0], '')
+    }
+    
+    // 移除常见的资源标签（但保留年份已移除）
     name = name.replace(/\[.*?\]/g, '')
     name = name.replace(/\(.*?\)/g, '')
     name = name.replace(/【.*?】/g, '')
-    
-    // 提取年份
-    let year: number | null = null
-    const yearMatch = name.match(/(19|20)\d{2}/)
-    if (yearMatch) {
-      year = parseInt(yearMatch[0])
-      name = name.replace(yearMatch[0], '')
-    }
     
     // 提取季数和集数
     let season: number | null = null
@@ -431,9 +431,15 @@ export class TMDBService {
       }
     }
     
-    // 清理标题
-    name = name.replace(/[-_.]/g, ' ').trim()
-    name = name.replace(/\s+/g, ' ')
+    // 清理标题 - 移除质量标签
+    name = name.replace(/[-_.]/g, ' ')
+    name = name.replace(/\b(2160p|1080p|720p|480p|4K|8K)\b/gi, '')
+    name = name.replace(/\b(WEB-DL|WEBRip|BluRay|BDRip|HDTV|DVDRip)\b/gi, '')
+    name = name.replace(/\b(HEVC|H\.?265|H\.?264|X\.?264|X\.?265|AV1|VP9)\b/gi, '')
+    name = name.replace(/\b(AAC|AC3|DDP|TrueHD|Atmos|DTS-HD|DTS)\b/gi, '')
+    name = name.replace(/\b(HDR10\+|HDR10|HDR|Dolby\.?Vision|DV|SDR)\b/gi, '')
+    name = name.replace(/\b\d+bit\b/gi, '')
+    name = name.replace(/\s+/g, ' ').trim()
     
     return { title: name, year, season, episode }
   }
