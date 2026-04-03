@@ -151,37 +151,4 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// DELETE - 批量删除推送记录
-export async function DELETE(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { ids } = body
-    
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return NextResponse.json({ error: '请选择要删除的记录' }, { status: 400 })
-    }
-    
-    const client = getSupabaseClient()
-    
-    // 逐个删除（因为 Supabase 不支持 IN 条件）
-    const deletePromises = ids.map(id => 
-      client.from('push_records').delete().eq('id', id)
-    )
-    
-    const results = await Promise.all(deletePromises)
-    
-    // 检查是否有错误
-    const errors = results.filter(r => r.error)
-    if (errors.length > 0) {
-      console.error('部分删除失败:', errors)
-    }
-    
-    return NextResponse.json({ 
-      success: true, 
-      deleted: ids.length - errors.length 
-    })
-  } catch (error) {
-    console.error('批量删除推送记录失败:', error)
-    return NextResponse.json({ error: '删除失败' }, { status: 500 })
-  }
-}
+

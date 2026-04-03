@@ -24,15 +24,14 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 import { 
-  Bell, RefreshCw, ExternalLink, Copy, CheckCircle2, XCircle, 
+  Bell, RefreshCw, Copy, CheckCircle2, XCircle, 
   Clock, Loader2, ChevronLeft, ChevronRight, Film, Tv, File,
-  Search, Send, Trash2, Eye, AlertTriangle
+  Search, Send, Eye, AlertTriangle
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
@@ -123,7 +122,6 @@ export default function PushRecordsPage() {
   // 批量操作
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
-  const [batchAction, setBatchAction] = useState<'retry' | 'delete'>('retry')
   
   // 详情弹窗
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
@@ -158,7 +156,6 @@ export default function PushRecordsPage() {
       setRecords(data.records || [])
       setPagination(prev => ({ ...prev, ...data.pagination }))
       
-      // 计算统计
       if (data.stats) {
         setStats(data.stats)
       }
@@ -205,7 +202,7 @@ export default function PushRecordsPage() {
   const handleBatchRetry = async () => {
     if (selectedIds.size === 0) return
     
-    setRetrying(-1) // 批量操作标记
+    setRetrying(-1)
     try {
       let successCount = 0
       for (const id of selectedIds) {
@@ -226,34 +223,6 @@ export default function PushRecordsPage() {
       fetchRecords()
     } catch {
       toast.error('批量重试失败')
-    } finally {
-      setRetrying(null)
-    }
-  }
-
-  // 批量删除
-  const handleBatchDelete = async () => {
-    if (selectedIds.size === 0) return
-    
-    setRetrying(-1)
-    try {
-      const response = await fetch('/api/push/records', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: Array.from(selectedIds) })
-      })
-      
-      const result = await response.json()
-      
-      if (result.success) {
-        toast.success(`成功删除 ${selectedIds.size} 条记录`)
-        setSelectedIds(new Set())
-        fetchRecords()
-      } else {
-        toast.error(result.error || '删除失败')
-      }
-    } catch {
-      toast.error('删除失败')
     } finally {
       setRetrying(null)
       setBatchDialogOpen(false)
@@ -482,26 +451,11 @@ export default function PushRecordsPage() {
                   已选择 {selectedIds.size} 项
                 </span>
                 <Button 
-                  variant="outline" 
                   size="sm"
-                  onClick={() => {
-                    setBatchAction('retry')
-                    setBatchDialogOpen(true)
-                  }}
+                  onClick={() => setBatchDialogOpen(true)}
                 >
                   <RefreshCw className="h-4 w-4 mr-1" />
                   批量重试
-                </Button>
-                <Button 
-                  variant="destructive" 
-                  size="sm"
-                  onClick={() => {
-                    setBatchAction('delete')
-                    setBatchDialogOpen(true)
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  批量删除
                 </Button>
                 <Button 
                   variant="ghost" 
@@ -541,7 +495,7 @@ export default function PushRecordsPage() {
                       <TableHead className="w-24">状态</TableHead>
                       <TableHead className="w-20 text-center">重试</TableHead>
                       <TableHead className="w-40">推送时间</TableHead>
-                      <TableHead className="w-28 text-center">操作</TableHead>
+                      <TableHead className="w-20 text-center">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -562,9 +516,21 @@ export default function PushRecordsPage() {
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2">
                                   {getContentTypeIcon(share.content_type)}
-                                  <span className="font-medium truncate max-w-[200px]" title={share.file_name}>
+                                  <span className="font-medium truncate max-w-[180px]" title={share.file_name}>
                                     {share.file_name}
                                   </span>
+                                  {/* 复制按钮放到文件名后面 */}
+                                  {share.share_url && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 shrink-0"
+                                      onClick={() => handleCopy(share.share_code ? `${share.share_url} 密码:${share.share_code}` : share.share_url)}
+                                      title="复制链接"
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                   {share.cloud_drives && (
@@ -629,9 +595,8 @@ export default function PushRecordsPage() {
                               </Button>
                               {(record.push_status === 'failed' || record.push_status === 'retrying') && (
                                 <Button
-                                  variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  className="h-8 w-8"
                                   onClick={() => handleRetry(record.id)}
                                   disabled={retrying === record.id}
                                   title="重试"
@@ -641,17 +606,6 @@ export default function PushRecordsPage() {
                                   ) : (
                                     <RefreshCw className="h-4 w-4" />
                                   )}
-                                </Button>
-                              )}
-                              {share?.share_url && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => handleCopy(share.share_code ? `${share.share_url} 密码:${share.share_code}` : share.share_url)}
-                                  title="复制链接"
-                                >
-                                  <Copy className="h-4 w-4" />
                                 </Button>
                               )}
                             </div>
@@ -756,6 +710,20 @@ export default function PushRecordsPage() {
                 <div className="flex items-center gap-2 mb-2">
                   {getContentTypeIcon(selectedRecord.share_records?.content_type || 'unknown')}
                   <span className="font-medium">{selectedRecord.share_records?.file_name || '-'}</span>
+                  {selectedRecord.share_records?.share_url && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => handleCopy(
+                        selectedRecord.share_records?.share_code 
+                          ? `${selectedRecord.share_records.share_url} 密码:${selectedRecord.share_records.share_code}`
+                          : selectedRecord.share_records?.share_url || ''
+                      )}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   {selectedRecord.share_records?.cloud_drives && (
@@ -894,31 +862,25 @@ export default function PushRecordsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 批量操作确认弹窗 */}
+      {/* 批量重试确认弹窗 */}
       <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {batchAction === 'retry' ? '批量重试' : '批量删除'}
-            </DialogTitle>
-            <DialogDescription>
-              {batchAction === 'retry' 
-                ? `确定要重试选中的 ${selectedIds.size} 条推送记录吗？`
-                : `确定要删除选中的 ${selectedIds.size} 条推送记录吗？此操作不可撤销。`
-              }
-            </DialogDescription>
+            <DialogTitle>批量重试</DialogTitle>
           </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            确定要重试选中的 {selectedIds.size} 条推送记录吗？
+          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBatchDialogOpen(false)}>
               取消
             </Button>
             <Button 
-              variant={batchAction === 'delete' ? 'destructive' : 'default'}
-              onClick={batchAction === 'retry' ? handleBatchRetry : handleBatchDelete}
+              onClick={handleBatchRetry}
               disabled={retrying !== null}
             >
               {retrying !== null && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              确认
+              确认重试
             </Button>
           </DialogFooter>
         </DialogContent>
