@@ -39,6 +39,9 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
     app: string
   } | null>(null)
   
+  // 使用 ref 标记是否已成功，避免重复调用 onSuccess
+  const confirmedRef = useRef(false)
+  
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null)
   const initializedRef = useRef(false)
@@ -60,6 +63,9 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
     const session = currentSessionRef.current
     if (!session || !session.uid) return
     
+    // 如果已经确认，不再处理
+    if (confirmedRef.current) return
+    
     try {
       const response = await fetch(`/api/cloud-drives/115/qrcode?action=status&uid=${session.uid}`)
       const data = await response.json()
@@ -73,6 +79,10 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
       const newStatus = data.data.status
       
       if (newStatus === 'confirmed') {
+        // 标记已确认，避免重复调用
+        if (confirmedRef.current) return
+        confirmedRef.current = true
+        
         clearAllTimers()
         setStatus('confirmed')
         toast.success('登录成功')
@@ -100,6 +110,7 @@ export function QRCodeLogin({ onSuccess, onCancel }: QRCodeLoginProps) {
     setStatus('loading')
     setErrorMessage('')
     clearAllTimers()
+    confirmedRef.current = false  // 重置确认状态
     
     try {
       const response = await fetch(`/api/cloud-drives/115/qrcode?app=${app}`)

@@ -28,6 +28,36 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const client = getSupabaseClient()
     
+    // 检查是否已存在相同的配置（针对115网盘检查UID）
+    if (body.name === '115' && body.config?.cookie) {
+      const cookieStr = body.config.cookie
+      // 从cookie中提取UID
+      const uidMatch = cookieStr.match(/UID=([^;]+)/)
+      if (uidMatch) {
+        const uid = uidMatch[1]
+        
+        // 查询是否已存在相同UID的账号
+        const { data: existingDrives } = await client
+          .from('cloud_drives')
+          .select('id, name, config')
+          .eq('name', '115')
+        
+        if (existingDrives && existingDrives.length > 0) {
+          const duplicate = existingDrives.find((drive: { config?: { cookie?: string } }) => {
+            const existingCookie = drive.config?.cookie || ''
+            return existingCookie.includes(`UID=${uid}`)
+          })
+          
+          if (duplicate) {
+            return NextResponse.json(
+              { error: '该115账号已存在，请勿重复添加' },
+              { status: 400 }
+            )
+          }
+        }
+      }
+    }
+    
     const { data, error } = await client
       .from('cloud_drives')
       .insert({
