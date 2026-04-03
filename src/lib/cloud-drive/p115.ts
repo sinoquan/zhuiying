@@ -7,6 +7,7 @@ import {
   ICloudDriveService,
   CloudFile,
   ShareInfo,
+  ShareStatus,
   SharedFileInfo,
   ListResult,
   CloudDriveConfig,
@@ -820,6 +821,119 @@ export class Pan115Service implements ICloudDriveService {
     } catch (error) {
       console.error('115分享链接访问失败:', error)
       throw error
+    }
+  }
+
+  /**
+   * 获取分享链接状态
+   * 115网盘分享状态：active(有效)、audit(审核中)、blocked(已屏蔽)、expired(已过期)、deleted(已删除)
+   */
+  async getShareStatus(shareCode: string): Promise<ShareStatus> {
+    console.log('[115] 获取分享状态, shareCode:', shareCode)
+    
+    try {
+      // 方法1：从分享列表中查找该分享的状态
+      const listUrl = `https://proapi.115.com/android/2.0/share/slist?limit=100&offset=0`
+      const listRes = await fetch(listUrl, {
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/114.0.0.0 Mobile Safari/537.36',
+        },
+      })
+      const listData = await listRes.json()
+      console.log('[115] 分享列表响应:', JSON.stringify(listData).substring(0, 1000))
+      
+      if (listData.state === true || listData.errno === 0) {
+        const list = listData.data?.list || listData.data || []
+        if (Array.isArray(list)) {
+          // 查找匹配的分享
+          const shareItem = list.find((item: any) => 
+            item.share_code === shareCode || 
+            item.scode === shareCode ||
+            item.code === shareCode
+          )
+          
+          if (shareItem) {
+            console.log('[115] 找到分享项:', JSON.stringify(shareItem))
+            
+            // 115网盘状态码映射
+            // status: 0=正常, 1=审核中, 2=已屏蔽, 3=已过期, 4=已删除
+            const statusMap: Record<number, { status: ShareStatus['status']; text: string }> = {
+              0: { status: 'active', text: '有效' },
+              1: { status: 'audit', text: '审核中' },
+              2: { status: 'blocked', text: '已屏蔽' },
+              3: { status: 'expired', text: '已过期' },
+              4: { status: 'deleted', text: '已删除' },
+            }
+            
+            const statusCode = shareItem.status ?? shareItem.state ?? 0
+            const mapped = statusMap[statusCode] || { status: 'unknown', text: '未知' }
+            
+            return {
+              status: mapped.status,
+              status_text: mapped.text,
+              can_access: mapped.status === 'active',
+              message: shareItem.message || shareItem.desc,
+            }
+          }
+        }
+      }
+      
+      // 方法2：尝试直接访问分享链接判断状态
+      console.log('[115] 从列表未找到，尝试直接访问分享链接...')
+      const checkUrl = `https://webapi.115.com/share/getinfo?share_code=${shareCode}`
+      const checkRes = await fetch(checkUrl, {
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      })
+      const checkData = await checkRes.json()
+      console.log('[115] 分享检查响应:', JSON.stringify(checkData))
+      
+      if (checkData.state === true || checkData.errno === 0) {
+        // 分享存在且可访问
+        return {
+          status: 'active',
+          status_text: '有效',
+          can_access: true,
+        }
+      }
+      
+      // 根据错误码判断状态
+      // errno: 20001=需要提取码, 20002=提取码错误, 20011=分享不存在, 20012=分享已过期, 20013=分享审核中, 20014=分享被屏蔽
+      const errnoMap: Record<number, { status: ShareStatus['status']; text: string }> = {
+        20011: { status: 'deleted', text: '分享不存在' },
+        20012: { status: 'expired', text: '已过期' },
+        20013: { status: 'audit', text: '审核中' },
+        20014: { status: 'blocked', text: '已屏蔽' },
+      }
+      
+      const mapped = errnoMap[checkData.errno]
+      if (mapped) {
+        return {
+          status: mapped.status,
+          status_text: mapped.text,
+          can_access: false,
+          message: checkData.error,
+        }
+      }
+      
+      // 未知状态，默认返回有效
+      return {
+        status: 'unknown',
+        status_text: '未知',
+        can_access: true,
+        message: checkData.error,
+      }
+    } catch (error) {
+      console.error('[115] 获取分享状态失败:', error)
+      return {
+        status: 'unknown',
+        status_text: '未知',
+        can_access: true,
+        message: error instanceof Error ? error.message : '获取状态失败',
+      }
     }
   }
 }

@@ -3,7 +3,7 @@
  * 光鸭网盘是一个开源的网盘系统
  */
 
-import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, SharedFileInfo, SpaceInfo } from './types'
+import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, ShareStatus, SharedFileInfo, SpaceInfo } from './types'
 
 export class GuangyaService implements ICloudDriveService {
   private token: string
@@ -163,5 +163,13 @@ export class GuangyaService implements ICloudDriveService {
    */
   async getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
     throw new Error('光鸭网盘暂不支持访问分享链接')
+  }
+
+  async getShareStatus(shareCode: string): Promise<ShareStatus> {
+    return {
+      status: 'active',
+      status_text: '有效',
+      can_access: true,
+    }
   }
 }

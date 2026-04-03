@@ -7,6 +7,7 @@ import {
   ICloudDriveService,
   CloudFile,
   ShareInfo,
+  ShareStatus,
   SharedFileInfo,
   ListResult,
   CloudDriveConfig,
@@ -248,5 +249,13 @@ export class BaiduService implements ICloudDriveService {
    */
   async getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
     throw new Error('百度网盘暂不支持访问分享链接')
+  }
+
+  async getShareStatus(shareCode: string): Promise<ShareStatus> {
+    return {
+      status: 'active',
+      status_text: '有效',
+      can_access: true,
+    }
   }
 }

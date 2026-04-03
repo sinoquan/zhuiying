@@ -25,6 +25,14 @@ export interface ShareInfo {
   file_count?: number  // 文件数量
 }
 
+// 分享链接状态
+export interface ShareStatus {
+  status: 'active' | 'expired' | 'audit' | 'blocked' | 'deleted' | 'unknown'
+  status_text: string  // 状态文本描述
+  can_access: boolean  // 是否可以访问
+  message?: string     // 附加信息
+}
+
 // 分享链接文件信息
 export interface SharedFileInfo {
   share_id: string      // 分享ID
@@ -83,6 +91,9 @@ export interface ICloudDriveService {
   
   // 访问分享链接，获取文件信息
   getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo>
+  
+  // 获取分享链接状态
+  getShareStatus(shareCode: string): Promise<ShareStatus>
   
   // 检查文件是否为新文件（根据监控任务创建时间）
   checkNewFiles(path: string, sinceTime: Date): Promise<CloudFile[]>

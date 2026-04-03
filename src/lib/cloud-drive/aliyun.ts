@@ -7,6 +7,7 @@ import {
   ICloudDriveService,
   CloudFile,
   ShareInfo,
+  ShareStatus,
   SharedFileInfo,
   ListResult,
   CloudDriveConfig,
@@ -342,6 +343,19 @@ export class AliyunService implements ICloudDriveService {
     } catch (error) {
       console.error('阿里云盘分享链接访问失败:', error)
       throw error
+    }
+  }
+
+  /**
+   * 获取分享链接状态
+   * 阿里云盘暂不支持查询分享状态
+   */
+  async getShareStatus(shareCode: string): Promise<ShareStatus> {
+    // 阿里云盘暂不支持查询分享状态，返回默认值
+    return {
+      status: 'active',
+      status_text: '有效',
+      can_access: true,
     }
   }
 }

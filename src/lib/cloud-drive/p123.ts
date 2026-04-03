@@ -5,7 +5,7 @@
  * 2. 普通用户API: api.123pan.com (使用登录获取的JWT token)
  */
 
-import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, SharedFileInfo, SpaceInfo } from './types'
+import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, ShareStatus, SharedFileInfo, SpaceInfo } from './types'
 
 export class Pan123Service implements ICloudDriveService {
   private token: string
@@ -228,5 +228,13 @@ export class Pan123Service implements ICloudDriveService {
    */
   async getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
     throw new Error('123云盘暂不支持访问分享链接')
+  }
+
+  async getShareStatus(shareCode: string): Promise<ShareStatus> {
+    return {
+      status: 'active',
+      status_text: '有效',
+      can_access: true,
+    }
   }
 }

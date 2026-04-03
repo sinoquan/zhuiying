@@ -33,7 +33,7 @@ import {
   FileText, Copy, Trash2, 
   Send, RefreshCw, Search, ChevronLeft, ChevronRight, Bot, Eye, 
   Hand, Clock, CheckCircle2, XCircle, AlertCircle, Loader2,
-  Film, Tv, File, Check, Square, RotateCcw, AlertTriangle
+  Film, Tv, File, Check, Square, RotateCcw, AlertTriangle, HelpCircle
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
@@ -50,11 +50,15 @@ const CLOUD_DRIVE_NAMES: Record<string, string> = {
 }
 
 // 状态配置
-const STATUS_CONFIG = {
-  pending: { label: '审核中', color: 'bg-yellow-100 text-yellow-700 border-yellow-300', icon: Clock },
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle2 }> = {
+  pending: { label: '待处理', color: 'bg-gray-100 text-gray-700 border-gray-300', icon: Clock },
   active: { label: '有效', color: 'bg-green-100 text-green-700 border-green-300', icon: CheckCircle2 },
+  audit: { label: '审核中', color: 'bg-yellow-100 text-yellow-700 border-yellow-300', icon: Clock },
+  blocked: { label: '已屏蔽', color: 'bg-red-100 text-red-700 border-red-300', icon: XCircle },
   expired: { label: '已过期', color: 'bg-gray-100 text-gray-700 border-gray-300', icon: XCircle },
+  deleted: { label: '已删除', color: 'bg-gray-100 text-gray-500 border-gray-300', icon: XCircle },
   cancelled: { label: '已取消', color: 'bg-red-100 text-red-700 border-red-300', icon: XCircle },
+  unknown: { label: '未知', color: 'bg-gray-100 text-gray-500 border-gray-300', icon: HelpCircle },
 }
 
 // 来源配置
@@ -175,11 +179,42 @@ export default function ShareRecordsPage() {
   const [saving, setSaving] = useState(false)
   const [pushing, setPushing] = useState(false)
   const [renewingId, setRenewingId] = useState<number | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   
   // 批量操作
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [batchPushDialogOpen, setBatchPushDialogOpen] = useState(false)
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
+  
+  // 刷新分享状态
+  const refreshStatus = async () => {
+    if (selectedIds.size === 0) {
+      toast.error("请先选择要刷新状态的记录")
+      return
+    }
+    
+    setRefreshing(true)
+    try {
+      const response = await fetch('/api/share/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success(`已刷新 ${data.updated} 条记录的状态`)
+        fetchRecords() // 刷新列表
+      } else {
+        toast.error(data.error || '刷新状态失败')
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '刷新状态失败')
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const fetchCloudDrives = async () => {
     try {
@@ -746,6 +781,15 @@ export default function ShareRecordsPage() {
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   批量删除
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={refreshStatus}
+                  disabled={refreshing}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                  {refreshing ? '刷新中...' : '刷新状态'}
                 </Button>
                 <Button 
                   variant="ghost" 
