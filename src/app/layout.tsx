@@ -23,6 +23,9 @@ export const metadata: Metadata = {
     '百度网盘',
   ],
   authors: [{ name: '追影团队' }],
+  icons: {
+    icon: '/logo.svg',
+  },
   robots: {
     index: false,
     follow: false,
