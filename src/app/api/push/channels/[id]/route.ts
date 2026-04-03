@@ -18,6 +18,7 @@ export async function PUT(
     if (body.channel_name !== undefined) updateData.channel_name = body.channel_name
     if (body.config !== undefined) updateData.config = body.config
     if (body.is_active !== undefined) updateData.is_active = body.is_active
+    if (body.group_id !== undefined) updateData.group_id = body.group_id
     
     const { data, error } = await client
       .from('push_channels')

@@ -32,6 +32,10 @@
 | Telegram | `telegram` | Bot Token + Chat ID |
 | QQ | `qq` | Webhook URL |
 | 微信 | `wechat` | 企业微信 Webhook |
+| 钉钉 | `dingtalk` | Webhook URL + 加签密钥（可选） |
+| 飞书 | `feishu` | Webhook URL |
+| Bark | `bark` | 服务器地址 + Device Key |
+| Server酱 | `serverchan` | Send Key |
 
 ### 版本技术栈
 
@@ -92,6 +96,10 @@
 - TelegramPushService - Telegram Bot推送
 - QQPushService - QQ消息推送
 - WechatPushService - 企业微信推送
+- DingTalkPushService - 钉钉机器人推送
+- FeishuPushService - 飞书机器人推送
+- BarkPushService - iOS Bark推送
+- ServerChanPushService - Server酱微信推送
 
 ### 3. TMDB服务 (src/lib/tmdb/)
 - TMDBService - 智能识别影视内容
@@ -211,7 +219,8 @@
 - **cloud_drives** - 网盘账号表
 - **file_monitors** - 文件监控任务表
 - **share_records** - 分享记录表
-- **push_channels** - 推送渠道表
+- **push_channels** - 推送渠道表（支持分组、统计字段）
+- **push_groups** - 推送分组表
 - **push_rules** - 推送规则表
 - **push_templates** - 推送模板表
 - **push_records** - 推送记录表

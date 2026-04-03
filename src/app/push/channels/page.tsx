@@ -26,7 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { 
   Plus, Edit, Trash2, Send, Loader2, 
-  RefreshCw, Check
+  RefreshCw, Check, FolderPlus, Folder
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon } from "@/lib/icons"
@@ -69,10 +69,21 @@ interface PushTarget {
     server_url?: string
   } | null
   is_active: boolean
+  group_id?: number | null
   success_count?: number
   fail_count?: number
   last_push_at?: string
   last_push_status?: string
+  created_at: string
+}
+
+// 分组接口
+interface PushGroup {
+  id: number
+  group_name: string
+  channel_type: ChannelType
+  sort_order: number
+  channel_count?: number
   created_at: string
 }
 
@@ -102,6 +113,7 @@ export default function PushChannelsPage() {
     send_key: "",
     secret: "",
     server_url: "",
+    group_id: null as number | null,
   })
 
   // Telegram 特有配置
@@ -116,9 +128,16 @@ export default function PushChannelsPage() {
   const [telegramHint, setTelegramHint] = useState<string>("")
   const [loadingChannels, setLoadingChannels] = useState(false)
 
+  // 分组管理
+  const [groups, setGroups] = useState<PushGroup[]>([])
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false)
+  const [editingGroup, setEditingGroup] = useState<PushGroup | null>(null)
+  const [groupFormData, setGroupFormData] = useState({ group_name: "" })
+
   useEffect(() => {
     fetchTargets()
     fetchConfig()
+    fetchGroups()
   }, [])
 
   // 获取推送目标列表
@@ -131,6 +150,17 @@ export default function PushChannelsPage() {
       toast.error("获取推送目标失败")
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 获取分组列表
+  const fetchGroups = async () => {
+    try {
+      const response = await fetch("/api/push/groups")
+      const data = await response.json()
+      setGroups(data.groups || [])
+    } catch {
+      console.error("获取分组失败")
     }
   }
 
@@ -255,7 +285,8 @@ export default function PushChannelsPage() {
       device_key: "", 
       send_key: "", 
       secret: "", 
-      server_url: "" 
+      server_url: "",
+      group_id: null,
     })
     setDialogOpen(true)
   }
@@ -271,6 +302,7 @@ export default function PushChannelsPage() {
       send_key: target.config?.send_key || "",
       secret: target.config?.secret || "",
       server_url: target.config?.server_url || "",
+      group_id: target.group_id || null,
     })
     setDialogOpen(true)
   }
@@ -328,6 +360,7 @@ export default function PushChannelsPage() {
         channel_type: activeTab,
         target_name: formData.target_name,
         config,
+        group_id: formData.group_id,
       }
 
       if (editingTarget) {
@@ -471,6 +504,74 @@ export default function PushChannelsPage() {
       toast.error("删除失败")
     }
   }
+
+  // 分组管理
+  const openAddGroupDialog = () => {
+    setEditingGroup(null)
+    setGroupFormData({ group_name: "" })
+    setGroupDialogOpen(true)
+  }
+
+  const openEditGroupDialog = (group: PushGroup) => {
+    setEditingGroup(group)
+    setGroupFormData({ group_name: group.group_name })
+    setGroupDialogOpen(true)
+  }
+
+  const handleGroupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!groupFormData.group_name) {
+      toast.error("请输入分组名称")
+      return
+    }
+
+    try {
+      if (editingGroup) {
+        const response = await fetch(`/api/push/groups/${editingGroup.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ group_name: groupFormData.group_name }),
+        })
+        if (!response.ok) throw new Error("更新失败")
+        toast.success("分组更新成功")
+      } else {
+        const response = await fetch("/api/push/groups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            group_name: groupFormData.group_name, 
+            channel_type: activeTab 
+          }),
+        })
+        if (!response.ok) throw new Error("创建失败")
+        toast.success("分组创建成功")
+      }
+      setGroupDialogOpen(false)
+      fetchGroups()
+    } catch {
+      toast.error("操作失败")
+    }
+  }
+
+  const handleDeleteGroup = async (group: PushGroup) => {
+    if (!confirm(`确定要删除分组「${group.group_name}」吗？\n分组内的推送目标将移至未分组。`)) return
+    
+    try {
+      const response = await fetch(`/api/push/groups/${group.id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) throw new Error("删除失败")
+      toast.success("分组删除成功")
+      fetchGroups()
+      fetchTargets()
+    } catch {
+      toast.error("删除失败")
+    }
+  }
+
+  // 获取当前渠道的分组
+  const currentGroups = groups.filter(g => g.channel_type === activeTab)
 
   // 复制到剪贴板
   const copyToClipboard = (text: string) => {
@@ -1221,6 +1322,26 @@ export default function PushChannelsPage() {
                   />
                 </div>
               )}
+              
+              {/* 分组选择 */}
+              <div className="grid gap-2">
+                <Label>分组（可选）</Label>
+                <div className="flex gap-2">
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={formData.group_id || ""}
+                    onChange={(e) => setFormData({ ...formData, group_id: e.target.value ? parseInt(e.target.value) : null })}
+                  >
+                    <option value="">未分组</option>
+                    {currentGroups.map(g => (
+                      <option key={g.id} value={g.id}>{g.group_name}</option>
+                    ))}
+                  </select>
+                  <Button type="button" variant="outline" size="sm" onClick={openAddGroupDialog}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
@@ -1228,6 +1349,38 @@ export default function PushChannelsPage() {
               </Button>
               <Button type="submit">
                 {editingTarget ? "保存" : "添加"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 分组管理对话框 */}
+      <Dialog open={groupDialogOpen} onOpenChange={setGroupDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingGroup ? "编辑分组" : "创建分组"}</DialogTitle>
+            <DialogDescription>
+              为 {CHANNEL_TYPES.find(t => t.id === activeTab)?.name} 渠道创建分组，方便管理推送目标
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleGroupSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label>分组名称</Label>
+                <Input
+                  value={groupFormData.group_name}
+                  onChange={(e) => setGroupFormData({ group_name: e.target.value })}
+                  placeholder="如: 影视推送、通知群组"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setGroupDialogOpen(false)}>
+                取消
+              </Button>
+              <Button type="submit">
+                {editingGroup ? "保存" : "创建"}
               </Button>
             </DialogFooter>
           </form>

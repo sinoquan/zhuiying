@@ -424,6 +424,22 @@ export default function PushTemplatesPage() {
             <ChannelIcon type="wechat" />
             微信
           </TabsTrigger>
+          <TabsTrigger value="dingtalk" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
+            <ChannelIcon type="dingtalk" />
+            钉钉
+          </TabsTrigger>
+          <TabsTrigger value="feishu" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
+            <ChannelIcon type="feishu" />
+            飞书
+          </TabsTrigger>
+          <TabsTrigger value="bark" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
+            <ChannelIcon type="bark" />
+            Bark
+          </TabsTrigger>
+          <TabsTrigger value="serverchan" className="flex items-center gap-2 rounded-full px-4 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
+            <ChannelIcon type="serverchan" />
+            Server酱
+          </TabsTrigger>
         </TabsList>
 
         {/* 渠道能力说明 */}
@@ -431,7 +447,7 @@ export default function PushTemplatesPage() {
           <ChannelCapabilityCard channel={activeChannel} />
         </div>
 
-        {(['telegram', 'qq', 'wechat'] as PushChannelType[]).map((channel) => (
+        {(['telegram', 'qq', 'wechat', 'dingtalk', 'feishu', 'bark', 'serverchan'] as PushChannelType[]).map((channel) => (
           <TabsContent key={channel} value={channel}>
             <Card>
               <CardHeader>

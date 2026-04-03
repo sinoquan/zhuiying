@@ -89,12 +89,13 @@ interface PushChannel {
   id: number
   channel_name: string
   target_name?: string
-  channel_type: 'telegram' | 'qq' | 'wechat'
+  channel_type: 'telegram' | 'qq' | 'wechat' | 'dingtalk' | 'feishu' | 'bark' | 'serverchan'
   config?: {
     chat_id?: string
     webhook_url?: string
   } | null
   is_active?: boolean
+  group_id?: number | null
 }
 
 interface CloudFile {
@@ -1015,7 +1016,11 @@ export default function FileMonitorPage() {
                       const typeLabels: Record<string, string> = {
                         telegram: '📱 Telegram',
                         qq: '💬 QQ',
-                        wechat: '💚 微信'
+                        wechat: '💚 微信',
+                        dingtalk: '🔷 钉钉',
+                        feishu: '🔷 飞书',
+                        bark: '🍎 Bark',
+                        serverchan: '📨 Server酱'
                       }
                       
                       const selectedInType = formData.push_channel_ids.filter(id => 

@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
         channel_name: channelName,
         config: body.config || {},
         is_active: body.is_active ?? true,
+        group_id: body.group_id || null,
       })
       .select()
       .single()
