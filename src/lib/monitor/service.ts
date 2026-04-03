@@ -544,7 +544,7 @@ export class FileMonitorService {
           share_code: shareInfo.share_code,
           share_status: 'active',
           file_created_at: file.created_at,
-          content_type: seriesInfo.contentInfo.type,
+          content_type: file.isDir ? 'folder' : 'video', // 文件类型：文件夹或视频
           tmdb_id: seriesInfo.contentInfo.tmdbId,
           tmdb_title: seriesInfo.contentInfo.title,
           tmdb_info: tmdbInfo,
@@ -605,7 +605,9 @@ export class FileMonitorService {
           share_url: shareInfo.share_url,
           share_code: shareInfo.share_code,
           share_status: 'active',
-          content_type: 'tv',
+          content_type: 'folder', // 完结分享的是文件夹
+          tmdb_id: seriesInfo.contentInfo.tmdbId,
+          tmdb_title: seriesInfo.contentInfo.title,
           file_count: files.length,
           source: 'monitor',
         })
