@@ -393,11 +393,6 @@ export default function PushChannelsPage() {
             >
               <ChannelIcon type={type.id} />
               {type.name}
-              {targetsByType[type.id]?.length > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                  {targetsByType[type.id].length}
-                </Badge>
-              )}
             </TabsTrigger>
           ))}
         </TabsList>
