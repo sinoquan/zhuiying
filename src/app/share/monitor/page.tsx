@@ -83,6 +83,7 @@ interface FileMonitor {
     id: number
     channel_name: string
     channel_type: string
+    target_name?: string
   }>
   scan_stats?: ScanStats
 }
@@ -131,12 +132,6 @@ const CRON_PRESETS = [
   { label: '工作时间(7-23点)每30分钟', value: '*/30 7-23 * * *' },
   { label: '自定义', value: 'custom' },
 ]
-
-const channelTypeLabels: Record<string, string> = {
-  telegram: 'TG',
-  qq: 'QQ',
-  wechat: '微信',
-}
 
 export default function FileMonitorPage() {
   const router = useRouter()
@@ -783,8 +778,7 @@ export default function FileMonitorPage() {
                   <TableHead className="w-[160px]">网盘</TableHead>
                   <TableHead>监控目录</TableHead>
                   <TableHead className="w-[120px]">检测频率</TableHead>
-                  <TableHead className="w-[160px]">推送渠道</TableHead>
-                  <TableHead className="w-[80px]">类型</TableHead>
+                  <TableHead className="w-[200px]">推送渠道</TableHead>
                   <TableHead className="w-[100px]">状态</TableHead>
                   <TableHead className="w-[140px]">最近扫描</TableHead>
                   <TableHead className="w-[60px] text-right">操作</TableHead>
@@ -801,6 +795,11 @@ export default function FileMonitorPage() {
                   const scanStatus = scanStats?.lastScanStatus
                   const isScanning = scanningId === monitor.id
                   
+                  // 判断路径是否为数字ID（115网盘等）
+                  const isNumericPath = /^\d+$/.test(monitor.path.split('/').pop() || '')
+                  const displayName = monitor.path_name || monitor.path.split('/').pop() || monitor.path
+                  const showPath = !isNumericPath && monitor.path !== '/' && monitor.path !== displayName
+                  
                   return (
                     <TableRow key={monitor.id}>
                       <TableCell>
@@ -813,12 +812,14 @@ export default function FileMonitorPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm truncate max-w-[200px]" title={monitor.path_name}>
-                            {monitor.path_name || monitor.path.split('/').pop() || monitor.path}
+                          <span className="font-medium text-sm truncate max-w-[250px]" title={displayName}>
+                            {displayName}
                           </span>
-                          <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={monitor.path}>
-                            {monitor.path}
-                          </span>
+                          {showPath && (
+                            <span className="text-xs text-muted-foreground truncate max-w-[250px]" title={monitor.path}>
+                              {monitor.path}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -837,22 +838,16 @@ export default function FileMonitorPage() {
                                 className="text-[10px] px-1.5 py-0 h-5 gap-1"
                                 title={ch.channel_name}
                               >
-                                <span className="w-2.5 h-2.5 flex items-center justify-center">
+                                <span className="w-3 h-3 flex items-center justify-center">
                                   {getPushChannelIcon(ch.channel_type)}
                                 </span>
-                                {channelTypeLabels[ch.channel_type]}
+                                <span className="truncate max-w-[60px]">{ch.target_name || ch.channel_name}</span>
                               </Badge>
                             ))}
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">未配置</span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-xs font-normal">
-                          {monitor.push_template_type === 'movie' ? '🎬 电影' : 
-                           monitor.push_template_type === 'tv' ? '📺 剧集' : '🔄 自动'}
-                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">

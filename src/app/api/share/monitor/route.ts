@@ -30,10 +30,10 @@ export async function GET() {
       // 获取所有推送渠道
       const { data: allChannels } = await client
         .from('push_channels')
-        .select('id, channel_name, channel_type')
+        .select('id, channel_name, channel_type, target_name')
       
       // 创建渠道ID到渠道信息的映射
-      const channelMap = new Map<number, { id: number; channel_name: string; channel_type: string }>()
+      const channelMap = new Map<number, { id: number; channel_name: string; channel_type: string; target_name?: string }>()
       for (const ch of allChannels || []) {
         channelMap.set(ch.id, ch)
       }
