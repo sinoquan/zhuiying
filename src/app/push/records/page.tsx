@@ -670,17 +670,17 @@ export default function PushRecordsPage() {
 
       {/* 详情弹窗 */}
       <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl w-[90vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>推送详情</DialogTitle>
+            <DialogTitle className="text-lg">推送详情</DialogTitle>
           </DialogHeader>
           {selectedRecord && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               {/* 基本信息 */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs text-muted-foreground">影视名称</label>
-                  <p className="font-medium">{selectedRecord.share_records?.tmdb_title || selectedRecord.share_records?.file_name}</p>
+                  <p className="font-medium text-base">{selectedRecord.share_records?.tmdb_title || selectedRecord.share_records?.file_name}</p>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">推送状态</label>
@@ -704,20 +704,46 @@ export default function PushRecordsPage() {
                 </div>
               </div>
               
+              {/* TMDB 信息 */}
+              {selectedRecord.share_records?.tmdb_info && (
+                <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-lg">
+                  {selectedRecord.share_records.tmdb_info.year && (
+                    <div>
+                      <label className="text-xs text-muted-foreground">年份</label>
+                      <p className="font-medium">{selectedRecord.share_records.tmdb_info.year}</p>
+                    </div>
+                  )}
+                  {selectedRecord.share_records.tmdb_info.rating && (
+                    <div>
+                      <label className="text-xs text-muted-foreground">评分</label>
+                      <p className="font-medium text-yellow-600">⭐ {selectedRecord.share_records.tmdb_info.rating.toFixed(1)}</p>
+                    </div>
+                  )}
+                  {selectedRecord.share_records.tmdb_info.season && selectedRecord.share_records.tmdb_info.episode && (
+                    <div>
+                      <label className="text-xs text-muted-foreground">季集</label>
+                      <p className="font-medium text-blue-600">
+                        S{String(selectedRecord.share_records.tmdb_info.season).padStart(2, '0')}E{String(selectedRecord.share_records.tmdb_info.episode).padStart(2, '0')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
               {/* 分享链接 */}
               {selectedRecord.share_records?.share_url && (
                 <div>
                   <label className="text-xs text-muted-foreground">分享链接</label>
                   <div className="flex items-center gap-2 mt-1">
-                    <code className="text-sm bg-muted px-2 py-1 rounded flex-1 truncate">
+                    <code className="text-sm bg-muted px-3 py-2 rounded flex-1 truncate">
                       {selectedRecord.share_records.share_url}
                     </code>
                     {selectedRecord.share_records.share_code && (
-                      <code className="text-sm bg-muted px-2 py-1 rounded">
+                      <code className="text-sm bg-muted px-3 py-2 rounded whitespace-nowrap">
                         密码: {selectedRecord.share_records.share_code}
                       </code>
                     )}
-                    <Button size="sm" variant="ghost" onClick={() => handleCopy(selectedRecord.share_records!.share_url)}>
+                    <Button size="sm" variant="outline" onClick={() => handleCopy(selectedRecord.share_records!.share_url)}>
                       <Copy className="h-4 w-4" />
                     </Button>
                   </div>
@@ -728,7 +754,7 @@ export default function PushRecordsPage() {
               {selectedRecord.error_message && (
                 <div>
                   <label className="text-xs text-muted-foreground">错误信息</label>
-                  <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950 p-2 rounded mt-1">
+                  <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950 p-3 rounded mt-1">
                     {selectedRecord.error_message}
                   </p>
                 </div>
@@ -738,7 +764,7 @@ export default function PushRecordsPage() {
               {selectedRecord.content && (
                 <div>
                   <label className="text-xs text-muted-foreground">推送内容</label>
-                  <pre className="text-sm bg-muted p-3 rounded mt-1 whitespace-pre-wrap max-h-60 overflow-y-auto">
+                  <pre className="text-sm bg-muted p-4 rounded mt-1 whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed">
                     {selectedRecord.content}
                   </pre>
                 </div>
