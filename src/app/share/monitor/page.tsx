@@ -924,7 +924,7 @@ export default function FileMonitorPage() {
 
       {/* 创建/编辑对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className={editingMonitor ? "max-w-xl" : "max-w-3xl"}>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>
               {editingMonitor ? "编辑监控任务" : "新建监控任务"}
@@ -936,155 +936,109 @@ export default function FileMonitorPage() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              {/* 网盘选择 */}
-              <div className="grid gap-2">
-                <Label>选择网盘 *</Label>
-                <Select
-                  value={formData.cloud_drive_id}
-                  onValueChange={(value) => {
-                    setFormData({ 
-                      ...formData, 
-                      cloud_drive_id: value
-                    })
-                    selectedFoldersRef.current = []
-                    forceUpdate(n => n + 1)
-                    setPathHistory([{ path: "/", name: "根目录" }])
-                  }}
-                  disabled={!!editingMonitor}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择网盘" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {drives.map((drive) => (
-                      <SelectItem key={drive.id} value={drive.id.toString()}>
-                        <div className="flex items-center gap-2">
-                          <span className="w-4 h-4 flex items-center justify-center">
-                            {getDriveIcon(drive.name)}
-                          </span>
-                          {getDriveLabel(drive)}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {/* 检测频率 */}
-              <div className="grid gap-2">
-                <Label>检测频率</Label>
-                <Select
-                  value={cronPreset}
-                  onValueChange={(value) => {
-                    setCronPreset(value)
-                    if (value !== 'custom') {
-                      setFormData({ ...formData, cron_expression: value })
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择检测频率" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CRON_PRESETS.map((preset) => (
-                      <SelectItem key={preset.value} value={preset.value}>
-                        {preset.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {cronPreset === 'custom' && (
-                  <Input
-                    value={customCron}
-                    onChange={(e) => setCustomCron(e.target.value)}
-                    placeholder="输入cron表达式，如: */10 7-23 * * *"
-                    className="mt-1"
-                  />
-                )}
-              </div>
-              
-              {/* 推送渠道 - 按渠道类型分组选择 */}
-              <div className="grid gap-2">
-                <Label>推送渠道</Label>
-                {availableChannels.length > 0 ? (
-                  <div className="space-y-2">
-                    {['telegram', 'qq', 'wechat'].map(channelType => {
-                      const typeChannels = availableChannels.filter(c => c.channel_type === channelType)
-                      if (typeChannels.length === 0) return null
-                      
-                      const typeLabels: Record<string, string> = {
-                        telegram: '📱 Telegram',
-                        qq: '💬 QQ',
-                        wechat: '💚 微信',
-                        dingtalk: '🔷 钉钉',
-                        feishu: '🔷 飞书',
-                        bark: '🍎 Bark',
-                        serverchan: '📨 Server酱'
-                      }
-                      
-                      const selectedInType = formData.push_channel_ids.filter(id => 
-                        typeChannels.some(c => c.id === id)
-                      )
-                      const isChannelEnabled = selectedInType.length > 0
-                      const isAllSelected = selectedInType.length === typeChannels.length
-                      
-                      return (
-                        <div key={channelType} className="border rounded-lg overflow-hidden">
-                          {/* 渠道类型头部 */}
-                          <div className="flex items-center justify-between p-2 bg-muted/50">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{typeLabels[channelType]}</span>
-                              <Badge variant="secondary" className="text-xs">
-                                {typeChannels.length}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {isChannelEnabled && typeChannels.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (isAllSelected) {
-                                      setFormData(prev => ({
-                                        ...prev,
-                                        push_channel_ids: prev.push_channel_ids.filter(id => !typeChannels.some(c => c.id === id))
-                                      }))
-                                    } else {
-                                      setFormData(prev => ({
-                                        ...prev,
-                                        push_channel_ids: [...new Set([...prev.push_channel_ids, ...typeChannels.map(c => c.id)])]
-                                      }))
-                                    }
-                                  }}
-                                  className="text-xs text-muted-foreground hover:text-foreground"
-                                >
-                                  {isAllSelected ? '取消全选' : '全选'}
-                                </button>
-                              )}
-                              <Switch
-                                checked={isChannelEnabled}
-                                onCheckedChange={(enabled) => {
-                                  if (enabled) {
-                                    // 启用时，默认全选该渠道下的目标
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      push_channel_ids: [...new Set([...prev.push_channel_ids, ...typeChannels.map(c => c.id)])]
-                                    }))
-                                  } else {
-                                    // 禁用时，移除该渠道下的所有目标
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      push_channel_ids: prev.push_channel_ids.filter(id => !typeChannels.some(c => c.id === id))
-                                    }))
-                                  }
-                                }}
-                              />
-                            </div>
+            <div className="grid grid-cols-2 gap-6 py-4">
+              {/* 左侧：配置区域 */}
+              <div className="space-y-4">
+                {/* 网盘选择 */}
+                <div className="grid gap-2">
+                  <Label>选择网盘 *</Label>
+                  <Select
+                    value={formData.cloud_drive_id}
+                    onValueChange={(value) => {
+                      setFormData({ 
+                        ...formData, 
+                        cloud_drive_id: value
+                      })
+                      selectedFoldersRef.current = []
+                      forceUpdate(n => n + 1)
+                      setPathHistory([{ path: "/", name: "根目录" }])
+                    }}
+                    disabled={!!editingMonitor}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择网盘" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {drives.map((drive) => (
+                        <SelectItem key={drive.id} value={drive.id.toString()}>
+                          <div className="flex items-center gap-2">
+                            <span className="w-4 h-4 flex items-center justify-center">
+                              {getDriveIcon(drive.name)}
+                            </span>
+                            {getDriveLabel(drive)}
                           </div>
-                          
-                          {/* 目标列表 */}
-                          {isChannelEnabled && (
-                            <div className="p-2 space-y-1 bg-background">
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* 检测频率 */}
+                <div className="grid gap-2">
+                  <Label>检测频率</Label>
+                  <Select
+                    value={cronPreset}
+                    onValueChange={(value) => {
+                      setCronPreset(value)
+                      if (value !== 'custom') {
+                        setFormData({ ...formData, cron_expression: value })
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择检测频率" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CRON_PRESETS.map((preset) => (
+                        <SelectItem key={preset.value} value={preset.value}>
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {cronPreset === 'custom' && (
+                    <Input
+                      value={customCron}
+                      onChange={(e) => setCustomCron(e.target.value)}
+                      placeholder="输入cron表达式，如: */10 7-23 * * *"
+                      className="mt-1"
+                    />
+                  )}
+                </div>
+                
+                {/* 推送渠道 - 直接显示所有渠道目标 */}
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <Label>推送目标</Label>
+                    {availableChannels.length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        已选 {formData.push_channel_ids.length} 个
+                      </span>
+                    )}
+                  </div>
+                  {availableChannels.length > 0 ? (
+                    <div className="border rounded-lg max-h-64 overflow-y-auto">
+                      {/* 按渠道类型分组 */}
+                      {['telegram', 'qq', 'wechat', 'dingtalk', 'feishu', 'bark', 'serverchan'].map(channelType => {
+                        const typeChannels = availableChannels.filter(c => c.channel_type === channelType)
+                        if (typeChannels.length === 0) return null
+                        
+                        const typeLabels: Record<string, string> = {
+                          telegram: '📱 Telegram',
+                          qq: '💬 QQ',
+                          wechat: '💚 微信',
+                          dingtalk: '🔷 钉钉',
+                          feishu: '🔷 飞书',
+                          bark: '🍎 Bark',
+                          serverchan: '📨 Server酱'
+                        }
+                        
+                        return (
+                          <div key={channelType} className="border-b last:border-b-0">
+                            <div className="flex items-center gap-2 p-2 bg-muted/30 font-medium text-sm">
+                              <span>{typeLabels[channelType]}</span>
+                            </div>
+                            <div className="p-1">
                               {typeChannels.map(ch => (
                                 <label
                                   key={ch.id}
@@ -1098,70 +1052,60 @@ export default function FileMonitorPage() {
                                 </label>
                               ))}
                             </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                    
-                    {/* 已选择统计 */}
-                    {formData.push_channel_ids.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        已选择 {formData.push_channel_ids.length} 个推送目标
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/30">
-                    暂无推送渠道，请先在「推送管理」中创建
-                  </div>
-                )}
-              </div>
-              
-              {/* 内容类型 */}
-              <div className="grid gap-2">
-                <Label>内容类型</Label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="template_type"
-                      value="tv"
-                      checked={formData.push_template_type === 'tv'}
-                      onChange={() => setFormData({ ...formData, push_template_type: 'tv' })}
-                      className="h-4 w-4"
-                    />
-                    <span className="text-sm">📺 剧集模板</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="template_type"
-                      value="movie"
-                      checked={formData.push_template_type === 'movie'}
-                      onChange={() => setFormData({ ...formData, push_template_type: 'movie' })}
-                      className="h-4 w-4"
-                    />
-                    <span className="text-sm">🎬 电影模板</span>
-                  </label>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/30">
+                      暂无推送渠道，请先在「推送管理」中创建
+                    </div>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  剧集模板会在完结时自动切换为完结模板
-                </p>
+                
+                {/* 内容类型 */}
+                <div className="grid gap-2">
+                  <Label>内容类型</Label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="template_type"
+                        value="tv"
+                        checked={formData.push_template_type === 'tv'}
+                        onChange={() => setFormData({ ...formData, push_template_type: 'tv' })}
+                        className="h-4 w-4"
+                      />
+                      <span className="text-sm">📺 剧集</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="template_type"
+                        value="movie"
+                        checked={formData.push_template_type === 'movie'}
+                        onChange={() => setFormData({ ...formData, push_template_type: 'movie' })}
+                        className="h-4 w-4"
+                      />
+                      <span className="text-sm">🎬 电影</span>
+                    </label>
+                  </div>
+                </div>
               </div>
               
-              {/* 目录选择 - 仅创建模式显示 */}
-              {!editingMonitor && (
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <Label>选择监控目录 *</Label>
-                    {selectedFoldersRef.current.length > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        已选择 {selectedFoldersRef.current.length} 个目录
-                      </span>
-                    )}
-                  </div>
-                  {!formData.cloud_drive_id ? (
-                    <div className="text-sm text-muted-foreground p-4 border rounded-lg bg-muted/30">
+              {/* 右侧：目录选择 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>选择监控目录 *</Label>
+                  {!editingMonitor && selectedFoldersRef.current.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      已选择 {selectedFoldersRef.current.length} 个目录
+                    </span>
+                  )}
+                </div>
+                {!editingMonitor ? (
+                  !formData.cloud_drive_id ? (
+                    <div className="text-sm text-muted-foreground p-4 border rounded-lg bg-muted/30 h-80 flex items-center justify-center">
                       请先选择网盘
                     </div>
                   ) : (
@@ -1233,14 +1177,14 @@ export default function FileMonitorPage() {
                             <Input
                               value={fileSearchQuery}
                               onChange={(e) => setFileSearchQuery(e.target.value)}
-                              placeholder="搜索文件夹"
-                              className="h-7 w-32 pl-6 text-xs"
+                              placeholder="搜索"
+                              className="h-7 w-24 pl-6 text-xs"
                             />
                           </div>
                         </div>
                         
                         {/* 文件列表 */}
-                        <div className="max-h-80 overflow-y-auto">
+                        <div className="max-h-64 overflow-y-auto">
                           {loadingFiles ? (
                             <div className="flex items-center justify-center py-8">
                               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1283,12 +1227,16 @@ export default function FileMonitorPage() {
                         </div>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        单击选择/取消，双击进入文件夹。支持多选。
+                        单击选择/取消，双击进入文件夹
                       </p>
                     </>
-                  )}
-                </div>
-              )}
+                  )
+                ) : (
+                  <div className="border rounded-lg p-4 bg-muted/30 h-80 flex items-center justify-center text-muted-foreground text-sm">
+                    编辑模式下不可更改监控目录
+                  </div>
+                )}
+              </div>
             </div>
             
             <DialogFooter>

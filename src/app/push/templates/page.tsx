@@ -487,7 +487,7 @@ export default function PushTemplatesPage() {
                         <TableRow key={template.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <FileCode className="h-4 w-4" />
+                              <ChannelIcon type={template.channel_type} />
                               <span className="font-medium">{template.name}</span>
                               {template.isPreset && (
                                 <Badge variant="outline" className="text-xs">预设</Badge>
