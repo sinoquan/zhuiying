@@ -577,13 +577,12 @@ export default function ShareRecordsPage() {
     }
     
     const idsArray = Array.from(selectedIds)
+    const idsParam = idsArray.join(',')
     
     setSaving(true)
     try {
-      const response = await fetch('/api/share/records', {
+      const response = await fetch(`/api/share/records?ids=${idsParam}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: idsArray }),
       })
       
       const data = await response.json()
@@ -1188,7 +1187,7 @@ export default function ShareRecordsPage() {
           <DialogHeader>
             <DialogTitle>批量删除分享记录</DialogTitle>
             <DialogDescription>
-              确定要删除选中的 {selectedIds.size} 条分享记录吗？
+              确定要删除选中的 {selectedIds.size} 条分享记录吗？此操作不可撤销。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-row">

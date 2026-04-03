@@ -143,44 +143,39 @@ export async function GET(request: NextRequest) {
 /**
  * DELETE - 删除分享记录
  * 支持单个删除和批量删除
+ * 批量删除：通过 URL 参数 ids=1,2,3 传递
+ * 单个删除：通过 URL 参数 id=1 传递
  */
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    const idsParam = searchParams.get('ids')
     const cancelShare = searchParams.get('cancel') === 'true'
-    
-    // 检查是否为批量删除 - 尝试解析 JSON body
-    let body: { ids?: number[] } = {}
-    
-    try {
-      const jsonBody = await request.json()
-      if (jsonBody && typeof jsonBody === 'object') {
-        body = jsonBody as { ids?: number[] }
-      }
-    } catch {
-      // body 为空或不是有效 JSON，忽略
-    }
     
     const client = getSupabaseClient()
     
-    // 批量删除
-    if (body.ids && Array.isArray(body.ids) && body.ids.length > 0) {
-      // 先删除关联的推送记录
-      await client
-        .from('push_records')
-        .delete()
-        .in('share_record_id', body.ids)
+    // 批量删除 - 通过 URL 参数传递 ids=1,2,3
+    if (idsParam) {
+      const ids = idsParam.split(',').map(Number).filter(n => !isNaN(n))
       
-      // 再删除分享记录
-      const { error: deleteError } = await client
-        .from('share_records')
-        .delete()
-        .in('id', body.ids)
-      
-      if (deleteError) throw new Error(`批量删除失败: ${deleteError.message}`)
-      
-      return NextResponse.json({ success: true, message: `成功删除 ${body.ids.length} 条记录` })
+      if (ids.length > 0) {
+        // 先删除关联的推送记录
+        await client
+          .from('push_records')
+          .delete()
+          .in('share_record_id', ids)
+        
+        // 再删除分享记录
+        const { error: deleteError } = await client
+          .from('share_records')
+          .delete()
+          .in('id', ids)
+        
+        if (deleteError) throw new Error(`批量删除失败: ${deleteError.message}`)
+        
+        return NextResponse.json({ success: true, message: `成功删除 ${ids.length} 条记录` })
+      }
     }
     
     // 单个删除
