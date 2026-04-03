@@ -76,31 +76,39 @@ export function getPushChannelIcon(type: string): React.ReactNode {
 }
 
 // 获取网盘图标组件
-export function getDriveIcon(type: string): React.ReactNode {
+export function getDriveIcon(type: string, size: 'sm' | 'md' | 'lg' = 'sm'): React.ReactNode {
   const lowerType = type?.toLowerCase() || ''
   const drive = driveIcons[lowerType] || driveIcons[type]
+  
+  const sizeClasses = {
+    sm: 'h-4 w-4',
+    md: 'h-6 w-6',
+    lg: 'h-10 w-10',
+  }
+  
+  const sizeClass = sizeClasses[size]
   
   if (drive?.icon) {
     return (
       <img 
         src={drive.icon} 
         alt={drive.name}
-        className="h-4 w-4 object-contain"
+        className={`${sizeClass} object-contain`}
       />
     )
   }
   
-  // 默认返回一个占位图标
+  // 默认返回百度网盘图标
   return (
     <img 
       src="/icons/baidu.png" 
       alt="网盘"
-      className="h-4 w-4 object-contain"
+      className={`${sizeClass} object-contain`}
     />
   )
 }
 
 // 获取网盘图标组件（别名）
-export function getCloudDriveIcon(type: string): React.ReactNode {
-  return getDriveIcon(type)
+export function getCloudDriveIcon(type: string, size: 'sm' | 'md' | 'lg' = 'sm'): React.ReactNode {
+  return getDriveIcon(type, size)
 }

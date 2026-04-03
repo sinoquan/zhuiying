@@ -485,11 +485,7 @@ export default function CloudDrivesPage() {
                   <div className="flex items-center gap-4">
                     {/* 网盘图标 */}
                     <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                      {driveType && (
-                        <span className="w-10 h-10 flex items-center justify-center">
-                          {getDriveIcon(drive.name)}
-                        </span>
-                      )}
+                      {driveType && getDriveIcon(drive.name, 'lg')}
                     </div>
                     
                     {/* 账号信息 */}
@@ -624,7 +620,7 @@ export default function CloudDrivesPage() {
                   }`}
                 >
                   <span className="w-9 h-9 flex items-center justify-center flex-shrink-0">
-                    {getDriveIcon(type.value)}
+                    {getDriveIcon(type.value, 'md')}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm">{type.label}</div>
