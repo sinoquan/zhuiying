@@ -68,20 +68,58 @@ const SOURCE_CONFIG = {
   assistant: { label: '智能助手', icon: Bot, color: 'bg-purple-100 text-purple-700' },
 }
 
-// 内容类型配置
-const CONTENT_TYPE_CONFIG: Record<string, { label: string; icon: typeof File; color?: string }> = {
-  movie: { label: '电影', icon: Film, color: 'text-red-500' },
-  tv_series: { label: '剧集', icon: Tv, color: 'text-purple-500' },
-  video: { label: '视频', icon: Film, color: 'text-red-500' },
-  audio: { label: '音频', icon: File, color: 'text-green-500' },
-  image: { label: '图片', icon: File, color: 'text-blue-500' },
-  document: { label: '文档', icon: FileText, color: 'text-yellow-500' },
-  archive: { label: '压缩包', icon: File, color: 'text-orange-500' },
-  folder: { label: '文件夹', icon: Folder, color: 'text-amber-500' },
-  other: { label: '其他', icon: File, color: 'text-gray-500' },
-  unknown: { label: '未知', icon: File, color: 'text-gray-500' },
-  // 兼容旧数据
-  '': { label: '未知', icon: File, color: 'text-gray-500' },
+// 内容类型配置 - 用于文件图标显示
+const FILE_TYPE_ICONS: Record<string, { icon: typeof File; color: string }> = {
+  folder: { icon: Folder, color: 'text-amber-500' },
+  video: { icon: Film, color: 'text-red-500' },
+  audio: { icon: File, color: 'text-green-500' },
+  image: { icon: File, color: 'text-blue-500' },
+  document: { icon: FileText, color: 'text-yellow-500' },
+  archive: { icon: File, color: 'text-orange-500' },
+  subtitle: { icon: FileText, color: 'text-cyan-500' },
+  other: { icon: File, color: 'text-gray-500' },
+}
+
+// 根据文件名获取文件类型
+const getFileType = (fileName: string, contentType?: string): { icon: typeof File; color: string } => {
+  // 如果是文件夹
+  if (contentType === 'folder') {
+    return FILE_TYPE_ICONS.folder
+  }
+  
+  const ext = fileName.toLowerCase().split('.').pop() || ''
+  
+  // 视频文件
+  if (['mkv', 'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm2ts', 'ts', 'm4v', 'rmvb', 'rm'].includes(ext)) {
+    return FILE_TYPE_ICONS.video
+  }
+  
+  // 音频文件
+  if (['mp3', 'flac', 'wav', 'aac', 'm4a', 'ogg', 'wma', 'ape'].includes(ext)) {
+    return FILE_TYPE_ICONS.audio
+  }
+  
+  // 图片文件
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'].includes(ext)) {
+    return FILE_TYPE_ICONS.image
+  }
+  
+  // 字幕文件
+  if (['srt', 'ass', 'ssa', 'sub', 'idx', 'sup', 'vtt'].includes(ext)) {
+    return FILE_TYPE_ICONS.subtitle
+  }
+  
+  // 压缩文件
+  if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'].includes(ext)) {
+    return FILE_TYPE_ICONS.archive
+  }
+  
+  // 文档文件
+  if (['txt', 'doc', 'docx', 'pdf', 'xls', 'xlsx', 'ppt', 'pptx', 'epub', 'mobi'].includes(ext)) {
+    return FILE_TYPE_ICONS.document
+  }
+  
+  return FILE_TYPE_ICONS.other
 }
 
 interface PushInfo {
@@ -618,18 +656,6 @@ export default function ShareRecordsPage() {
     )
   }
 
-  // 获取内容类型Badge
-  const getContentTypeBadge = (contentType?: string) => {
-    const config = CONTENT_TYPE_CONFIG[contentType as keyof typeof CONTENT_TYPE_CONFIG] || CONTENT_TYPE_CONFIG.unknown
-    const Icon = config.icon
-    return (
-      <Badge variant="outline" className={`text-xs ${config.color || ''}`}>
-        <Icon className="h-3 w-3 mr-1" />
-        {config.label}
-      </Badge>
-    )
-  }
-
   // 获取推送状态Badge
   const getPushStatusBadge = (pushInfo?: PushInfo[]) => {
     if (!pushInfo || pushInfo.length === 0) {
@@ -909,9 +935,8 @@ export default function ShareRecordsPage() {
                     </TableHead>
                     <TableHead className="w-[140px]">分享时间</TableHead>
                     <TableHead className="w-[120px]">网盘</TableHead>
-                    <TableHead className="w-[240px]">文件名</TableHead>
+                    <TableHead className="w-[280px]">文件名</TableHead>
                     <TableHead className="w-[240px]">分享链接</TableHead>
-                    <TableHead className="w-[60px] text-center">类型</TableHead>
                     <TableHead className="w-[70px] text-center">大小</TableHead>
                     <TableHead className="w-[60px] text-center">有效期</TableHead>
                     <TableHead className="w-[70px] text-center">链接状态</TableHead>
@@ -951,16 +976,23 @@ export default function ShareRecordsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm truncate" title={record.file_name}>
-                            {record.tmdb_title || record.file_name}
-                          </span>
-                          {/* 只有当有 TMDB 信息且是剧集时显示季集信息 */}
-                          {record.tmdb_info?.season && record.tmdb_info?.episode && (
-                            <span className="text-xs text-muted-foreground">
-                              S{String(record.tmdb_info.season).padStart(2, '0')}E{String(record.tmdb_info.episode).padStart(2, '0')}
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const fileType = getFileType(record.file_name, record.content_type)
+                            const FileIcon = fileType.icon
+                            return <FileIcon className={`h-4 w-4 flex-shrink-0 ${fileType.color}`} />
+                          })()}
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <span className="font-medium text-sm truncate" title={record.file_name}>
+                              {record.tmdb_title || record.file_name}
                             </span>
-                          )}
+                            {/* 只有当有 TMDB 信息且是剧集时显示季集信息 */}
+                            {record.tmdb_info?.season && record.tmdb_info?.episode && (
+                              <span className="text-xs text-muted-foreground">
+                                S{String(record.tmdb_info.season).padStart(2, '0')}E{String(record.tmdb_info.episode).padStart(2, '0')}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -1043,9 +1075,6 @@ export default function ShareRecordsPage() {
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {getContentTypeBadge(record.content_type)}
                       </TableCell>
                       <TableCell className="text-sm text-center">
                         {formatFileSize(record.file_size, record.content_type)}
