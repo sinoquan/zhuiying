@@ -933,7 +933,7 @@ export default function FileMonitorPage() {
 
       {/* 创建/编辑对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-[1400px] w-[98vw] h-[90vh] flex flex-col p-0 gap-0">
+        <DialogContent className="sm:max-w-[1400px] w-[98vw] h-[90vh] flex flex-col p-0 gap-0">
           {/* 标题区域 */}
           <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
             <DialogTitle className="text-lg font-semibold">
