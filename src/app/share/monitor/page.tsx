@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Table,
   TableBody,
@@ -87,8 +88,13 @@ interface CloudDrive {
 interface PushChannel {
   id: number
   channel_name: string
-  channel_type: string
-  cloud_drive_id?: number | null
+  target_name?: string
+  channel_type: 'telegram' | 'qq' | 'wechat'
+  config?: {
+    chat_id?: string
+    webhook_url?: string
+  } | null
+  is_active?: boolean
 }
 
 interface CloudFile {
@@ -997,53 +1003,107 @@ export default function FileMonitorPage() {
                 )}
               </div>
               
-              {/* 推送渠道 - 多选开关 */}
+              {/* 推送渠道 - 按渠道类型分组选择 */}
               <div className="grid gap-2">
-                <div className="flex items-center justify-between">
-                  <Label>推送渠道</Label>
-                  {availableChannels.length > 0 && (
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => toggleAllChannels(formData.push_channel_ids.length !== availableChannels.length)}
-                      className="text-xs h-6"
-                    >
-                      {formData.push_channel_ids.length === availableChannels.length ? '取消全选' : '全选'}
-                    </Button>
-                  )}
-                </div>
+                <Label>推送渠道</Label>
                 {availableChannels.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-2 p-3 border rounded-lg bg-muted/30">
-                    {Object.entries(
-                      availableChannels.reduce((acc, ch) => {
-                        if (!acc[ch.channel_type]) acc[ch.channel_type] = []
-                        acc[ch.channel_type].push(ch)
-                        return acc
-                      }, {} as Record<string, PushChannel[]>)
-                    ).map(([type, typeChannels]) => (
-                      <div key={type} className="space-y-1.5">
-                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                          <span className="w-3 h-3 flex items-center justify-center">
-                            {getPushChannelIcon(type)}
-                          </span>
-                          {channelTypeLabels[type]}
+                  <div className="space-y-2">
+                    {['telegram', 'qq', 'wechat'].map(channelType => {
+                      const typeChannels = availableChannels.filter(c => c.channel_type === channelType)
+                      if (typeChannels.length === 0) return null
+                      
+                      const typeLabels: Record<string, string> = {
+                        telegram: '📱 Telegram',
+                        qq: '💬 QQ',
+                        wechat: '💚 微信'
+                      }
+                      
+                      const selectedInType = formData.push_channel_ids.filter(id => 
+                        typeChannels.some(c => c.id === id)
+                      )
+                      const isChannelEnabled = selectedInType.length > 0
+                      const isAllSelected = selectedInType.length === typeChannels.length
+                      
+                      return (
+                        <div key={channelType} className="border rounded-lg overflow-hidden">
+                          {/* 渠道类型头部 */}
+                          <div className="flex items-center justify-between p-2 bg-muted/50">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{typeLabels[channelType]}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {typeChannels.length}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isChannelEnabled && typeChannels.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (isAllSelected) {
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        push_channel_ids: prev.push_channel_ids.filter(id => !typeChannels.some(c => c.id === id))
+                                      }))
+                                    } else {
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        push_channel_ids: [...new Set([...prev.push_channel_ids, ...typeChannels.map(c => c.id)])]
+                                      }))
+                                    }
+                                  }}
+                                  className="text-xs text-muted-foreground hover:text-foreground"
+                                >
+                                  {isAllSelected ? '取消全选' : '全选'}
+                                </button>
+                              )}
+                              <Switch
+                                checked={isChannelEnabled}
+                                onCheckedChange={(enabled) => {
+                                  if (enabled) {
+                                    // 启用时，默认全选该渠道下的目标
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      push_channel_ids: [...new Set([...prev.push_channel_ids, ...typeChannels.map(c => c.id)])]
+                                    }))
+                                  } else {
+                                    // 禁用时，移除该渠道下的所有目标
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      push_channel_ids: prev.push_channel_ids.filter(id => !typeChannels.some(c => c.id === id))
+                                    }))
+                                  }
+                                }}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* 目标列表 */}
+                          {isChannelEnabled && (
+                            <div className="p-2 space-y-1 bg-background">
+                              {typeChannels.map(ch => (
+                                <label
+                                  key={ch.id}
+                                  className="flex items-center gap-2 p-1.5 rounded cursor-pointer hover:bg-muted/50 text-sm"
+                                >
+                                  <Checkbox
+                                    checked={formData.push_channel_ids.includes(ch.id)}
+                                    onCheckedChange={() => toggleChannel(ch.id)}
+                                  />
+                                  <span className="truncate">{ch.target_name || ch.channel_name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        {typeChannels.map(ch => (
-                          <label 
-                            key={ch.id} 
-                            className="flex items-center gap-2 p-2 rounded border bg-background cursor-pointer hover:bg-accent text-sm"
-                          >
-                            <Switch
-                              checked={formData.push_channel_ids.includes(ch.id)}
-                              onCheckedChange={() => toggleChannel(ch.id)}
-                              className="data-[state=checked]:bg-blue-500"
-                            />
-                            <span className="truncate">{ch.channel_name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ))}
+                      )
+                    })}
+                    
+                    {/* 已选择统计 */}
+                    {formData.push_channel_ids.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        已选择 {formData.push_channel_ids.length} 个推送目标
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/30">

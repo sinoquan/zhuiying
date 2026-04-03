@@ -11,8 +11,10 @@ export async function PUT(
     const body = await request.json()
     const client = getSupabaseClient()
     
-    const updateData: Record<string, any> = {}
+    const updateData: Record<string, unknown> = {}
     
+    // 兼容 target_name 和 channel_name
+    if (body.target_name !== undefined) updateData.channel_name = body.target_name
     if (body.channel_name !== undefined) updateData.channel_name = body.channel_name
     if (body.config !== undefined) updateData.config = body.config
     if (body.is_active !== undefined) updateData.is_active = body.is_active
@@ -26,7 +28,11 @@ export async function PUT(
     
     if (error) throw new Error(`更新推送渠道失败: ${error.message}`)
     
-    return NextResponse.json(data)
+    // 返回时转换为 target_name
+    return NextResponse.json({
+      ...data,
+      target_name: data?.channel_name,
+    })
   } catch (error) {
     console.error('更新推送渠道失败:', error)
     return NextResponse.json(
