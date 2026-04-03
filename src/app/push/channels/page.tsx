@@ -433,85 +433,26 @@ export default function PushChannelsPage() {
             </CardContent>
           </Card>
 
-          {/* 从 Bot 获取频道列表 */}
-          {botToken && (
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base">频道/群组列表</CardTitle>
-                    <CardDescription>从 Bot 获取已加入的频道和群组，快速添加为推送目标</CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={fetchTelegramChannels} disabled={loadingChannels}>
-                    {loadingChannels ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                    <span className="ml-2">刷新列表</span>
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {telegramChannels.length === 0 && telegramGroups.length === 0 ? (
-                  <div className="text-center py-6 text-muted-foreground text-sm">
-                    点击"刷新列表"获取 Bot 所在的频道和群组
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {telegramChannels.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground mb-2">频道 ({telegramChannels.length})</p>
-                        <div className="grid gap-2">
-                          {telegramChannels.map(ch => (
-                            <div key={ch.id} className="flex items-center justify-between p-2 rounded border bg-muted/30">
-                              <div>
-                                <p className="text-sm font-medium">{ch.title}</p>
-                                <p className="text-xs text-muted-foreground">{ch.username ? `@${ch.username}` : '私有'}</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <code className="text-xs bg-background px-2 py-1 rounded">{ch.chat_id}</code>
-                                <Button size="sm" variant="outline" onClick={() => quickAddFromChannel(ch)}>
-                                  <Plus className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {telegramGroups.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground mb-2">群组 ({telegramGroups.length})</p>
-                        <div className="grid gap-2">
-                          {telegramGroups.map(gr => (
-                            <div key={gr.id} className="flex items-center justify-between p-2 rounded border bg-muted/30">
-                              <div>
-                                <p className="text-sm font-medium">{gr.title}</p>
-                                <p className="text-xs text-muted-foreground">{gr.username ? `@${gr.username}` : '私有'}</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <code className="text-xs bg-background px-2 py-1 rounded">{gr.chat_id}</code>
-                                <Button size="sm" variant="outline" onClick={() => quickAddFromChannel(gr)}>
-                                  <Plus className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Telegram 推送目标列表 */}
+          {/* 推送目标列表 */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">推送目标</CardTitle>
-                <Button size="sm" onClick={openAddDialog}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  添加目标
-                </Button>
+                <div>
+                  <CardTitle className="text-base">推送目标</CardTitle>
+                  <CardDescription>已添加的频道或群组</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  {botToken && (
+                    <Button variant="outline" size="sm" onClick={fetchTelegramChannels} disabled={loadingChannels}>
+                      {loadingChannels ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      <span className="ml-2">从Bot获取</span>
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={openAddDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加目标
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -519,37 +460,24 @@ export default function PushChannelsPage() {
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-              ) : targetsByType.telegram.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  暂无 Telegram 推送目标
-                </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>名称</TableHead>
-                      <TableHead>Chat ID</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead className="text-right">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {targetsByType.telegram.map(target => (
-                      <TableRow key={target.id}>
-                        <TableCell className="font-medium">{target.target_name}</TableCell>
-                        <TableCell>
-                          <code className="text-xs bg-muted px-2 py-1 rounded">
-                            {target.config?.chat_id || '-'}
-                          </code>
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={target.is_active}
-                            onCheckedChange={() => handleToggle(target)}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
+                <div className="space-y-4">
+                  {/* 已添加的推送目标 */}
+                  {targetsByType.telegram.length > 0 && (
+                    <div className="space-y-2">
+                      {targetsByType.telegram.map(target => (
+                        <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{target.target_name}</span>
+                              <code className="text-xs text-muted-foreground">{target.config?.chat_id || '-'}</code>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={target.is_active}
+                              onCheckedChange={() => handleToggle(target)}
+                            />
                             <Button variant="ghost" size="sm" onClick={() => handleTest(target)} disabled={testingTarget === target.id}>
                               {testingTarget === target.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                             </Button>
@@ -560,11 +488,54 @@ export default function PushChannelsPage() {
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 从 Bot 获取的可添加频道 */}
+                  {(telegramChannels.length > 0 || telegramGroups.length > 0) && (
+                    <div className="pt-2 border-t">
+                      <p className="text-sm text-muted-foreground mb-2">可添加的频道/群组</p>
+                      <div className="space-y-1">
+                        {[...telegramChannels, ...telegramGroups].map(ch => {
+                          // 检查是否已添加
+                          const isAdded = targetsByType.telegram.some(
+                            t => t.config?.chat_id === ch.chat_id
+                          )
+                          if (isAdded) return null
+                          
+                          return (
+                            <div key={ch.id} className="flex items-center justify-between p-2 rounded border bg-muted/30">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {ch.type === 'channel' ? '频道' : '群组'}
+                                </Badge>
+                                <span className="text-sm">{ch.title}</span>
+                                <code className="text-xs text-muted-foreground">{ch.chat_id}</code>
+                              </div>
+                              <Button size="sm" variant="outline" onClick={() => quickAddFromChannel(ch)}>
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 空状态 */}
+                  {targetsByType.telegram.length === 0 && telegramChannels.length === 0 && telegramGroups.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>暂无推送目标</p>
+                      <p className="text-sm mt-1">
+                        {botToken 
+                          ? '点击"从Bot获取"或"添加目标"添加' 
+                          : '请先配置 Bot Token'}
+                      </p>
+                    </div>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
