@@ -6,52 +6,71 @@ import { PushChannelType, PushChannelConfig, IPushService } from './types'
 import { TelegramPushService } from './telegram'
 import { QQPushService } from './qq'
 import { WechatPushService } from './wechat'
-
-// 推送服务映射
-const serviceMap: Record<PushChannelType, new (config: PushChannelConfig) => IPushService> = {
-  telegram: TelegramPushService,
-  qq: QQPushService,
-  wechat: WechatPushService,
-}
+import { DingTalkPushService } from './dingtalk'
+import { FeishuPushService } from './feishu'
+import { BarkPushService } from './bark'
+import { ServerChanPushService } from './serverchan'
 
 // 推送渠道名称
 export const channelNames: Record<PushChannelType, string> = {
   telegram: 'Telegram',
   qq: 'QQ',
   wechat: '微信',
+  dingtalk: '钉钉',
+  feishu: '飞书',
+  bark: 'Bark',
+  serverchan: 'Server酱',
 }
 
 // 推送渠道配置字段
 export const channelConfigFields: Record<PushChannelType, { key: string; label: string; required: boolean }[]> = {
   telegram: [
-    { key: 'bot_token', label: 'Bot Token', required: true },
     { key: 'chat_id', label: 'Chat ID', required: true },
   ],
   qq: [
     { key: 'webhook_url', label: 'Webhook URL', required: true },
-    { key: 'chat_id', label: 'QQ号', required: false },
-    { key: 'group_id', label: '群号', required: false },
   ],
   wechat: [
-    { key: 'webhook_url', label: '企业微信 Webhook URL', required: true },
-    { key: 'mentioned_list', label: '提醒成员(@成员ID，逗号分隔)', required: false },
+    { key: 'webhook_url', label: 'Webhook URL', required: true },
+  ],
+  dingtalk: [
+    { key: 'webhook_url', label: 'Webhook URL', required: true },
+    { key: 'secret', label: '加签密钥', required: false },
+  ],
+  feishu: [
+    { key: 'webhook_url', label: 'Webhook URL', required: true },
+  ],
+  bark: [
+    { key: 'device_key', label: 'Device Key', required: true },
+    { key: 'server_url', label: '服务器地址(可选)', required: false },
+  ],
+  serverchan: [
+    { key: 'send_key', label: 'Send Key', required: true },
   ],
 }
 
 /**
  * 创建推送服务实例
  */
-export function createPushService(
-  type: PushChannelType,
-  config: PushChannelConfig
-): IPushService {
-  const ServiceClass = serviceMap[type]
-  
-  if (!ServiceClass) {
-    throw new Error(`不支持的推送渠道: ${type}`)
+export function createPushService(type: PushChannelType, config: PushChannelConfig): IPushService {
+  switch (type) {
+    case 'telegram':
+      return new TelegramPushService(config)
+    case 'qq':
+      return new QQPushService(config)
+    case 'wechat':
+      return new WechatPushService(config)
+    case 'dingtalk':
+      return new DingTalkPushService(config)
+    case 'feishu':
+      return new FeishuPushService(config)
+    case 'bark':
+      return new BarkPushService(config as { server_url?: string; device_key?: string })
+    case 'serverchan':
+      return new ServerChanPushService(config as { send_key?: string })
+    default:
+      throw new Error(`不支持的推送渠道: ${type}`)
   }
-  
-  return new ServiceClass(config)
 }
 
 /**
@@ -75,7 +94,7 @@ export async function testPushConnection(
 export async function sendPushMessage(
   type: PushChannelType,
   config: PushChannelConfig,
-  message: { title: string; content: string; url?: string; code?: string; extra?: Record<string, any> }
+  message: { title: string; content: string; url?: string; code?: string; extra?: Record<string, unknown> }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const service = createPushService(type, config)
@@ -94,3 +113,7 @@ export * from './types'
 export { TelegramPushService } from './telegram'
 export { QQPushService } from './qq'
 export { WechatPushService } from './wechat'
+export { DingTalkPushService } from './dingtalk'
+export { FeishuPushService } from './feishu'
+export { BarkPushService } from './bark'
+export { ServerChanPushService } from './serverchan'

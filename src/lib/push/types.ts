@@ -77,7 +77,7 @@ export interface IPushService {
 }
 
 // 推送渠道类型
-export type PushChannelType = 'telegram' | 'qq' | 'wechat'
+export type PushChannelType = 'telegram' | 'qq' | 'wechat' | 'dingtalk' | 'feishu' | 'bark' | 'serverchan'
 
 // 模板内容类型
 export type TemplateContentType = 'movie' | 'tv_series' | 'completed'
@@ -123,6 +123,34 @@ export const CHANNEL_CAPABILITIES: Record<PushChannelType, {
     supportsMarkdown: false,
     maxContentLength: 2048,
     description: '纯文本，建议精简内容'
+  },
+  dingtalk: {
+    name: '钉钉',
+    supportsImage: true,
+    supportsMarkdown: true,
+    maxContentLength: 20000,
+    description: '支持Markdown和图片'
+  },
+  feishu: {
+    name: '飞书',
+    supportsImage: true,
+    supportsMarkdown: true,
+    maxContentLength: 30000,
+    description: '支持富文本和图片卡片'
+  },
+  bark: {
+    name: 'Bark',
+    supportsImage: true,
+    supportsMarkdown: false,
+    maxContentLength: 4096,
+    description: 'iOS推送，支持图片'
+  },
+  serverchan: {
+    name: 'Server酱',
+    supportsImage: true,
+    supportsMarkdown: true,
+    maxContentLength: 65536,
+    description: '微信推送，支持Markdown'
   }
 }
 
@@ -208,6 +236,138 @@ export const DEFAULT_TEMPLATES: Record<PushChannelType, Record<TemplateContentTy
 ━━━━━━━━━━━━
 🔗 {share_url}
 🔑 {share_code}`,
+  },
+  dingtalk: {
+    movie: `🎬 **电影：{title} ({year})**
+🍿 TMDB ID: {tmdb_id}
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+🎥 画质: {quality}
+💾 大小: {file_size}
+👥 主演: {cast}
+📝 简介: {overview}
+🔗 {drive_name}: {share_url}
+🔑 密码: {share_code}`,
+    tv_series: `📺 **电视剧：{title} ({year}) - S{season:02d}E{episode:02d}**
+🍿 TMDB ID: {tmdb_id}
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+📊 进度: {progress_bar} {progress_percent} ({episode}/{total_episodes}集)
+🔄 状态: {status}
+🎥 画质: {quality}
+💾 大小: {file_size}
+👥 主演: {cast}
+📝 简介: {overview}
+🔗 {drive_name}: {share_url}
+🔑 密码: {share_code}`,
+    completed: `📺 **电视剧：{title} ({year}) - 完结打包**
+🍿 TMDB ID: {tmdb_id}
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+🎥 画质: {quality}
+📦 文件: {file_count} 个
+💾 大小: {file_size}
+👥 主演: {cast}
+📝 简介: {overview}
+🔗 {drive_name}: {share_url}
+🔑 密码: {share_code}`,
+  },
+  feishu: {
+    movie: `🎬 **电影：{title} ({year})**
+🍿 TMDB ID: {tmdb_id}
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+🎥 画质: {quality}
+💾 大小: {file_size}
+👥 主演: {cast}
+📝 简介: {overview}
+🔗 {drive_name}: {share_url}
+🔑 密码: {share_code}`,
+    tv_series: `📺 **电视剧：{title} ({year}) - S{season:02d}E{episode:02d}**
+🍿 TMDB ID: {tmdb_id}
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+📊 进度: {progress_bar} {progress_percent} ({episode}/{total_episodes}集)
+🔄 状态: {status}
+🎥 画质: {quality}
+💾 大小: {file_size}
+👥 主演: {cast}
+📝 简介: {overview}
+🔗 {drive_name}: {share_url}
+🔑 密码: {share_code}`,
+    completed: `📺 **电视剧：{title} ({year}) - 完结打包**
+🍿 TMDB ID: {tmdb_id}
+⭐️ 评分: {rating}
+🎭 类型: {genres}
+🎥 画质: {quality}
+📦 文件: {file_count} 个
+💾 大小: {file_size}
+👥 主演: {cast}
+📝 简介: {overview}
+🔗 {drive_name}: {share_url}
+🔑 密码: {share_code}`,
+  },
+  bark: {
+    movie: `🎬 {title} ({year})
+⭐️ {rating} | 🎭 {genres}
+🎥 {quality} | 💾 {file_size}
+🔗 {share_url} 密码:{share_code}`,
+    tv_series: `📺 {title} S{season:02d}E{episode:02d}
+⭐️ {rating} | 🎭 {genres}
+📊 {progress_percent} ({episode}/{total_episodes})
+🎥 {quality}
+🔗 {share_url} 密码:{share_code}`,
+    completed: `📺 {title} - 完结
+⭐️ {rating} | 🎭 {genres}
+📦 {file_count}文件 | 💾 {file_size}
+🔗 {share_url} 密码:{share_code}`,
+  },
+  serverchan: {
+    movie: `## 🎬 电影：{title} ({year})
+
+**TMDB ID**: {tmdb_id}
+**评分**: {rating}
+**类型**: {genres}
+**画质**: {quality}
+**大小**: {file_size}
+**主演**: {cast}
+
+> {overview}
+
+**下载链接**: {drive_name}
+🔗 {share_url}
+🔑 密码: {share_code}`,
+    tv_series: `## 📺 电视剧：{title} ({year}) - S{season:02d}E{episode:02d}
+
+**TMDB ID**: {tmdb_id}
+**评分**: {rating}
+**类型**: {genres}
+**进度**: {progress_bar} {progress_percent} ({episode}/{total_episodes}集)
+**状态**: {status}
+**画质**: {quality}
+**大小**: {file_size}
+**主演**: {cast}
+
+> {overview}
+
+**下载链接**: {drive_name}
+🔗 {share_url}
+🔑 密码: {share_code}`,
+    completed: `## 📺 电视剧：{title} ({year}) - 完结打包
+
+**TMDB ID**: {tmdb_id}
+**评分**: {rating}
+**类型**: {genres}
+**画质**: {quality}
+**文件数**: {file_count} 个
+**大小**: {file_size}
+**主演**: {cast}
+
+> {overview}
+
+**下载链接**: {drive_name}
+🔗 {share_url}
+🔑 密码: {share_code}`,
   },
 }
 

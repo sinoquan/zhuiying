@@ -129,6 +129,10 @@ const CHANNEL_PREFIX: Record<PushChannelType, string> = {
   telegram: 'TG-',
   qq: 'QQ-',
   wechat: '微信-',
+  dingtalk: '钉钉-',
+  feishu: '飞书-',
+  bark: 'Bark-',
+  serverchan: 'Server酱-',
 }
 
 // 预设模板配置

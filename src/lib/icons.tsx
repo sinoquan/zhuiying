@@ -5,6 +5,7 @@
 'use client'
 
 import React from 'react'
+import { Bell, Send, MessageSquare } from 'lucide-react'
 import {
   TelegramIcon,
   QQIcon,
@@ -38,6 +39,10 @@ export const pushChannelIcons: Record<string, {
   'telegram': { name: 'Telegram' },
   'qq': { name: 'QQ' },
   'wechat': { name: '微信' },
+  'dingtalk': { name: '钉钉' },
+  'feishu': { name: '飞书' },
+  'bark': { name: 'Bark' },
+  'serverchan': { name: 'Server酱' },
 }
 
 // 获取网盘名称
@@ -68,8 +73,12 @@ export function getPushChannelIcon(type: string): React.ReactNode {
     'telegram': <TelegramIcon className="h-4 w-4 text-[#0088cc]" />,
     'qq': <QQIcon className="h-4 w-4 text-[#12B7F5]" />,
     'wechat': <WechatIcon className="h-4 w-4 text-[#07C160]" />,
+    'dingtalk': <MessageSquare className="h-4 w-4 text-[#0089FF]" />,
+    'feishu': <MessageSquare className="h-4 w-4 text-[#3370FF]" />,
+    'bark': <Bell className="h-4 w-4 text-[#FF6B6B]" />,
+    'serverchan': <Send className="h-4 w-4 text-[#4A90D9]" />,
   }
-  return icons[type] || <TelegramIcon className="h-4 w-4" />
+  return icons[type] || <MessageSquare className="h-4 w-4" />
 }
 
 // 获取网盘图标组件

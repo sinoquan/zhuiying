@@ -26,10 +26,10 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { 
   Plus, Edit, Trash2, Send, Loader2, 
-  Bot, RefreshCw, Settings, Copy, Check, ExternalLink
+  RefreshCw, Check
 } from "lucide-react"
 import { toast } from "sonner"
-import { getPushChannelIcon, getPushChannelName } from "@/lib/icons"
+import { getPushChannelIcon } from "@/lib/icons"
 
 // 渠道图标组件
 function ChannelIcon({ type, size = 16 }: { type: ChannelType; size?: number }) {
@@ -48,6 +48,10 @@ const CHANNEL_TYPES = [
   { id: 'telegram', name: 'Telegram' },
   { id: 'qq', name: 'QQ' },
   { id: 'wechat', name: '微信' },
+  { id: 'dingtalk', name: '钉钉' },
+  { id: 'feishu', name: '飞书' },
+  { id: 'bark', name: 'Bark' },
+  { id: 'serverchan', name: 'Server酱' },
 ] as const
 
 type ChannelType = typeof CHANNEL_TYPES[number]['id']
@@ -59,8 +63,16 @@ interface PushTarget {
   config: {
     chat_id?: string
     webhook_url?: string
+    device_key?: string
+    send_key?: string
+    secret?: string
+    server_url?: string
   } | null
   is_active: boolean
+  success_count?: number
+  fail_count?: number
+  last_push_at?: string
+  last_push_status?: string
   created_at: string
 }
 
@@ -86,6 +98,10 @@ export default function PushChannelsPage() {
     target_name: "",
     chat_id: "",
     webhook_url: "",
+    device_key: "",
+    send_key: "",
+    secret: "",
+    server_url: "",
   })
 
   // Telegram 特有配置
@@ -232,7 +248,15 @@ export default function PushChannelsPage() {
   // 打开添加对话框
   const openAddDialog = () => {
     setEditingTarget(null)
-    setFormData({ target_name: "", chat_id: "", webhook_url: "" })
+    setFormData({ 
+      target_name: "", 
+      chat_id: "", 
+      webhook_url: "", 
+      device_key: "", 
+      send_key: "", 
+      secret: "", 
+      server_url: "" 
+    })
     setDialogOpen(true)
   }
 
@@ -243,6 +267,10 @@ export default function PushChannelsPage() {
       target_name: target.target_name,
       chat_id: target.config?.chat_id || "",
       webhook_url: target.config?.webhook_url || "",
+      device_key: target.config?.device_key || "",
+      send_key: target.config?.send_key || "",
+      secret: target.config?.secret || "",
+      server_url: target.config?.server_url || "",
     })
     setDialogOpen(true)
   }
@@ -256,20 +284,45 @@ export default function PushChannelsPage() {
       return
     }
 
+    // 根据渠道类型验证必填字段
     if (activeTab === 'telegram' && !formData.chat_id) {
       toast.error("请输入 Chat ID")
       return
     }
-
-    if (activeTab !== 'telegram' && !formData.webhook_url) {
+    if (activeTab === 'bark' && !formData.device_key) {
+      toast.error("请输入 Device Key")
+      return
+    }
+    if (activeTab === 'serverchan' && !formData.send_key) {
+      toast.error("请输入 Send Key")
+      return
+    }
+    if (['qq', 'wechat', 'dingtalk', 'feishu'].includes(activeTab) && !formData.webhook_url) {
       toast.error("请输入 Webhook URL")
       return
     }
 
     try {
-      const config = activeTab === 'telegram' 
-        ? { chat_id: formData.chat_id }
-        : { webhook_url: formData.webhook_url }
+      // 根据渠道类型构建配置
+      let config: Record<string, string | undefined> = {}
+      
+      if (activeTab === 'telegram') {
+        config = { chat_id: formData.chat_id }
+      } else if (activeTab === 'bark') {
+        config = { 
+          server_url: formData.server_url || 'https://api.day.app',
+          device_key: formData.device_key 
+        }
+      } else if (activeTab === 'serverchan') {
+        config = { send_key: formData.send_key }
+      } else if (activeTab === 'dingtalk') {
+        config = { 
+          webhook_url: formData.webhook_url,
+          secret: formData.secret 
+        }
+      } else {
+        config = { webhook_url: formData.webhook_url }
+      }
 
       const payload = {
         channel_type: activeTab,
@@ -334,6 +387,57 @@ export default function PushChannelsPage() {
     } finally {
       setTestingTarget(null)
     }
+  }
+
+  // 一键测试所有激活的推送目标
+  const [testingAll, setTestingAll] = useState(false)
+  const handleTestAll = async () => {
+    const activeTargets = (targetsByType[activeTab] || []).filter(t => t.is_active)
+    if (activeTargets.length === 0) {
+      toast.error("没有启用的推送目标")
+      return
+    }
+    
+    setTestingAll(true)
+    let successCount = 0
+    let failCount = 0
+    
+    for (const target of activeTargets) {
+      try {
+        const response = await fetch(`/api/push/channels/${target.id}/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: {
+              title: "🔔 批量测试推送",
+              content: `来自「${target.target_name}」的测试消息\n\n批量测试中...`,
+            },
+          }),
+        })
+        
+        const data = await response.json()
+        if (response.ok && data.success) {
+          successCount++
+        } else {
+          failCount++
+        }
+      } catch {
+        failCount++
+      }
+    }
+    
+    setTestingAll(false)
+    
+    if (failCount === 0) {
+      toast.success(`全部测试成功 (${successCount}个)`)
+    } else if (successCount === 0) {
+      toast.error(`全部测试失败 (${failCount}个)`)
+    } else {
+      toast(`测试完成：成功 ${successCount} 个，失败 ${failCount} 个`, { icon: "⚠️" })
+    }
+    
+    // 刷新列表以更新统计
+    fetchTargets()
   }
 
   // 切换启用状态
@@ -476,9 +580,22 @@ export default function PushChannelsPage() {
                       {targetsByType.telegram.map(target => (
                         <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
                           <div className="flex items-center gap-3">
-                            <div className="flex flex-col">
-                              <span className="font-medium">{target.target_name}</span>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{target.target_name}</span>
+                                {!target.is_active && (
+                                  <Badge variant="secondary" className="text-xs">已禁用</Badge>
+                                )}
+                              </div>
                               <code className="text-xs text-muted-foreground">{target.config?.chat_id || '-'}</code>
+                              {/* 统计信息 */}
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                                <span className="text-green-600">✓ {target.success_count || 0}</span>
+                                <span className="text-red-500">✗ {target.fail_count || 0}</span>
+                                {target.last_push_at && (
+                                  <span>最后推送: {new Date(target.last_push_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -536,7 +653,7 @@ export default function PushChannelsPage() {
                   {telegramHint && telegramChannels.length === 0 && telegramGroups.length === 0 && (
                     <div className="text-center py-4 text-sm text-muted-foreground border-t">
                       <p className="mb-2">{telegramHint}</p>
-                      <p className="text-xs">或直接点击"添加目标"手动输入 Chat ID</p>
+                      <p className="text-xs">或直接点击&ldquo;添加目标&rdquo;手动输入 Chat ID</p>
                     </div>
                   )}
 
@@ -563,10 +680,16 @@ export default function PushChannelsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">推送目标</CardTitle>
-                <Button size="sm" onClick={openAddDialog}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  添加目标
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handleTestAll} disabled={testingAll || targetsByType.qq.length === 0}>
+                    {testingAll ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                    一键测试
+                  </Button>
+                  <Button size="sm" onClick={openAddDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加目标
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -584,6 +707,7 @@ export default function PushChannelsPage() {
                     <TableRow>
                       <TableHead>名称</TableHead>
                       <TableHead>Webhook URL</TableHead>
+                      <TableHead>统计</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
@@ -596,6 +720,19 @@ export default function PushChannelsPage() {
                           <code className="text-xs bg-muted px-2 py-1 rounded max-w-[200px] truncate block">
                             {target.config?.webhook_url || '-'}
                           </code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="text-green-600">✓ {target.success_count || 0}</span>
+                              <span className="text-red-500">✗ {target.fail_count || 0}</span>
+                            </div>
+                            {target.last_push_at && (
+                              <span className="text-muted-foreground">
+                                {new Date(target.last_push_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Switch
@@ -631,10 +768,16 @@ export default function PushChannelsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">推送目标</CardTitle>
-                <Button size="sm" onClick={openAddDialog}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  添加目标
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handleTestAll} disabled={testingAll || targetsByType.wechat.length === 0}>
+                    {testingAll ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                    一键测试
+                  </Button>
+                  <Button size="sm" onClick={openAddDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加目标
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -652,6 +795,7 @@ export default function PushChannelsPage() {
                     <TableRow>
                       <TableHead>名称</TableHead>
                       <TableHead>Webhook URL</TableHead>
+                      <TableHead>统计</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
@@ -664,6 +808,19 @@ export default function PushChannelsPage() {
                           <code className="text-xs bg-muted px-2 py-1 rounded max-w-[200px] truncate block">
                             {target.config?.webhook_url || '-'}
                           </code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="text-green-600">✓ {target.success_count || 0}</span>
+                              <span className="text-red-500">✗ {target.fail_count || 0}</span>
+                            </div>
+                            {target.last_push_at && (
+                              <span className="text-muted-foreground">
+                                {new Date(target.last_push_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Switch
@@ -687,7 +844,279 @@ export default function PushChannelsPage() {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+	                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 钉钉配置 */}
+        <TabsContent value="dingtalk" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">推送目标</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handleTestAll} disabled={testingAll || (targetsByType.dingtalk?.length || 0) === 0}>
+                    {testingAll ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                    一键测试
+                  </Button>
+                  <Button size="sm" onClick={openAddDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加目标
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : targetsByType.dingtalk?.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  暂无钉钉推送目标
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {targetsByType.dingtalk?.map(target => (
+                    <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{target.target_name}</span>
+                          {!target.is_active && (
+                            <Badge variant="secondary" className="text-xs">已禁用</Badge>
+                          )}
+                        </div>
+                        <code className="text-xs text-muted-foreground truncate max-w-[300px]">{target.config?.webhook_url || '-'}</code>
+                        {/* 统计信息 */}
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                          <span className="text-green-600">✓ {target.success_count || 0}</span>
+                          <span className="text-red-500">✗ {target.fail_count || 0}</span>
+                          {target.last_push_at && (
+                            <span>最后推送: {new Date(target.last_push_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={target.is_active} onCheckedChange={() => handleToggle(target)} />
+                        <Button variant="ghost" size="sm" onClick={() => handleTest(target)} disabled={testingTarget === target.id}>
+                          {testingTarget === target.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(target)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(target)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 飞书配置 */}
+        <TabsContent value="feishu" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">推送目标</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handleTestAll} disabled={testingAll || (targetsByType.feishu?.length || 0) === 0}>
+                    {testingAll ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                    一键测试
+                  </Button>
+                  <Button size="sm" onClick={openAddDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加目标
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : targetsByType.feishu?.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  暂无飞书推送目标
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {targetsByType.feishu?.map(target => (
+                    <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{target.target_name}</span>
+                          {!target.is_active && (
+                            <Badge variant="secondary" className="text-xs">已禁用</Badge>
+                          )}
+                        </div>
+                        <code className="text-xs text-muted-foreground truncate max-w-[300px]">{target.config?.webhook_url || '-'}</code>
+                        {/* 统计信息 */}
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                          <span className="text-green-600">✓ {target.success_count || 0}</span>
+                          <span className="text-red-500">✗ {target.fail_count || 0}</span>
+                          {target.last_push_at && (
+                            <span>最后推送: {new Date(target.last_push_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={target.is_active} onCheckedChange={() => handleToggle(target)} />
+                        <Button variant="ghost" size="sm" onClick={() => handleTest(target)} disabled={testingTarget === target.id}>
+                          {testingTarget === target.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(target)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(target)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Bark配置 */}
+        <TabsContent value="bark" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">推送目标</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handleTestAll} disabled={testingAll || (targetsByType.bark?.length || 0) === 0}>
+                    {testingAll ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                    一键测试
+                  </Button>
+                  <Button size="sm" onClick={openAddDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加目标
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : targetsByType.bark?.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  暂无 Bark 推送目标
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {targetsByType.bark?.map(target => (
+                    <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{target.target_name}</span>
+                          {!target.is_active && (
+                            <Badge variant="secondary" className="text-xs">已禁用</Badge>
+                          )}
+                        </div>
+                        <code className="text-xs text-muted-foreground">{target.config?.device_key || '-'}</code>
+                        {/* 统计信息 */}
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                          <span className="text-green-600">✓ {target.success_count || 0}</span>
+                          <span className="text-red-500">✗ {target.fail_count || 0}</span>
+                          {target.last_push_at && (
+                            <span>最后推送: {new Date(target.last_push_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={target.is_active} onCheckedChange={() => handleToggle(target)} />
+                        <Button variant="ghost" size="sm" onClick={() => handleTest(target)} disabled={testingTarget === target.id}>
+                          {testingTarget === target.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(target)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(target)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Server酱配置 */}
+        <TabsContent value="serverchan" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">推送目标</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handleTestAll} disabled={testingAll || (targetsByType.serverchan?.length || 0) === 0}>
+                    {testingAll ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                    一键测试
+                  </Button>
+                  <Button size="sm" onClick={openAddDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加目标
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : targetsByType.serverchan?.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  暂无 Server酱 推送目标
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {targetsByType.serverchan?.map(target => (
+                    <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{target.target_name}</span>
+                          {!target.is_active && (
+                            <Badge variant="secondary" className="text-xs">已禁用</Badge>
+                          )}
+                        </div>
+                        <code className="text-xs text-muted-foreground">{target.config?.send_key ? '****' + target.config.send_key.slice(-4) : '-'}</code>
+                        {/* 统计信息 */}
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                          <span className="text-green-600">✓ {target.success_count || 0}</span>
+                          <span className="text-red-500">✗ {target.fail_count || 0}</span>
+                          {target.last_push_at && (
+                            <span>最后推送: {new Date(target.last_push_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={target.is_active} onCheckedChange={() => handleToggle(target)} />
+                        <Button variant="ghost" size="sm" onClick={() => handleTest(target)} disabled={testingTarget === target.id}>
+                          {testingTarget === target.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(target)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(target)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -726,13 +1155,69 @@ export default function PushChannelsPage() {
                     可从上方频道列表获取，或手动输入
                   </p>
                 </div>
+              ) : activeTab === 'bark' ? (
+                <>
+                  <div className="grid gap-2">
+                    <Label>服务器地址</Label>
+                    <Input
+                      value={formData.server_url}
+                      onChange={(e) => setFormData({ ...formData, server_url: e.target.value })}
+                      placeholder="如: https://api.day.app（留空使用默认）"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Device Key</Label>
+                    <Input
+                      value={formData.device_key}
+                      onChange={(e) => setFormData({ ...formData, device_key: e.target.value })}
+                      placeholder="输入 Bark 设备 Key"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      在 iOS 设备的 Bark App 中获取
+                    </p>
+                  </div>
+                </>
+              ) : activeTab === 'serverchan' ? (
+                <div className="grid gap-2">
+                  <Label>Send Key</Label>
+                  <Input
+                    value={formData.send_key}
+                    onChange={(e) => setFormData({ ...formData, send_key: e.target.value })}
+                    placeholder="输入 Server酱 SendKey"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    在 Server酱 后台获取
+                  </p>
+                </div>
+              ) : activeTab === 'dingtalk' ? (
+                <>
+                  <div className="grid gap-2">
+                    <Label>Webhook URL</Label>
+                    <Input
+                      value={formData.webhook_url}
+                      onChange={(e) => setFormData({ ...formData, webhook_url: e.target.value })}
+                      placeholder="输入钉钉机器人 Webhook 地址"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>加签密钥（可选）</Label>
+                    <Input
+                      value={formData.secret}
+                      onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
+                      placeholder="启用加签验证时填写"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      钉钉机器人安全设置中的&ldquo;加签&rdquo;密钥
+                    </p>
+                  </div>
+                </>
               ) : (
                 <div className="grid gap-2">
                   <Label>Webhook URL</Label>
                   <Input
                     value={formData.webhook_url}
                     onChange={(e) => setFormData({ ...formData, webhook_url: e.target.value })}
-                    placeholder="输入 Webhook 地址"
+                    placeholder={`输入${CHANNEL_TYPES.find(t => t.id === activeTab)?.name || ''} Webhook 地址`}
                   />
                 </div>
               )}
