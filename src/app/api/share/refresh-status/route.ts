@@ -72,8 +72,7 @@ export async function POST(request: NextRequest) {
     const updateResult = await client
       .from('share_records')
       .update({ 
-        share_status: statusInfo.status,
-        updated_at: new Date().toISOString()
+        share_status: statusInfo.status
       })
       .eq('id', share_record_id)
     

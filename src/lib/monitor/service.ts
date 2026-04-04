@@ -1489,7 +1489,6 @@ export class FileMonitorService {
         share_url: shareInfo.share_url,
         share_code: shareInfo.share_code,
         share_status: 'success',
-        updated_at: new Date().toISOString(),
       })
       .eq('id', shareRecordId)
       .select()
@@ -1668,7 +1667,6 @@ export class FileMonitorService {
             share_url: shareInfo.share_url,
             share_code: shareInfo.share_code,
             expire_at: shareInfo.expire_time,
-            updated_at: new Date().toISOString(),
           })
           .eq('id', share.id)
         
