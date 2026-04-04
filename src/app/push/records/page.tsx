@@ -13,6 +13,8 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -42,7 +44,7 @@ import {
   Bell, RefreshCw, Copy, CheckCircle2, XCircle, 
   Clock, Loader2, ChevronLeft, ChevronRight,
   Search, Send, Trash2, ExternalLink, Film, Folder,
-  Star, Calendar, HardDrive, Link2, FileText
+  Star, Calendar, HardDrive, Link2, FileText, Edit, Image as ImageIcon
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
@@ -86,6 +88,13 @@ interface ShareRecord {
     rating?: number
     season?: number
     episode?: number
+    poster_url?: string
+    backdrop_url?: string
+    overview?: string
+    genres?: string[]
+    cast?: string[]
+    total_episodes?: number
+    status?: string
   } | null
   cloud_drives: {
     id: number
@@ -112,6 +121,17 @@ interface PushRecord {
   push_channel_id: number
   share_records: ShareRecord | null
   push_channels: PushChannel | null
+}
+
+interface TMDBSearchResult {
+  id: number
+  title: string
+  original_title?: string
+  year?: number
+  type: 'movie' | 'tv'
+  poster_url?: string
+  rating?: number
+  overview?: string
 }
 
 interface Pagination {
@@ -155,6 +175,22 @@ export default function PushRecordsPage() {
   // 详情弹窗
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedRecord, setSelectedRecord] = useState<PushRecord | null>(null)
+  
+  // 编辑弹窗
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<PushRecord | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    tmdb_id: '',
+    tmdb_title: '',
+    content_type: 'movie',
+    season: '',
+    episode: '',
+  })
+  const [tmdbSearchQuery, setTmdbSearchQuery] = useState('')
+  const [tmdbSearchResults, setTmdbSearchResults] = useState<TMDBSearchResult[]>([])
+  const [tmdbSearching, setTmdbSearching] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [repushing, setRepushing] = useState(false)
 
   // 加载推送渠道列表
   useEffect(() => {
@@ -308,6 +344,162 @@ export default function PushRecordsPage() {
   const openDetail = (record: PushRecord) => {
     setSelectedRecord(record)
     setDetailDialogOpen(true)
+  }
+  
+  // 打开编辑弹窗
+  const openEdit = (record: PushRecord) => {
+    setEditingRecord(record)
+    const share = record.share_records
+    setEditFormData({
+      tmdb_id: share?.tmdb_id?.toString() || '',
+      tmdb_title: share?.tmdb_title || share?.file_name || '',
+      content_type: share?.content_type || 'movie',
+      season: share?.tmdb_info?.season?.toString() || '',
+      episode: share?.tmdb_info?.episode?.toString() || '',
+    })
+    setTmdbSearchResults([])
+    setTmdbSearchQuery('')
+    setEditDialogOpen(true)
+  }
+  
+  // 搜索 TMDB
+  const searchTMDB = async (query: string) => {
+    if (!query.trim()) {
+      setTmdbSearchResults([])
+      return
+    }
+    
+    setTmdbSearching(true)
+    try {
+      const response = await fetch(`/api/tmdb/search?query=${encodeURIComponent(query)}`)
+      const data = await response.json()
+      setTmdbSearchResults(data.results || [])
+    } catch (error) {
+      console.error('TMDB 搜索失败:', error)
+      toast.error('TMDB 搜索失败')
+    } finally {
+      setTmdbSearching(false)
+    }
+  }
+  
+  // 选择 TMDB 结果
+  const selectTMDBResult = (result: TMDBSearchResult) => {
+    setEditFormData(prev => ({
+      ...prev,
+      tmdb_id: result.id.toString(),
+      tmdb_title: result.title + (result.year ? ` (${result.year})` : ''),
+      content_type: result.type,
+    }))
+    setTmdbSearchResults([])
+    setTmdbSearchQuery('')
+  }
+  
+  // 保存编辑
+  const saveEdit = async () => {
+    if (!editingRecord?.share_records?.id) {
+      toast.error('分享记录不存在')
+      return
+    }
+    
+    setSaving(true)
+    try {
+      const shareRecordId = editingRecord.share_records.id
+      
+      // 更新分享记录
+      const response = await fetch('/api/share/records', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: shareRecordId,
+          tmdb_id: editFormData.tmdb_id ? parseInt(editFormData.tmdb_id) : null,
+          tmdb_title: editFormData.tmdb_title,
+          tmdb_info: {
+            ...editingRecord.share_records?.tmdb_info,
+            season: editFormData.season ? parseInt(editFormData.season) : undefined,
+            episode: editFormData.episode ? parseInt(editFormData.episode) : undefined,
+          },
+          content_type: editFormData.content_type,
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        toast.success('保存成功')
+        setEditDialogOpen(false)
+        fetchRecords()
+      } else {
+        toast.error(result.error || '保存失败')
+      }
+    } catch (error) {
+      console.error('保存失败:', error)
+      toast.error('保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+  
+  // 保存并重新推送
+  const saveAndRepush = async () => {
+    if (!editingRecord?.share_records?.id) {
+      toast.error('分享记录不存在')
+      return
+    }
+    
+    setSaving(true)
+    try {
+      const shareRecordId = editingRecord.share_records.id
+      
+      // 更新分享记录
+      const response = await fetch('/api/share/records', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: shareRecordId,
+          tmdb_id: editFormData.tmdb_id ? parseInt(editFormData.tmdb_id) : null,
+          tmdb_title: editFormData.tmdb_title,
+          tmdb_info: {
+            ...editingRecord.share_records?.tmdb_info,
+            season: editFormData.season ? parseInt(editFormData.season) : undefined,
+            episode: editFormData.episode ? parseInt(editFormData.episode) : undefined,
+          },
+          content_type: editFormData.content_type,
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        // 然后重新推送
+        setRepushing(true)
+        const repushResponse = await fetch('/api/monitor/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'repush',
+            push_record_id: editingRecord.id
+          })
+        })
+        
+        const repushResult = await repushResponse.json()
+        
+        if (repushResult.success) {
+          toast.success('保存并重新推送成功')
+          setEditDialogOpen(false)
+          fetchRecords()
+        } else {
+          toast.error(repushResult.error || '重新推送失败')
+        }
+      } else {
+        toast.error(result.error || '保存失败')
+      }
+    } catch (error) {
+      console.error('保存并重新推送失败:', error)
+      toast.error('操作失败')
+    } finally {
+      setSaving(false)
+      setRepushing(false)
+    }
   }
 
   return (
@@ -607,6 +799,16 @@ export default function PushRecordsPage() {
                               </Button>
                             )}
                             
+                            {/* 编辑 */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEdit(record)}
+                              title="编辑TMDB信息"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            
                             {/* 查看详情 */}
                             <Button
                               variant="ghost"
@@ -774,6 +976,174 @@ export default function PushRecordsPage() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑弹窗 */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-2xl w-[90vw]">
+          <DialogHeader>
+            <DialogTitle>编辑 TMDB 信息</DialogTitle>
+            <DialogDescription>
+              修改影视信息后可重新推送
+            </DialogDescription>
+          </DialogHeader>
+          
+          {editingRecord && (
+            <div className="space-y-4">
+              {/* 文件名 */}
+              <div>
+                <Label className="text-xs text-muted-foreground">文件名</Label>
+                <p className="font-medium mt-1">{editingRecord.share_records?.file_name}</p>
+              </div>
+              
+              {/* TMDB 搜索 */}
+              <div>
+                <Label>搜索 TMDB</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    placeholder="输入影视名称搜索..."
+                    value={tmdbSearchQuery}
+                    onChange={(e) => setTmdbSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && searchTMDB(tmdbSearchQuery)}
+                  />
+                  <Button 
+                    variant="outline" 
+                    onClick={() => searchTMDB(tmdbSearchQuery)}
+                    disabled={tmdbSearching}
+                  >
+                    {tmdbSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  </Button>
+                </div>
+                
+                {/* 搜索结果 */}
+                {tmdbSearchResults.length > 0 && (
+                  <div className="mt-2 border rounded-lg max-h-48 overflow-y-auto">
+                    {tmdbSearchResults.map((result) => (
+                      <div
+                        key={result.id}
+                        className="flex items-center gap-3 p-2 hover:bg-muted cursor-pointer border-b last:border-b-0"
+                        onClick={() => selectTMDBResult(result)}
+                      >
+                        {result.poster_url ? (
+                          <img 
+                            src={result.poster_url} 
+                            alt={result.title}
+                            className="w-10 h-14 object-cover rounded"
+                          />
+                        ) : (
+                          <div className="w-10 h-14 bg-muted rounded flex items-center justify-center">
+                            <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{result.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {result.year} · {result.type === 'tv' ? '电视剧' : '电影'}
+                            {result.rating && ` · ⭐ ${result.rating.toFixed(1)}`}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* TMDB ID */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>TMDB ID</Label>
+                  <Input
+                    value={editFormData.tmdb_id}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, tmdb_id: e.target.value }))}
+                    placeholder="输入 TMDB ID"
+                  />
+                </div>
+                <div>
+                  <Label>类型</Label>
+                  <Select
+                    value={editFormData.content_type}
+                    onValueChange={(value) => setEditFormData(prev => ({ ...prev, content_type: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="movie">电影</SelectItem>
+                      <SelectItem value="tv">电视剧</SelectItem>
+                      <SelectItem value="folder">文件夹</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              {/* 标题 */}
+              <div>
+                <Label>标题</Label>
+                <Input
+                  value={editFormData.tmdb_title}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, tmdb_title: e.target.value }))}
+                  placeholder="输入标题"
+                />
+              </div>
+              
+              {/* 季集 */}
+              {editFormData.content_type === 'tv' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>季数</Label>
+                    <Input
+                      type="number"
+                      value={editFormData.season}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, season: e.target.value }))}
+                      placeholder="季数"
+                    />
+                  </div>
+                  <div>
+                    <Label>集数</Label>
+                    <Input
+                      type="number"
+                      value={editFormData.episode}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, episode: e.target.value }))}
+                      placeholder="集数"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* 分享链接 */}
+              {editingRecord.share_records?.share_url && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">分享链接</Label>
+                  <code className="text-sm bg-muted px-3 py-2 rounded block mt-1 truncate">
+                    {editingRecord.share_records.share_url}
+                    {editingRecord.share_records.share_code && ` 密码: ${editingRecord.share_records.share_code}`}
+                  </code>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={saveEdit}
+              disabled={saving}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              仅保存
+            </Button>
+            <Button 
+              onClick={saveAndRepush}
+              disabled={saving || repushing}
+            >
+              {(saving || repushing) ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              保存并重新推送
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

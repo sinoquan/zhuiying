@@ -36,6 +36,7 @@ export interface PushResult {
   success: boolean
   error?: string
   channelName?: string
+  validation_errors?: string[]
 }
 
 // 推送选项
@@ -542,6 +543,28 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
     category_tag: templateData.category_tag,
     has_poster: !!templateData.poster_url,
   })
+  
+  // 4.5 验证 TMDB 信息是否完整
+  const validationErrors: string[] = []
+  
+  if (!templateData.tmdb_id) {
+    validationErrors.push('TMDB ID 缺失，无法识别影视内容')
+  }
+  
+  if (!templateData.poster_url) {
+    validationErrors.push('海报图片缺失')
+  }
+  
+  if (!templateData.title || templateData.title === '未知') {
+    validationErrors.push('标题识别失败')
+  }
+  
+  // 如果有验证错误，返回失败原因
+  if (validationErrors.length > 0) {
+    const errorMessage = `TMDB 信息不完整: ${validationErrors.join('、')}。请到推送记录编辑后重新推送。`
+    console.log(`[SharePushService] 验证失败: ${errorMessage}`)
+    return [{ success: false, error: errorMessage, validation_errors: validationErrors }]
+  }
   
   // 5. 获取推送渠道
   const { data: channelConfigs, error } = await client

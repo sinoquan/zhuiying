@@ -54,6 +54,7 @@ export interface PushResult {
   success: boolean
   message_id?: string
   error?: string
+  validation_errors?: string[]
 }
 
 // 推送渠道配置

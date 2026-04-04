@@ -226,12 +226,12 @@ export async function DELETE(request: NextRequest) {
 }
 
 /**
- * PATCH - 更新分享记录（备注、标签等）
+ * PATCH - 更新分享记录（备注、标签、TMDB信息等）
  */
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, remark, tags } = body
+    const { id, remark, tags, tmdb_id, tmdb_title, tmdb_info, content_type } = body
     
     if (!id) {
       return NextResponse.json({ error: '缺少分享记录ID' }, { status: 400 })
@@ -242,6 +242,10 @@ export async function PATCH(request: NextRequest) {
     const updateData: Record<string, any> = { updated_at: new Date().toISOString() }
     if (remark !== undefined) updateData.remark = remark
     if (tags !== undefined) updateData.tags = tags
+    if (tmdb_id !== undefined) updateData.tmdb_id = tmdb_id
+    if (tmdb_title !== undefined) updateData.tmdb_title = tmdb_title
+    if (tmdb_info !== undefined) updateData.tmdb_info = tmdb_info
+    if (content_type !== undefined) updateData.content_type = content_type
     
     const { error } = await client
       .from('share_records')
