@@ -990,11 +990,17 @@ export default function ShareRecordsPage() {
                           })()}
                           <div className="flex flex-col gap-0.5 min-w-0">
                             <span className="font-medium text-sm truncate" title={record.file_name}>
-                              {record.tmdb_title || record.file_name}
+                              {record.file_name}
                             </span>
+                            {/* TMDB 标题（如果与文件名不同） */}
+                            {record.tmdb_title && record.tmdb_title !== record.file_name && (
+                              <span className="text-xs text-muted-foreground truncate" title={record.tmdb_title}>
+                                {record.tmdb_title}
+                              </span>
+                            )}
                             {/* 只有当有 TMDB 信息且是剧集时显示季集信息 */}
                             {record.tmdb_info?.season && record.tmdb_info?.episode && (
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-xs text-blue-500">
                                 S{String(record.tmdb_info.season).padStart(2, '0')}E{String(record.tmdb_info.episode).padStart(2, '0')}
                               </span>
                             )}
@@ -1233,7 +1239,10 @@ export default function ShareRecordsPage() {
           <div className="space-y-4 py-4">
             <div className="text-sm font-medium">分享内容</div>
             <div className="p-3 bg-muted rounded-lg text-sm">
-              <p className="font-medium">{selectedRecord?.tmdb_title || selectedRecord?.file_name}</p>
+              <p className="font-medium truncate">{selectedRecord?.file_name}</p>
+              {selectedRecord?.tmdb_title && selectedRecord.tmdb_title !== selectedRecord.file_name && (
+                <p className="text-muted-foreground mt-1 truncate">{selectedRecord.tmdb_title}</p>
+              )}
               {selectedRecord?.share_url && (
                 <p className="text-muted-foreground mt-1 truncate">{selectedRecord.share_url}</p>
               )}

@@ -690,10 +690,16 @@ export default function PushRecordsPage() {
                               <Film className="h-4 w-4 mt-0.5 text-red-500 flex-shrink-0" />
                             )}
                             <div className="min-w-0 flex-1">
-                              {/* 标题 */}
-                              <div className="font-medium text-sm truncate" title={share?.tmdb_title || share?.file_name}>
-                                {share?.tmdb_title || share?.file_name || '-'}
+                              {/* 文件名 - 始终显示原始文件名 */}
+                              <div className="font-medium text-sm truncate" title={share?.file_name}>
+                                {share?.file_name || '-'}
                               </div>
+                              {/* TMDB 标题（如果与文件名不同） */}
+                              {share?.tmdb_title && share.tmdb_title !== share.file_name && (
+                                <div className="text-xs text-muted-foreground truncate" title={share.tmdb_title}>
+                                  {share.tmdb_title}
+                                </div>
+                              )}
                               {/* 元信息 */}
                               <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                                 {/* 年份 */}
@@ -884,8 +890,15 @@ export default function PushRecordsPage() {
               {/* 基本信息 */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-xs text-muted-foreground">影视名称</label>
-                  <p className="font-medium text-base">{selectedRecord.share_records?.tmdb_title || selectedRecord.share_records?.file_name}</p>
+                  <label className="text-xs text-muted-foreground">文件名</label>
+                  <p className="font-medium text-base truncate" title={selectedRecord.share_records?.file_name}>
+                    {selectedRecord.share_records?.file_name || '-'}
+                  </p>
+                  {selectedRecord.share_records?.tmdb_title && selectedRecord.share_records.tmdb_title !== selectedRecord.share_records.file_name && (
+                    <p className="text-xs text-muted-foreground truncate" title={selectedRecord.share_records.tmdb_title}>
+                      {selectedRecord.share_records.tmdb_title}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">推送状态</label>
