@@ -480,7 +480,8 @@ export class FileMonitorService {
     // 获取 TMDB 信息（电影和电视剧都需要）
     try {
       // 记录是否有季集信息（这是最可靠的类型判断依据）
-      const hasSeasonEpisode = parsed.season !== null && parsed.episode !== null
+      // 使用 != null 来同时检查 null 和 undefined
+      const hasSeasonEpisode = parsed.season != null && parsed.episode != null
       console.log(`[Monitor] 文件名解析结果: title=${parsed.title}, season=${parsed.season}, episode=${parsed.episode}, type=${parsed.type}, hasSeasonEpisode=${hasSeasonEpisode}`)
       
       // 如果有季集信息，强制类型为电视剧
@@ -532,7 +533,7 @@ export class FileMonitorService {
     } catch (error) {
       console.error('获取 TMDB 信息失败:', error)
       // 出错时，如果有季集信息，仍然标记为电视剧
-      if (parsed.season !== null && parsed.episode !== null) {
+      if (parsed.season != null && parsed.episode != null) {
         contentInfo.type = 'tv'
       }
     }
@@ -779,7 +780,8 @@ export class FileMonitorService {
               }
               
               // 【关键】检查内部视频文件是否有季集信息
-              if (videoParsed?.season !== null && videoParsed?.episode !== null) {
+              // 使用 != null 而不是 !== null，因为 undefined != null 也是 true
+              if (videoParsed?.season != null && videoParsed?.episode != null) {
                 console.log(`[Monitor] 内部视频文件有季集信息: S${videoParsed.season}E${videoParsed.episode}，强制类型为电视剧`)
                 // 更新 seriesInfo 中的类型和季集信息
                 seriesInfo.contentInfo.type = 'tv'

@@ -332,7 +332,8 @@ export class TMDBService {
     
     try {
       // 根据是否有季/集信息判断类型
-      if (parsed.season !== null || parsed.episode !== null) {
+      // 使用 != null 来同时检查 null 和 undefined
+      if (parsed.season != null || parsed.episode != null) {
         // 有季集信息，优先搜索电视剧
         console.log(`[TMDB] 检测到季集信息 S${parsed.season}E${parsed.episode}，优先搜索电视剧`)
         const tvResults = await this.searchTV(parsed.title, parsed.year || undefined)
