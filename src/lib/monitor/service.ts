@@ -18,6 +18,7 @@ interface MonitorTask {
   created_at: string
   push_channel_ids?: number[] | null
   push_template_type?: 'movie' | 'tv' | 'completed' | 'auto' | null
+  content_type?: 'movie' | 'tv' | 'auto'  // 监控内容类型：电影/剧集/自动检测
   cloud_drives?: {
     id: number
     name: string
@@ -53,6 +54,43 @@ interface FileInfo {
   size: number
   created_at?: string
   is_dir?: boolean  // CloudFile 使用的字段名
+  parent_id?: string   // 父目录 ID（电影类型需要分享父目录）
+  parent_name?: string // 父目录名称
+}
+
+// 分享记录
+interface ShareRecord {
+  id?: number
+  cloud_drive_id: number
+  file_name: string
+  file_path: string
+  file_size: number
+  share_code: string
+  share_url: string
+  share_status: string
+  content_type: string
+  tmdb_id?: number | null
+  tmdb_title?: string | null
+  tmdb_info?: TMDBInfoData | null
+  source: string
+  push_status: string
+  created_at: string
+  updated_at: string
+  [key: string]: unknown  // 添加索引签名以兼容 Record<string, unknown>
+}
+
+// TMDB 信息数据
+interface TMDBInfoData {
+  tmdb_id?: number
+  title?: string
+  original_title?: string
+  year?: string
+  poster_url?: string
+  backdrop_url?: string
+  rating?: number
+  overview?: string
+  genres?: number[] | string[]
+  type?: string
 }
 
 // 获取文件是否为目录
@@ -167,12 +205,14 @@ export class FileMonitorService {
    * @param path 当前扫描路径
    * @param result 收集的视频文件列表
    * @param depth 当前递归深度（防止无限递归）
+   * @param parentInfo 父目录信息（用于电影类型分享父目录）
    */
   private async scanRecursive(
     driveService: any, 
     path: string, 
     result: FileInfo[], 
-    depth: number
+    depth: number,
+    parentInfo?: { id: string; name: string }
   ): Promise<void> {
     // 限制递归深度，防止无限递归
     if (depth > 10) {
@@ -195,16 +235,19 @@ export class FileMonitorService {
         page++
       }
       
+      // 当前目录信息（作为子文件的父目录）
+      const currentDirInfo = { id: path, name: files[0]?.parent_name || '' }
+      
       for (const file of files) {
         if (file.is_dir) {
           // 如果是目录，递归扫描
           console.log(`[Monitor] 发现子目录: ${file.name}`)
-          await this.scanRecursive(driveService, file.id, result, depth + 1)
+          await this.scanRecursive(driveService, file.id, result, depth + 1, currentDirInfo)
         } else {
           // 如果是文件，检查是否为视频文件
           const ext = file.name?.toLowerCase().split('.').pop() || ''
           if (this.VIDEO_EXTENSIONS.includes(ext)) {
-            console.log(`[Monitor] 发现视频文件: ${file.name}`)
+            console.log(`[Monitor] 发现视频文件: ${file.name}, 父目录: ${currentDirInfo.name}`)
             result.push({
               id: file.id,
               name: file.name,
@@ -212,6 +255,8 @@ export class FileMonitorService {
               size: file.size,
               created_at: file.created_at,
               is_dir: false,
+              parent_id: currentDirInfo.id,
+              parent_name: currentDirInfo.name,
             })
           }
         }
@@ -339,6 +384,9 @@ export class FileMonitorService {
       errors: [],
     }
     
+    const monitorType = monitor.content_type || 'auto'
+    console.log(`[Monitor] 监控类型: ${monitorType}`)
+    
     try {
       const driveConfig = monitor.cloud_drives?.config || {}
       const driveService = createCloudDriveService(
@@ -359,139 +407,17 @@ export class FileMonitorService {
         return result
       }
       
-      // 过滤掉已经分享过的文件（去重检查）
-      const client = getSupabaseClient()
-      const newFiles: FileInfo[] = []
-      
-      for (const file of allVideoFiles) {
-        // 检查是否已有分享记录
-        const { data: existingShare } = await client
-          .from('share_records')
-          .select('id')
-          .eq('cloud_drive_id', monitor.cloud_drive_id)
-          .eq('file_path', file.id)
-          .maybeSingle()
-        
-        if (existingShare) {
-          console.log(`[Monitor] 跳过已分享的文件: ${file.name}`)
-          result.skipped_files++
-        } else {
-          newFiles.push(file)
-        }
+      // 根据监控类型区分处理逻辑
+      if (monitorType === 'movie') {
+        // 电影类型：分享父目录文件夹
+        return await this.processMovieType(monitor, allVideoFiles, result, driveService)
+      } else if (monitorType === 'tv') {
+        // 剧集类型：分享视频文件本身
+        return await this.processTVType(monitor, allVideoFiles, result, driveService)
+      } else {
+        // 自动检测：当前行为
+        return await this.processAutoType(monitor, allVideoFiles, result, driveService)
       }
-      
-      console.log(`[Monitor] 未分享的文件: ${newFiles.length} 个`)
-      
-      if (newFiles.length === 0) {
-        return result
-      }
-      
-      // 时间过滤：只处理监控任务创建时间之后的文件（只推新文件）
-      const monitorCreatedAt = new Date(monitor.created_at)
-      const filteredFiles: FileInfo[] = []
-      let skippedHistoryFiles = 0
-      
-      for (const file of newFiles) {
-        // 如果文件没有创建时间信息，默认处理
-        if (!file.created_at) {
-          filteredFiles.push(file)
-          continue
-        }
-        
-        const fileCreatedAt = new Date(file.created_at)
-        if (fileCreatedAt > monitorCreatedAt) {
-          filteredFiles.push(file)
-        } else {
-          console.log(`[Monitor] 跳过历史文件: ${file.name} (文件时间: ${fileCreatedAt.toISOString()}, 监控时间: ${monitorCreatedAt.toISOString()})`)
-          skippedHistoryFiles++
-        }
-      }
-      
-      result.skipped_files += skippedHistoryFiles
-      console.log(`[Monitor] 时间过滤后剩余文件: ${filteredFiles.length} 个 (跳过历史文件: ${skippedHistoryFiles} 个)`)
-      
-      if (filteredFiles.length === 0) {
-        return result
-      }
-      
-      // 按剧集分组检测完结
-      const seriesMap = await this.groupFilesBySeries(filteredFiles)
-      
-      // 处理每个文件/剧集
-      for (const [seriesKey, files] of seriesMap.entries()) {
-        try {
-          // 检测是否完结
-          const seriesInfo = await this.detectSeriesCompletion(files, monitor.cloud_drive_id)
-          
-          // 判断是否需要打包推送（完结 + 最后一集）
-          const needPackPush = seriesInfo.isCompleted && seriesInfo.isLastEpisode
-          
-          // 单集分享（无论是否完结，都先分享单集）
-          for (const file of files) {
-            // 文件质量检测
-            const parsed = parseFileName(file.name, file.size)
-            if (parsed.is_non_main_content) {
-              console.log(`[Monitor] 跳过非正片: ${file.name} (${parsed.quality_type})`)
-              result.skipped_files++
-              continue
-            }
-            
-            // 去重检查
-            if (await this.isDuplicateFile(monitor.cloud_drive_id, file.path)) {
-              result.skipped_files++
-              continue
-            }
-            
-            const shareRecord = await this.shareSingleFile(
-              driveService, 
-              monitor, 
-              file, 
-              seriesInfo,
-              parsed  // 传递解析结果
-            )
-            
-            if (shareRecord) {
-              result.shared_files++
-              
-              // 推送单集
-              if (await this.autoPush(monitor, shareRecord)) {
-                result.pushed_files++
-              }
-            }
-          }
-          
-          // 如果完结，再打包分享整个文件夹
-          if (needPackPush) {
-            console.log(`[Monitor] 剧集完结，开始打包分享: ${seriesInfo.contentInfo.title}`)
-            const packRecord = await this.shareCompletedSeries(
-              driveService, 
-              monitor, 
-              files, 
-              seriesInfo
-            )
-            if (packRecord) {
-              result.completed_shares++
-              
-              // 推送打包
-              if (await this.autoPush(monitor, packRecord)) {
-                result.pushed_files++
-              }
-            }
-          }
-        } catch (error) {
-          result.errors.push(`处理剧集失败: ${seriesKey} - ${error}`)
-        }
-      }
-      
-      // 扫描成功，更新网盘状态为在线
-      await this.client
-        .from('cloud_drives')
-        .update({
-          connection_status: 'online',
-          last_check_at: new Date().toISOString(),
-          last_error: null,
-        })
-        .eq('id', monitor.cloud_drive_id)
       
     } catch (error) {
       result.errors.push(`扫描失败: ${error}`)
@@ -521,6 +447,473 @@ export class FileMonitorService {
     await this.logOperation(monitor, result)
     
     return result
+  }
+  
+  // ==================== 电影类型处理 ====================
+  
+  private async processMovieType(
+    monitor: MonitorTask, 
+    allVideoFiles: FileInfo[], 
+    result: ScanResult,
+    driveService: any
+  ): Promise<ScanResult> {
+    console.log(`[Monitor] 电影类型处理：按父目录分组`)
+    
+    const client = getSupabaseClient()
+    const monitorCreatedAt = new Date(monitor.created_at)
+    
+    // 按父目录分组
+    const parentDirMap = new Map<string, FileInfo[]>()
+    for (const file of allVideoFiles) {
+      const parentKey = file.parent_id || 'unknown'
+      if (!parentDirMap.has(parentKey)) {
+        parentDirMap.set(parentKey, [])
+      }
+      parentDirMap.get(parentKey)!.push(file)
+    }
+    
+    console.log(`[Monitor] 共 ${parentDirMap.size} 个电影文件夹`)
+    
+    // 处理每个电影文件夹
+    for (const [parentId, files] of parentDirMap.entries()) {
+      try {
+        const parentName = files[0]?.parent_name || '未知电影'
+        console.log(`[Monitor] 处理电影文件夹: ${parentName}`)
+        
+        // 检查该父目录是否已分享（去重）
+        const { data: existingShare } = await client
+          .from('share_records')
+          .select('id')
+          .eq('cloud_drive_id', monitor.cloud_drive_id)
+          .eq('file_path', parentId)
+          .maybeSingle()
+        
+        if (existingShare) {
+          console.log(`[Monitor] 跳过已分享的电影文件夹: ${parentName}`)
+          result.skipped_files += files.length
+          continue
+        }
+        
+        // 时间过滤：检查文件夹内是否有新文件
+        const newFilesInDir = files.filter(file => {
+          if (!file.created_at) return true
+          const fileCreatedAt = new Date(file.created_at)
+          return fileCreatedAt > monitorCreatedAt
+        })
+        
+        if (newFilesInDir.length === 0) {
+          console.log(`[Monitor] 跳过历史电影文件夹: ${parentName}`)
+          result.skipped_files += files.length
+          continue
+        }
+        
+        // 文件质量检测：跳过预告片/样片
+        const mainContentFiles = files.filter(file => {
+          const parsed = parseFileName(file.name, file.size)
+          if (parsed.is_non_main_content) {
+            console.log(`[Monitor] 跳过非正片: ${file.name} (${parsed.quality_type})`)
+            return false
+          }
+          return true
+        })
+        
+        if (mainContentFiles.length === 0) {
+          console.log(`[Monitor] 电影文件夹无正片内容: ${parentName}`)
+          result.skipped_files += files.length
+          continue
+        }
+        
+        // 分享父目录文件夹
+        const shareRecord = await this.shareMovieFolder(
+          driveService, 
+          monitor, 
+          parentId, 
+          parentName,
+          mainContentFiles
+        )
+        
+        if (shareRecord) {
+          result.shared_files++
+          
+          // 推送
+          if (await this.autoPush(monitor, shareRecord)) {
+            result.pushed_files++
+          }
+        }
+        
+      } catch (error) {
+        result.errors.push(`处理电影失败: ${files[0]?.parent_name || parentId} - ${error}`)
+      }
+    }
+    
+    // 更新网盘状态为在线
+    await this.client
+      .from('cloud_drives')
+      .update({
+        connection_status: 'online',
+        last_check_at: new Date().toISOString(),
+        last_error: null,
+      })
+      .eq('id', monitor.cloud_drive_id)
+    
+    await this.logOperation(monitor, result)
+    return result
+  }
+  
+  // ==================== 剧集类型处理 ====================
+  
+  private async processTVType(
+    monitor: MonitorTask, 
+    allVideoFiles: FileInfo[], 
+    result: ScanResult,
+    driveService: any
+  ): Promise<ScanResult> {
+    console.log(`[Monitor] 剧集类型处理：分享视频文件`)
+    
+    const client = getSupabaseClient()
+    const monitorCreatedAt = new Date(monitor.created_at)
+    
+    // 过滤已分享的文件
+    const newFiles: FileInfo[] = []
+    for (const file of allVideoFiles) {
+      const { data: existingShare } = await client
+        .from('share_records')
+        .select('id')
+        .eq('cloud_drive_id', monitor.cloud_drive_id)
+        .eq('file_path', file.id)
+        .maybeSingle()
+      
+      if (existingShare) {
+        console.log(`[Monitor] 跳过已分享的文件: ${file.name}`)
+        result.skipped_files++
+      } else {
+        newFiles.push(file)
+      }
+    }
+    
+    if (newFiles.length === 0) {
+      await this.logOperation(monitor, result)
+      return result
+    }
+    
+    // 时间过滤
+    const filteredFiles = newFiles.filter(file => {
+      if (!file.created_at) return true
+      const fileCreatedAt = new Date(file.created_at)
+      if (fileCreatedAt <= monitorCreatedAt) {
+        console.log(`[Monitor] 跳过历史文件: ${file.name}`)
+        result.skipped_files++
+        return false
+      }
+      return true
+    })
+    
+    if (filteredFiles.length === 0) {
+      await this.logOperation(monitor, result)
+      return result
+    }
+    
+    // 按剧集分组
+    const seriesMap = await this.groupFilesBySeries(filteredFiles)
+    
+    // 处理每个剧集
+    for (const [seriesKey, files] of seriesMap.entries()) {
+      try {
+        const seriesInfo = await this.detectSeriesCompletion(files, monitor.cloud_drive_id)
+        const needPackPush = seriesInfo.isCompleted && seriesInfo.isLastEpisode
+        
+        for (const file of files) {
+          // 文件质量检测
+          const parsed = parseFileName(file.name, file.size)
+          if (parsed.is_non_main_content) {
+            console.log(`[Monitor] 跳过非正片: ${file.name} (${parsed.quality_type})`)
+            result.skipped_files++
+            continue
+          }
+          
+          // 强制类型为电视剧
+          const shareRecord = await this.shareSingleFile(
+            driveService, 
+            monitor, 
+            file, 
+            seriesInfo,
+            { ...parsed, type: 'tv' }  // 强制电视剧类型
+          )
+          
+          if (shareRecord) {
+            result.shared_files++
+            if (await this.autoPush(monitor, shareRecord)) {
+              result.pushed_files++
+            }
+          }
+        }
+        
+        // 完结打包
+        if (needPackPush) {
+          console.log(`[Monitor] 剧集完结，开始打包分享: ${seriesInfo.contentInfo.title}`)
+          const packRecord = await this.shareCompletedSeries(driveService, monitor, files, seriesInfo)
+          if (packRecord) {
+            result.completed_shares++
+            if (await this.autoPush(monitor, packRecord)) {
+              result.pushed_files++
+            }
+          }
+        }
+      } catch (error) {
+        result.errors.push(`处理剧集失败: ${seriesKey} - ${error}`)
+      }
+    }
+    
+    // 更新网盘状态
+    await this.client
+      .from('cloud_drives')
+      .update({
+        connection_status: 'online',
+        last_check_at: new Date().toISOString(),
+        last_error: null,
+      })
+      .eq('id', monitor.cloud_drive_id)
+    
+    await this.logOperation(monitor, result)
+    return result
+  }
+  
+  // ==================== 自动类型处理 ====================
+  
+  private async processAutoType(
+    monitor: MonitorTask, 
+    allVideoFiles: FileInfo[], 
+    result: ScanResult,
+    driveService: any
+  ): Promise<ScanResult> {
+    console.log(`[Monitor] 自动类型处理：根据文件名自动判断`)
+    
+    const client = getSupabaseClient()
+    const monitorCreatedAt = new Date(monitor.created_at)
+    
+    // 过滤已分享的文件
+    const newFiles: FileInfo[] = []
+    for (const file of allVideoFiles) {
+      const { data: existingShare } = await client
+        .from('share_records')
+        .select('id')
+        .eq('cloud_drive_id', monitor.cloud_drive_id)
+        .eq('file_path', file.id)
+        .maybeSingle()
+      
+      if (existingShare) {
+        console.log(`[Monitor] 跳过已分享的文件: ${file.name}`)
+        result.skipped_files++
+      } else {
+        newFiles.push(file)
+      }
+    }
+    
+    if (newFiles.length === 0) {
+      await this.logOperation(monitor, result)
+      return result
+    }
+    
+    // 时间过滤
+    const filteredFiles: FileInfo[] = []
+    for (const file of newFiles) {
+      if (!file.created_at) {
+        filteredFiles.push(file)
+        continue
+      }
+      const fileCreatedAt = new Date(file.created_at)
+      if (fileCreatedAt > monitorCreatedAt) {
+        filteredFiles.push(file)
+      } else {
+        console.log(`[Monitor] 跳过历史文件: ${file.name}`)
+        result.skipped_files++
+      }
+    }
+    
+    if (filteredFiles.length === 0) {
+      await this.logOperation(monitor, result)
+      return result
+    }
+    
+    // 按剧集分组
+    const seriesMap = await this.groupFilesBySeries(filteredFiles)
+    
+    // 处理每个文件/剧集
+    for (const [seriesKey, files] of seriesMap.entries()) {
+      try {
+        const seriesInfo = await this.detectSeriesCompletion(files, monitor.cloud_drive_id)
+        const needPackPush = seriesInfo.isCompleted && seriesInfo.isLastEpisode
+        
+        for (const file of files) {
+          const parsed = parseFileName(file.name, file.size)
+          if (parsed.is_non_main_content) {
+            console.log(`[Monitor] 跳过非正片: ${file.name} (${parsed.quality_type})`)
+            result.skipped_files++
+            continue
+          }
+          
+          if (await this.isDuplicateFile(monitor.cloud_drive_id, file.path)) {
+            result.skipped_files++
+            continue
+          }
+          
+          const shareRecord = await this.shareSingleFile(driveService, monitor, file, seriesInfo, parsed)
+          
+          if (shareRecord) {
+            result.shared_files++
+            if (await this.autoPush(monitor, shareRecord)) {
+              result.pushed_files++
+            }
+          }
+        }
+        
+        if (needPackPush) {
+          console.log(`[Monitor] 剧集完结，开始打包分享: ${seriesInfo.contentInfo.title}`)
+          const packRecord = await this.shareCompletedSeries(driveService, monitor, files, seriesInfo)
+          if (packRecord) {
+            result.completed_shares++
+            if (await this.autoPush(monitor, packRecord)) {
+              result.pushed_files++
+            }
+          }
+        }
+      } catch (error) {
+        result.errors.push(`处理剧集失败: ${seriesKey} - ${error}`)
+      }
+    }
+    
+    // 更新网盘状态
+    await this.client
+      .from('cloud_drives')
+      .update({
+        connection_status: 'online',
+        last_check_at: new Date().toISOString(),
+        last_error: null,
+      })
+      .eq('id', monitor.cloud_drive_id)
+    
+    await this.logOperation(monitor, result)
+    return result
+  }
+  
+  // ==================== 电影文件夹分享 ====================
+  
+  private async shareMovieFolder(
+    driveService: any,
+    monitor: MonitorTask,
+    folderId: string,
+    folderName: string,
+    files: FileInfo[]
+  ): Promise<ShareRecord | null> {
+    try {
+      console.log(`[Monitor] 分享电影文件夹: ${folderName}`)
+      
+      // 创建分享链接
+      const shareResult = await driveService.createShare(folderId)
+      
+      if (!shareResult || !shareResult.share_code) {
+        throw new Error('分享失败：未获取到分享码')
+      }
+      
+      // 获取 TMDB 信息（强制电影类型）
+      const tmdbInfo = await this.getTMDBInfoForMovie(folderName)
+      
+      // 创建分享记录
+      const shareRecord: Omit<ShareRecord, 'id'> = {
+        cloud_drive_id: monitor.cloud_drive_id,
+        file_name: folderName,
+        file_path: folderId,
+        file_size: files.reduce((sum, f) => sum + (f.size || 0), 0),
+        share_code: shareResult.share_code,
+        share_url: shareResult.share_url,
+        share_status: 'success',
+        content_type: 'movie',  // 强制电影类型
+        tmdb_id: tmdbInfo?.tmdb_id,
+        tmdb_title: tmdbInfo?.title,
+        tmdb_info: tmdbInfo,
+        source: 'monitor',
+        push_status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      
+      const { data, error } = await this.client
+        .from('share_records')
+        .insert(shareRecord)
+        .select()
+        .single()
+      
+      if (error) throw error
+      
+      console.log(`[Monitor] 电影分享记录创建成功: ${folderName}`)
+      return data
+      
+    } catch (error) {
+      console.error(`[Monitor] 分享电影文件夹失败: ${folderName}`, error)
+      return null
+    }
+  }
+  
+  // ==================== 电影 TMDB 搜索 ====================
+  
+  private async getTMDBInfoForMovie(folderName: string): Promise<TMDBInfoData | null> {
+    try {
+      // 获取系统设置
+      const { data: settingsData } = await this.client
+        .from('system_settings')
+        .select('*')
+      
+      const settings: Record<string, any> = {}
+      settingsData?.forEach((item: { setting_key: string; setting_value: any }) => {
+        settings[item.setting_key] = item.setting_value
+      })
+      
+      const apiKey = settings.tmdb_api_key
+      const language = settings.tmdb_language || 'zh-CN'
+      const proxyUrl = settings.proxy_enabled ? settings.proxy_url : undefined
+      
+      if (!apiKey) return null
+      
+      const tmdbService = new TMDBService({
+        apiKey,
+        language,
+        proxyUrl,
+      })
+      
+      // 解析文件夹名称
+      const parsed = parseFileName(folderName)
+      
+      // 只搜索电影
+      const results = await tmdbService.searchMovie(parsed.title, parsed.year)
+      
+      if (results && results.length > 0) {
+        const movie = results[0]
+        // 获取详细信息以获取 genres
+        const details = await tmdbService.getMovieDetails(movie.id, 'credits')
+        
+        return {
+          tmdb_id: movie.id,
+          title: movie.title,
+          original_title: movie.original_title,
+          year: movie.release_date?.slice(0, 4),
+          poster_url: movie.poster_path 
+            ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+            : undefined,
+          backdrop_url: movie.backdrop_path
+            ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`
+            : undefined,
+          rating: movie.vote_average,
+          overview: movie.overview,
+          genres: (details as any)?.genres?.map((g: any) => g.name) || [],
+          type: 'movie',
+        }
+      }
+      
+      return null
+    } catch (error) {
+      console.error(`[Monitor] 电影 TMDB 搜索失败: ${folderName}`, error)
+      return null
+    }
   }
 
   // ==================== 去重机制 ====================

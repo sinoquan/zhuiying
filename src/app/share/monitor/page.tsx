@@ -74,6 +74,7 @@ interface FileMonitor {
   cron_expression?: string
   push_channel_ids?: number[] | string[]
   push_template_type?: string
+  content_type?: 'movie' | 'tv' | 'auto'  // 监控内容类型
   created_at: string
   cloud_drives?: {
     id: number
@@ -138,6 +139,7 @@ export default function FileMonitorPage() {
     cron_expression: "*/10 7-23 * * *",
     push_channel_ids: [] as number[],
     push_template_type: "auto",
+    content_type: "auto" as 'movie' | 'tv' | 'auto',
   })
   
   // 删除确认弹窗
@@ -361,6 +363,7 @@ export default function FileMonitorPage() {
       cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
       push_channel_ids: channelIds,
       push_template_type: monitor.push_template_type || "auto",
+      content_type: monitor.content_type || "auto",
     })
     selectedFoldersRef.current = []
     forceUpdate(n => n + 1)
@@ -386,6 +389,7 @@ export default function FileMonitorPage() {
             cron_expression: formData.cron_expression,
             push_channel_ids: formData.push_channel_ids,
             push_template_type: formData.push_template_type,
+            content_type: formData.content_type,
           }),
         })
         if (!response.ok) {
@@ -413,6 +417,7 @@ export default function FileMonitorPage() {
               cron_expression: formData.cron_expression,
               push_channel_ids: formData.push_channel_ids,
               push_template_type: formData.push_template_type,
+              content_type: formData.content_type,
             }),
           })
           if (!response.ok) {
@@ -475,6 +480,7 @@ export default function FileMonitorPage() {
       cron_expression: "*/10 7-23 * * *",
       push_channel_ids: [],
       push_template_type: "auto",
+      content_type: "auto",
     })
     setEditingMonitor(null)
     setBrowsingFiles([])
@@ -496,6 +502,7 @@ export default function FileMonitorPage() {
       cron_expression: monitor.cron_expression || "*/10 7-23 * * *",
       push_channel_ids: channelIds,
       push_template_type: monitor.push_template_type || "auto",
+      content_type: monitor.content_type || "auto",
     })
     selectedFoldersRef.current = [{ path: monitor.path, name: monitor.path_name || monitor.path.split('/').pop() || monitor.path }]
     forceUpdate(n => n + 1)
@@ -827,6 +834,7 @@ export default function FileMonitorPage() {
                 <TableRow className="bg-muted/50">
                   <TableHead className="w-[120px]">网盘</TableHead>
                   <TableHead className="max-w-[200px]">监控目录</TableHead>
+                  <TableHead className="w-[100px]">内容类型</TableHead>
                   <TableHead className="w-[180px]">推送目标</TableHead>
                   <TableHead className="w-[160px]">检测频率</TableHead>
                   <TableHead className="w-[140px]">最近扫描</TableHead>
@@ -868,6 +876,20 @@ export default function FileMonitorPage() {
                             {displayPath}
                           </span>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant="outline" 
+                          className={`text-xs px-2 py-0.5 h-6 ${
+                            monitor.content_type === 'movie' 
+                              ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800' 
+                              : monitor.content_type === 'tv' 
+                                ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' 
+                                : 'bg-gray-50 dark:bg-gray-950/30 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800'
+                          }`}
+                        >
+                          {monitor.content_type === 'movie' ? '🎬 电影' : monitor.content_type === 'tv' ? '📺 剧集' : '自动'}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         {monitor.push_channels_list && monitor.push_channels_list.length > 0 ? (
@@ -1105,10 +1127,71 @@ export default function FileMonitorPage() {
                   </div>
                 </div>
                 
+                {/* 内容类型 */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <span className="w-5 h-5 rounded bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-xs text-orange-600 dark:text-orange-400">3</span>
+                    内容类型
+                  </Label>
+                  <Select
+                    value={formData.content_type}
+                    onValueChange={(value: 'movie' | 'tv' | 'auto') => setFormData({ ...formData, content_type: value })}
+                  >
+                    <SelectTrigger className="h-10 w-full bg-white dark:bg-slate-900">
+                      <SelectValue placeholder="选择内容类型" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="w-[--radix-select-trigger-width]">
+                      <SelectItem value="auto">
+                        <div className="flex flex-col items-start">
+                          <span>自动检测</span>
+                          <span className="text-xs text-muted-foreground">根据文件名自动判断</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="movie">
+                        <div className="flex flex-col items-start">
+                          <span>🎬 电影</span>
+                          <span className="text-xs text-muted-foreground">分享整个文件夹</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="tv">
+                        <div className="flex flex-col items-start">
+                          <span>📺 剧集</span>
+                          <span className="text-xs text-muted-foreground">分享单个视频文件</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="text-xs text-muted-foreground bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg">
+                    {formData.content_type === 'movie' && (
+                      <div className="space-y-1">
+                        <p className="font-medium text-orange-600 dark:text-orange-400">电影模式：</p>
+                        <p>• 发现视频文件后，分享其上级文件夹</p>
+                        <p>• TMDB 只搜索电影，识别更准确</p>
+                        <p>• 适合 /媒体库/华语电影 目录</p>
+                      </div>
+                    )}
+                    {formData.content_type === 'tv' && (
+                      <div className="space-y-1">
+                        <p className="font-medium text-blue-600 dark:text-blue-400">剧集模式：</p>
+                        <p>• 分享单个视频文件（如 S01E01.mp4）</p>
+                        <p>• TMDB 只搜索电视剧，识别更准确</p>
+                        <p>• 适合 /媒体库/国漫 目录</p>
+                      </div>
+                    )}
+                    {formData.content_type === 'auto' && (
+                      <div className="space-y-1">
+                        <p className="font-medium text-green-600 dark:text-green-400">自动检测：</p>
+                        <p>• 根据文件名自动判断类型</p>
+                        <p>• 可能出现误判，建议明确指定</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
                 {/* 推送目标 */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium flex items-center gap-2">
-                    <span className="w-5 h-5 rounded bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-xs text-purple-600 dark:text-purple-400">3</span>
+                    <span className="w-5 h-5 rounded bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-xs text-purple-600 dark:text-purple-400">4</span>
                     推送目标
                     {availableChannels.length > 0 && formData.push_channel_ids.length > 0 && (
                       <Badge variant="secondary" className="ml-auto font-normal">

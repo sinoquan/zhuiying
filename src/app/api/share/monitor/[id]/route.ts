@@ -20,6 +20,7 @@ export async function PUT(
     if (body.cron_expression !== undefined) updateData.cron_expression = body.cron_expression
     if (body.push_channel_ids !== undefined) updateData.push_channel_ids = body.push_channel_ids
     if (body.push_template_type !== undefined) updateData.push_template_type = body.push_template_type
+    if (body.content_type !== undefined) updateData.content_type = body.content_type
     
     const { data, error } = await client
       .from('file_monitors')

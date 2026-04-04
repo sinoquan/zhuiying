@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
         cron_expression: body.cron_expression || '*/10 7-23 * * *',
         push_channel_ids: body.push_channel_ids || [],
         push_template_type: body.push_template_type || 'tv',
+        content_type: body.content_type || 'auto',
       })
       .select()
       .single()
