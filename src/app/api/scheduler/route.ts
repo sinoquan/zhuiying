@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { schedulerService } from '@/lib/scheduler/service'
 
 /**
- * 内置定时器管理 API
+ * 监控任务调度器状态 API
+ * 用于查看调度器状态（只读）
  */
 
-// GET - 获取定时器状态
+// GET - 获取调度器状态
 export async function GET() {
   try {
     const status = schedulerService.getStatus()
@@ -14,39 +15,25 @@ export async function GET() {
       ...status,
     })
   } catch (error) {
-    console.error('获取定时器状态失败:', error)
+    console.error('获取调度器状态失败:', error)
     return NextResponse.json(
-      { success: false, error: '获取定时器状态失败' },
+      { success: false, error: '获取调度器状态失败' },
       { status: 500 }
     )
   }
 }
 
-// POST - 启动/停止定时器
+// POST - 手动触发重新加载
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { action, cronExpression } = body
+    const { action } = body
 
-    if (action === 'start') {
-      const success = schedulerService.start(cronExpression || '*/10 7-23 * * *')
-      return NextResponse.json({
-        success,
-        message: success ? '定时器已启动' : '启动失败',
-        ...schedulerService.getStatus(),
-      })
-    } else if (action === 'stop') {
-      schedulerService.stop()
+    if (action === 'reload') {
+      await schedulerService.loadMonitors()
       return NextResponse.json({
         success: true,
-        message: '定时器已停止',
-        ...schedulerService.getStatus(),
-      })
-    } else if (action === 'restart') {
-      const success = schedulerService.restart(cronExpression)
-      return NextResponse.json({
-        success,
-        message: success ? '定时器已重启' : '重启失败',
+        message: '调度器已重新加载',
         ...schedulerService.getStatus(),
       })
     } else {
@@ -56,7 +43,7 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (error) {
-    console.error('定时器操作失败:', error)
+    console.error('调度器操作失败:', error)
     return NextResponse.json(
       { success: false, error: '操作失败' },
       { status: 500 }

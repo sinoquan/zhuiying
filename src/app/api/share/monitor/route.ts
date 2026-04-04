@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 import { withRetryOrDefault } from '@/lib/db-retry'
+import { schedulerService } from '@/lib/scheduler/service'
 
 // GET - 获取所有监控任务
 export async function GET() {
@@ -144,6 +145,10 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (error) throw new Error(`创建监控任务失败: ${error.message}`)
+    
+    // 添加到调度器
+    const cronExpr = data.cron_expression || '*/10 7-23 * * *'
+    schedulerService.scheduleMonitor(data.id, cronExpr)
     
     return NextResponse.json(data)
   } catch (error) {

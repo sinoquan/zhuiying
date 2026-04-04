@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { 
   Settings, Globe, Database, Loader2, TestTube,
-  ExternalLink, CheckCircle2, XCircle, Activity
+  ExternalLink, CheckCircle2, XCircle
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -37,12 +37,6 @@ interface SystemSettings {
   disable_auth: boolean
 }
 
-interface SchedulerStatus {
-  running: boolean
-  executing: boolean
-  cronExpression: string
-}
-
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -53,11 +47,6 @@ export default function SettingsPage() {
     latency?: number
     message?: string
   } | null>(null)
-  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus>({
-    running: false,
-    executing: false,
-    cronExpression: '',
-  })
   const [settings, setSettings] = useState<SystemSettings>({
     tmdb_api_key: "",
     tmdb_language: "zh-CN",
@@ -75,24 +64,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchSettings()
-    fetchSchedulerStatus()
   }, [])
-
-  const fetchSchedulerStatus = async () => {
-    try {
-      const response = await fetch('/api/scheduler')
-      const data = await response.json()
-      if (data.success) {
-        setSchedulerStatus({
-          running: data.running,
-          executing: data.executing,
-          cronExpression: data.cronExpression,
-        })
-      }
-    } catch (error) {
-      console.error('获取定时器状态失败:', error)
-    }
-  }
 
   const fetchSettings = async () => {
     try {
@@ -329,30 +301,6 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">
                   修改系统登录密码
                 </p>
-              </div>
-
-              {/* 自动监控状态 - 只读显示 */}
-              <div className="border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-blue-500" />
-                    <Label className="text-base font-semibold">监控服务</Label>
-                  </div>
-                  <Badge variant={schedulerStatus.running ? "default" : "secondary"} className={schedulerStatus.running ? "bg-green-500" : ""}>
-                    {schedulerStatus.running ? (schedulerStatus.executing ? '扫描中...' : '运行中') : '已停止'}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground mt-2">
-                  系统自动扫描监控文件夹，发现新文件后自动分享并推送
-                </p>
-                {schedulerStatus.running && schedulerStatus.cronExpression && (
-                  <div className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
-                    <span>扫描频率:</span>
-                    <code className="bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded">
-                      {schedulerStatus.cronExpression === '*/10 7-23 * * *' ? '每10分钟 (7:00-23:00)' : schedulerStatus.cronExpression}
-                    </code>
-                  </div>
-                )}
               </div>
 
               <Button onClick={() => handleSave("general")} disabled={saving}>

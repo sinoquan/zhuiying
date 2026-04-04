@@ -181,6 +181,59 @@ export class FileMonitorService {
     return results
   }
 
+  /**
+   * 扫描单个监控任务
+   */
+  async runSingleScan(monitorId: number): Promise<ScanResult> {
+    // 获取单个监控任务
+    const { data: monitor, error } = await this.client
+      .from('file_monitors')
+      .select(`
+        *,
+        cloud_drives (
+          id,
+          name,
+          alias,
+          config
+        )
+      `)
+      .eq('id', monitorId)
+      .single()
+    
+    if (error || !monitor) {
+      return {
+        monitor_id: monitorId,
+        cloud_drive: '未知',
+        path: '',
+        new_files: 0,
+        skipped_files: 0,
+        shared_files: 0,
+        pushed_files: 0,
+        completed_shares: 0,
+        errors: [`监控任务 ${monitorId} 不存在或已禁用`],
+      }
+    }
+    
+    // 获取推送渠道信息
+    const { data: allChannels } = await this.client
+      .from('push_channels')
+      .select('id, channel_name, channel_type, config')
+    
+    const channelMap = new Map<number, { id: number; channel_name: string; channel_type: string; config: Record<string, unknown> }>()
+    for (const ch of allChannels || []) {
+      channelMap.set(ch.id, ch)
+    }
+    
+    const channelIds = monitor.push_channel_ids as number[] | null
+    if (channelIds && channelIds.length > 0) {
+      monitor.push_channels_list = channelIds
+        .map(id => channelMap.get(id))
+        .filter(Boolean) as Array<{ id: number; channel_name: string; channel_type: string; config: Record<string, unknown> }>
+    }
+    
+    return this.scanMonitor(monitor as MonitorTask)
+  }
+
   private async scanMonitor(monitor: MonitorTask): Promise<ScanResult> {
     const result: ScanResult = {
       monitor_id: monitor.id,

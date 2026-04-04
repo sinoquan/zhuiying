@@ -1,44 +1,52 @@
 /**
- * 内置定时器服务
- * 用于自动执行监控扫描任务，无需外部cron
+ * 监控任务调度器服务
+ * 为每个监控任务创建独立的定时调度
  */
 
 import * as cron from 'node-cron'
 
 type ScheduledTask = ReturnType<typeof cron.schedule>
 
+interface MonitorSchedule {
+  id: number
+  cronExpression: string
+  task: ScheduledTask
+  isRunning: boolean
+}
+
 class SchedulerService {
-  private task: ScheduledTask | null = null
-  private isRunning = false
-  private currentCronExpression = ''
+  private monitors: Map<number, MonitorSchedule> = new Map()
 
   /**
-   * 启动定时任务
+   * 添加或更新监控任务的调度
    */
-  start(cronExpression: string = '*/10 7-23 * * *'): boolean {
-    if (this.task) {
-      this.stop()
-    }
-
+  scheduleMonitor(monitorId: number, cronExpression: string): boolean {
     // 验证 cron 表达式
     if (!cron.validate(cronExpression)) {
-      console.error('[Scheduler] 无效的 cron 表达式:', cronExpression)
+      console.error(`[Scheduler] 监控任务 ${monitorId} 无效的 cron 表达式:`, cronExpression)
       return false
     }
 
+    // 如果已存在，先停止旧的
+    this.unscheduleMonitor(monitorId)
+
     try {
-      this.task = cron.schedule(cronExpression, async () => {
-        if (this.isRunning) {
-          console.log('[Scheduler] 上一次任务仍在执行，跳过本次')
+      const task = cron.schedule(cronExpression, async () => {
+        const schedule = this.monitors.get(monitorId)
+        if (schedule?.isRunning) {
+          console.log(`[Scheduler] 监控任务 ${monitorId} 上一次仍在执行，跳过本次`)
           return
         }
 
-        this.isRunning = true
-        console.log('[Scheduler] 开始执行定时扫描任务...')
+        if (schedule) {
+          schedule.isRunning = true
+        }
+
+        console.log(`[Scheduler] 开始执行监控任务 ${monitorId} 的扫描...`)
         
         try {
-          // 调用监控服务执行扫描
-          const response = await fetch(`http://localhost:${process.env.DEPLOY_RUN_PORT || 5000}/api/monitor/cron`, {
+          // 调用监控服务执行单个任务的扫描
+          const response = await fetch(`http://localhost:${process.env.DEPLOY_RUN_PORT || 5000}/api/monitor/cron?monitor_id=${monitorId}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -46,64 +54,133 @@ class SchedulerService {
           })
 
           const result = await response.json()
-          console.log('[Scheduler] 扫描完成:', {
+          console.log(`[Scheduler] 监控任务 ${monitorId} 扫描完成:`, {
             success: result.success,
-            duration_ms: result.duration_ms,
-            monitors_scanned: result.scan?.monitors_scanned,
             new_files: result.scan?.total_new_files,
             shared: result.scan?.total_shared,
             pushed: result.scan?.total_pushed,
           })
         } catch (error) {
-          console.error('[Scheduler] 扫描任务失败:', error)
+          console.error(`[Scheduler] 监控任务 ${monitorId} 扫描失败:`, error)
         } finally {
-          this.isRunning = false
+          const s = this.monitors.get(monitorId)
+          if (s) {
+            s.isRunning = false
+          }
         }
       })
 
-      this.currentCronExpression = cronExpression
-      console.log('[Scheduler] 定时任务已启动:', cronExpression)
+      this.monitors.set(monitorId, {
+        id: monitorId,
+        cronExpression,
+        task,
+        isRunning: false,
+      })
+
+      console.log(`[Scheduler] 监控任务 ${monitorId} 已调度: ${cronExpression}`)
       return true
     } catch (error) {
-      console.error('[Scheduler] 启动定时任务失败:', error)
+      console.error(`[Scheduler] 监控任务 ${monitorId} 调度失败:`, error)
       return false
     }
   }
 
   /**
-   * 停止定时任务
+   * 移除监控任务的调度
    */
-  stop(): void {
-    if (this.task) {
-      this.task.stop()
-      this.task = null
-      this.currentCronExpression = ''
-      console.log('[Scheduler] 定时任务已停止')
+  unscheduleMonitor(monitorId: number): void {
+    const schedule = this.monitors.get(monitorId)
+    if (schedule) {
+      schedule.task.stop()
+      this.monitors.delete(monitorId)
+      console.log(`[Scheduler] 监控任务 ${monitorId} 已取消调度`)
     }
   }
 
   /**
-   * 获取状态
+   * 批量加载监控任务
+   */
+  async loadMonitors(): Promise<void> {
+    try {
+      const { getSupabaseClient } = await import('@/storage/database/supabase-client')
+      const client = getSupabaseClient()
+
+      const { data: monitors, error } = await client
+        .from('file_monitors')
+        .select('id, cron_expression')
+        .eq('enabled', true)
+
+      if (error) {
+        console.error('[Scheduler] 加载监控任务失败:', error)
+        return
+      }
+
+      // 清除所有现有调度
+      this.stopAll()
+
+      // 为每个启用的监控任务创建调度
+      for (const monitor of monitors || []) {
+        const cronExpr = monitor.cron_expression || '*/10 7-23 * * *'
+        this.scheduleMonitor(monitor.id, cronExpr)
+      }
+
+      console.log(`[Scheduler] 已加载 ${this.monitors.size} 个监控任务的调度`)
+    } catch (error) {
+      console.error('[Scheduler] 加载监控任务失败:', error)
+    }
+  }
+
+  /**
+   * 停止所有调度
+   */
+  stopAll(): void {
+    for (const [id, schedule] of this.monitors) {
+      schedule.task.stop()
+    }
+    this.monitors.clear()
+    console.log('[Scheduler] 所有调度已停止')
+  }
+
+  /**
+   * 获取调度状态
    */
   getStatus(): {
-    running: boolean
-    executing: boolean
-    cronExpression: string
+    monitorCount: number
+    monitors: Array<{
+      id: number
+      cronExpression: string
+      isRunning: boolean
+    }>
   } {
+    const monitorsList = Array.from(this.monitors.values()).map(m => ({
+      id: m.id,
+      cronExpression: m.cronExpression,
+      isRunning: m.isRunning,
+    }))
+
     return {
-      running: this.task !== null,
-      executing: this.isRunning,
-      cronExpression: this.currentCronExpression,
+      monitorCount: this.monitors.size,
+      monitors: monitorsList,
     }
   }
 
   /**
-   * 重启定时任务
+   * 获取单个监控任务的调度状态
    */
-  restart(cronExpression?: string): boolean {
-    const expression = cronExpression || this.currentCronExpression || '*/10 7-23 * * *'
-    this.stop()
-    return this.start(expression)
+  getMonitorStatus(monitorId: number): {
+    scheduled: boolean
+    cronExpression?: string
+    isRunning?: boolean
+  } {
+    const schedule = this.monitors.get(monitorId)
+    if (schedule) {
+      return {
+        scheduled: true,
+        cronExpression: schedule.cronExpression,
+        isRunning: schedule.isRunning,
+      }
+    }
+    return { scheduled: false }
   }
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
+import { schedulerService } from '@/lib/scheduler/service'
 
 // PUT - 更新监控任务
 export async function PUT(
@@ -29,6 +30,14 @@ export async function PUT(
     
     if (error) throw new Error(`更新监控任务失败: ${error.message}`)
     
+    // 同步更新调度器
+    if (data.enabled) {
+      const cronExpr = data.cron_expression || '*/10 7-23 * * *'
+      schedulerService.scheduleMonitor(data.id, cronExpr)
+    } else {
+      schedulerService.unscheduleMonitor(data.id)
+    }
+    
     return NextResponse.json(data)
   } catch (error) {
     console.error('更新监控任务失败:', error)
@@ -54,6 +63,9 @@ export async function DELETE(
       .eq('id', parseInt(id))
     
     if (error) throw new Error(`删除监控任务失败: ${error.message}`)
+    
+    // 从调度器中移除
+    schedulerService.unscheduleMonitor(parseInt(id))
     
     return NextResponse.json({ success: true })
   } catch (error) {
