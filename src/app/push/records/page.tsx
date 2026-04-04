@@ -542,7 +542,10 @@ export default function PushRecordsPage() {
                               {getCloudDriveIcon(share?.cloud_drives?.name || '')}
                             </span>
                             <span className="text-sm truncate">
-                              {share?.cloud_drives?.alias || share?.cloud_drives?.name || '-'}
+                              {share?.cloud_drives 
+                                ? (share.cloud_drives.alias || share.cloud_drives.name)
+                                : <span className="text-muted-foreground italic">已删除</span>
+                              }
                             </span>
                           </div>
                         </TableCell>

@@ -971,7 +971,10 @@ export default function ShareRecordsPage() {
                             {getCloudDriveIcon(record.cloud_drives?.name || '')}
                           </span>
                           <span className="text-sm font-medium">
-                            {record.cloud_drives?.alias || CLOUD_DRIVE_NAMES[record.cloud_drives?.name || ''] || record.cloud_drives?.name || '-'}
+                            {record.cloud_drives 
+                              ? (record.cloud_drives.alias || CLOUD_DRIVE_NAMES[record.cloud_drives.name] || record.cloud_drives.name)
+                              : <span className="text-muted-foreground italic">已删除</span>
+                            }
                           </span>
                         </div>
                       </TableCell>
@@ -1061,7 +1064,12 @@ export default function ShareRecordsPage() {
                                     <span className="w-3 h-3 flex items-center justify-center">
                                       {getCloudDriveIcon(link.cloud_drives?.name || '')}
                                     </span>
-                                    <span>{link.cloud_drives?.alias || CLOUD_DRIVE_NAMES[link.cloud_drives?.name || ''] || link.cloud_drives?.name}</span>
+                                    <span>
+                                      {link.cloud_drives 
+                                        ? (link.cloud_drives.alias || CLOUD_DRIVE_NAMES[link.cloud_drives.name] || link.cloud_drives.name)
+                                        : <span className="italic">已删除</span>
+                                      }
+                                    </span>
                                     {link.share_code && (
                                       <Badge variant="outline" className="text-[10px] h-4 px-1">
                                         {link.share_code}
