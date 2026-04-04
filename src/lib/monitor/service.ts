@@ -128,6 +128,33 @@ export class FileMonitorService {
     }
     return this._client
   }
+  
+  // 计算标题匹配度 (0-100)
+  private calculateMatchScore(originalTitle: string, tmdbTitle: string): number {
+    if (!originalTitle || !tmdbTitle) return 0
+    
+    const normalize = (s: string) => 
+      s.toLowerCase()
+       .replace(/[^\w\u4e00-\u9fa5]/g, '')
+       .trim()
+    
+    const norm1 = normalize(originalTitle)
+    const norm2 = normalize(tmdbTitle)
+    
+    if (norm1 === norm2) return 100
+    
+    // 包含关系
+    if (norm1.includes(norm2) || norm2.includes(norm1)) {
+      return Math.min(norm1.length, norm2.length) / Math.max(norm1.length, norm2.length) * 80
+    }
+    
+    // 计算相同字符比例
+    const set1 = new Set(norm1.split(''))
+    const set2 = new Set(norm2.split(''))
+    const intersection = new Set([...set1].filter(x => set2.has(x)))
+    
+    return intersection.size / Math.max(set1.size, set2.size) * 60
+  }
 
   // ==================== 主扫描流程 ====================
   
@@ -638,12 +665,28 @@ export class FileMonitorService {
           }
         }
       } else {
-        // unknown 类型，尝试两种搜索
-        // 先搜索电视剧（更常见）
-        const tvResults = await tmdbService.searchTV(title, year)
-        if (tvResults && tvResults.length > 0) {
+        // unknown 类型，同时搜索电影和电视剧（和 identify API 相同的逻辑）
+        const [movieResults, tvResults] = await Promise.all([
+          tmdbService.searchMovie(title, year),
+          tmdbService.searchTV(title, year),
+        ])
+        
+        // 计算匹配度
+        const movieScore = movieResults && movieResults.length > 0 
+          ? this.calculateMatchScore(title, movieResults[0].title || movieResults[0].original_title || '')
+          : 0
+        const tvScore = tvResults && tvResults.length > 0 
+          ? this.calculateMatchScore(title, tvResults[0].name || tvResults[0].original_name || '')
+          : 0
+        
+        console.log(`[Monitor] TMDB 搜索结果: 电影=${movieResults?.length || 0}条(匹配度${movieScore}), 电视剧=${tvResults?.length || 0}条(匹配度${tvScore})`)
+        
+        // 优先选择匹配度更高的结果
+        if (tvScore > movieScore && tvResults && tvResults.length > 0) {
+          // 电视剧匹配度更高
           const show = tvResults[0]
           const details = await tmdbService.getTVDetails(show.id, 'credits')
+          console.log(`[Monitor] 选择电视剧: ${show.name}`)
           
           return {
             tmdbId: show.id,
@@ -657,11 +700,11 @@ export class FileMonitorService {
           }
         }
         
-        // 再搜索电影
-        const movieResults = await tmdbService.searchMovie(title, year)
+        // 电影匹配度更高或相同
         if (movieResults && movieResults.length > 0) {
           const movie = movieResults[0]
           const details = await tmdbService.getMovieDetails(movie.id, 'credits')
+          console.log(`[Monitor] 选择电影: ${movie.title}`)
           
           return {
             tmdbId: movie.id,
@@ -673,6 +716,24 @@ export class FileMonitorService {
             poster_url: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
             cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
             runtime: (details as any)?.runtime,
+          }
+        }
+        
+        // 如果电影匹配度不够高，但电视剧有结果
+        if (tvResults && tvResults.length > 0) {
+          const show = tvResults[0]
+          const details = await tmdbService.getTVDetails(show.id, 'credits')
+          console.log(`[Monitor] 备选电视剧: ${show.name}`)
+          
+          return {
+            tmdbId: show.id,
+            totalEpisodes: details?.number_of_episodes || 0,
+            status: details?.status || 'Returning Series',
+            rating: show.vote_average,
+            genres: (details as any)?.genres?.map((g: any) => g.name) || [],
+            overview: show.overview,
+            poster_url: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : undefined,
+            cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
           }
         }
       }
