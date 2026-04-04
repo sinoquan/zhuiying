@@ -292,10 +292,11 @@ export function parseFileName(fileName: string, fileSize?: number): ParsedFileIn
     result.title = titleMatch ? titleMatch[1].trim() : cleanName
   }
   
-  // 如果没有匹配到剧集特征但有年份，可能是电影
-  if (result.content_type === 'unknown' && result.year) {
-    result.content_type = 'movie'
-  }
+  // 如果没有匹配到剧集特征但有年份，保持 unknown，让 TMDB 搜索来决定
+  // 不要默认设为 movie，因为很多电视剧文件夹也没有季集信息
+  // if (result.content_type === 'unknown' && result.year) {
+  //   result.content_type = 'movie'
+  // }
   
   // 格式化文件大小
   if (fileSize) {
