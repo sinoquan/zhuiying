@@ -182,6 +182,72 @@ class SchedulerService {
     }
     return { scheduled: false }
   }
+
+  /**
+   * 计算下次执行时间（秒数）
+   */
+  getNextRunInSeconds(cronExpression: string): number | null {
+    try {
+      // 解析 cron 表达式，计算下次执行时间
+      const parts = cronExpression.split(' ')
+      if (parts.length !== 5) return null
+
+      const [minute, hour, dayOfMonth, month, dayOfWeek] = parts
+      const now = new Date()
+      
+      // 简单实现：根据 minute 和 hour 计算下一次执行时间
+      // 只处理常见的 */N 格式
+      let nextRun = new Date(now)
+      
+      // 处理分钟
+      if (minute.startsWith('*/')) {
+        const interval = parseInt(minute.slice(2))
+        const currentMinute = now.getMinutes()
+        const nextMinute = Math.ceil(currentMinute / interval) * interval
+        if (nextMinute >= 60) {
+          nextRun.setHours(nextRun.getHours() + 1)
+          nextRun.setMinutes(0)
+        } else {
+          nextRun.setMinutes(nextMinute)
+        }
+        nextRun.setSeconds(0)
+        nextRun.setMilliseconds(0)
+      } else if (minute === '*') {
+        // 每分钟
+        nextRun.setMinutes(nextRun.getMinutes() + 1)
+        nextRun.setSeconds(0)
+        nextRun.setMilliseconds(0)
+      } else {
+        // 具体分钟值
+        const targetMinute = parseInt(minute)
+        nextRun.setMinutes(targetMinute)
+        nextRun.setSeconds(0)
+        nextRun.setMilliseconds(0)
+        if (nextRun <= now) {
+          nextRun.setHours(nextRun.getHours() + 1)
+        }
+      }
+
+      // 处理小时范围（如 7-23）
+      if (hour.includes('-') && !hour.startsWith('*')) {
+        const [startHour, endHour] = hour.split('-').map(Number)
+        const currentHour = nextRun.getHours()
+        if (currentHour < startHour) {
+          nextRun.setHours(startHour)
+          nextRun.setMinutes(0)
+        } else if (currentHour > endHour) {
+          // 超出时间范围，明天再执行
+          nextRun.setDate(nextRun.getDate() + 1)
+          nextRun.setHours(startHour)
+          nextRun.setMinutes(0)
+        }
+      }
+
+      return Math.max(0, Math.floor((nextRun.getTime() - now.getTime()) / 1000))
+    } catch {
+      return null
+    }
+  }
 }
 
 // 单例导出

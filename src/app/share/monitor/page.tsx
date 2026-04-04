@@ -126,7 +126,11 @@ export default function FileMonitorPage() {
   const [monitors, setMonitors] = useState<FileMonitor[]>([])
   const [drives, setDrives] = useState<CloudDrive[]>([])
   const [channels, setChannels] = useState<PushChannel[]>([])
+  const [schedulerInfo, setSchedulerInfo] = useState<{
+    monitors: Array<{ id: number; nextRunInSeconds: number | null }>
+  }>({ monitors: [] })
   const [loading, setLoading] = useState(true)
+  const [countdownUpdate, setCountdownUpdate] = useState(0) // 用于触发倒计时更新
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingMonitor, setEditingMonitor] = useState<FileMonitor | null>(null)
   const [formData, setFormData] = useState({
@@ -172,6 +176,24 @@ export default function FileMonitorPage() {
     fetchData()
   }, [])
 
+  // 每秒更新倒计时显示
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdownUpdate(n => n + 1)
+      // 每秒减少 nextRunInSeconds
+      setSchedulerInfo(prev => ({
+        ...prev,
+        monitors: prev.monitors.map(m => ({
+          ...m,
+          nextRunInSeconds: m.nextRunInSeconds !== null && m.nextRunInSeconds !== undefined 
+            ? Math.max(0, m.nextRunInSeconds - 1) 
+            : m.nextRunInSeconds
+        }))
+      }))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
   // 当选择网盘时，加载文件列表
   useEffect(() => {
     if (formData.cloud_drive_id && dialogOpen && !editingMonitor) {
@@ -179,20 +201,34 @@ export default function FileMonitorPage() {
     }
   }, [formData.cloud_drive_id, dialogOpen, editingMonitor])
 
-  const fetchData = async () => {
+  const fetchData = async (ensureScheduler = true) => {
     setLoading(true)
     try {
-      const [monitorsRes, drivesRes, channelsRes] = await Promise.all([
+      // 确保调度器已加载
+      if (ensureScheduler) {
+        await fetch("/api/scheduler", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reload" }),
+        })
+      }
+      
+      const [monitorsRes, drivesRes, channelsRes, schedulerRes] = await Promise.all([
         fetch("/api/share/monitor"),
         fetch("/api/cloud-drives"),
         fetch("/api/push/channels"),
+        fetch("/api/scheduler"),
       ])
       const monitorsData = await monitorsRes.json()
       const drivesData = await drivesRes.json()
       const channelsData = await channelsRes.json()
+      const schedulerData = await schedulerRes.json()
       setMonitors(monitorsData)
       setDrives(drivesData.filter((d: CloudDrive) => d.is_active))
       setChannels(channelsData || [])
+      if (schedulerData.success) {
+        setSchedulerInfo({ monitors: schedulerData.monitors || [] })
+      }
     } catch {
       toast.error("获取数据失败")
     } finally {
@@ -687,7 +723,7 @@ export default function FileMonitorPage() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={fetchData}
+            onClick={() => fetchData(false)}
             disabled={loading}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -858,6 +894,23 @@ export default function FileMonitorPage() {
                               <span className="text-green-600">分享 {scanStats.shared}</span>
                               <span className="text-blue-600">推送 {scanStats.pushed}</span>
                             </div>
+                            {(() => {
+                              const schedulerMonitor = schedulerInfo.monitors.find(m => m.id === monitor.id)
+                              const nextRun = schedulerMonitor?.nextRunInSeconds
+                              if (nextRun !== null && nextRun !== undefined) {
+                                const minutes = Math.floor(nextRun / 60)
+                                const seconds = nextRun % 60
+                                const timeText = minutes > 0 
+                                  ? `${minutes}分${seconds}秒后` 
+                                  : `${seconds}秒后`
+                                return (
+                                  <div className="text-xs text-orange-500">
+                                    下次扫描: {timeText}
+                                  </div>
+                                )
+                              }
+                              return null
+                            })()}
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">暂无记录</span>

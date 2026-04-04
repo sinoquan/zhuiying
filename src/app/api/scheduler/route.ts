@@ -10,9 +10,17 @@ import { schedulerService } from '@/lib/scheduler/service'
 export async function GET() {
   try {
     const status = schedulerService.getStatus()
+    
+    // 计算每个任务的下次扫描时间
+    const monitorsWithNextRun = status.monitors.map(m => ({
+      ...m,
+      nextRunInSeconds: schedulerService.getNextRunInSeconds(m.cronExpression),
+    }))
+    
     return NextResponse.json({
       success: true,
-      ...status,
+      monitorCount: status.monitorCount,
+      monitors: monitorsWithNextRun,
     })
   } catch (error) {
     console.error('获取调度器状态失败:', error)
@@ -31,10 +39,16 @@ export async function POST(request: NextRequest) {
 
     if (action === 'reload') {
       await schedulerService.loadMonitors()
+      const status = schedulerService.getStatus()
+      const monitorsWithNextRun = status.monitors.map(m => ({
+        ...m,
+        nextRunInSeconds: schedulerService.getNextRunInSeconds(m.cronExpression),
+      }))
       return NextResponse.json({
         success: true,
         message: '调度器已重新加载',
-        ...schedulerService.getStatus(),
+        monitorCount: status.monitorCount,
+        monitors: monitorsWithNextRun,
       })
     } else {
       return NextResponse.json(
