@@ -777,6 +777,21 @@ export class FileMonitorService {
                   hdr_format: videoQuality.hdr_format,
                 })
               }
+              
+              // 【关键】检查内部视频文件是否有季集信息
+              if (videoParsed?.season !== null && videoParsed?.episode !== null) {
+                console.log(`[Monitor] 内部视频文件有季集信息: S${videoParsed.season}E${videoParsed.episode}，强制类型为电视剧`)
+                // 更新 seriesInfo 中的类型和季集信息
+                seriesInfo.contentInfo.type = 'tv'
+                seriesInfo.contentInfo.season = videoParsed.season
+                seriesInfo.contentInfo.episode = videoParsed.episode
+                // 更新 parsedInfo 以便后续使用
+                if (parsedInfo) {
+                  parsedInfo.season = videoParsed.season
+                  parsedInfo.episode = videoParsed.episode
+                  parsedInfo.type = 'tv'
+                }
+              }
             }
           }
         } catch (e) {
