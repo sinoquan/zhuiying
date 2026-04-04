@@ -411,32 +411,14 @@ export class TMDBService {
         
         console.log(`[TMDB] 搜索结果: 电影=${movieResults.length}条(匹配度${movieScore}), 电视剧=${tvResults.length}条(匹配度${tvScore})`)
         
-        // 如果电视剧匹配度更高或相当，优先选择电视剧（因为文件夹形式更可能是电视剧）
-        if (tvResults.length > 0 && tvScore >= movieScore * 0.9) {
-          const show = tvResults[0]
-          const details = await this.getTVDetails(show.id, 'credits')
-          
-          return {
-            type: 'tv',
-            title: show.name || show.original_name,
-            original_title: show.original_name,
-            year: parsed.year || (show.first_air_date ? parseInt(show.first_air_date.split('-')[0]) : null),
-            season: parsed.season,
-            episode: parsed.episode,
-            tmdb_id: show.id,
-            poster_url: show.poster_path ? `${this.imageBaseUrl}${show.poster_path}` : null,
-            overview: show.overview,
-            is_completed: details.status === 'Ended' || details.status === '已完结',
-            rating: show.vote_average,
-            genres: details.genres?.map((g: { name: string }) => g.name),
-            cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
-            original_language: show.original_language,
-            production_countries: details.production_countries?.map((c: { iso_3166_1: string }) => c.iso_3166_1),
-          }
-        }
+        // 【重要】没有季集信息时，优先选择匹配度更高的结果
+        // 不再默认偏向电视剧，因为电影文件也很常见
+        const bestIsMovie = movieScore >= tvScore
         
-        // 否则选择电影
-        if (movieResults.length > 0) {
+        console.log(`[TMDB] 无季集信息，选择匹配度更高的: ${bestIsMovie ? '电影' : '电视剧'}`)
+        
+        // 优先选择匹配度更高的类型
+        if (bestIsMovie && movieResults.length > 0) {
           const movie = movieResults[0]
           const details = await this.getMovieDetails(movie.id, 'credits')
           
@@ -459,7 +441,7 @@ export class TMDBService {
           }
         }
         
-        // 电影没结果，再尝试电视剧
+        // 电视剧匹配度更高
         if (tvResults.length > 0) {
           const show = tvResults[0]
           const details = await this.getTVDetails(show.id, 'credits')
@@ -482,6 +464,8 @@ export class TMDBService {
             production_countries: details.production_countries?.map((c: { iso_3166_1: string }) => c.iso_3166_1),
           }
         }
+        
+        // 电视剧没结果，回退到电影
       }
       
       // 未找到
