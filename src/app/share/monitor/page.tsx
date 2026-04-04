@@ -772,10 +772,8 @@ export default function FileMonitorPage() {
                   const scanStatus = scanStats?.lastScanStatus
                   const isScanning = scanningId === monitor.id
                   
-                  // 路径显示：第一行显示文件夹名，第二行显示完整路径（如果是数字ID则不显示第二行）
+                  // 路径显示：第一行显示文件夹名，第二行显示完整路径
                   const folderName = monitor.path_name || monitor.path.split('/').pop() || monitor.path
-                  const isNumericPath = /^\d+$/.test(monitor.path.split('/').pop() || '')
-                  const showFullPath = !isNumericPath && monitor.path !== '/' && monitor.path !== folderName
                   
                   return (
                     <TableRow key={monitor.id}>
@@ -792,11 +790,9 @@ export default function FileMonitorPage() {
                           <span className="font-medium text-sm truncate" title={folderName}>
                             {folderName}
                           </span>
-                          {showFullPath && (
-                            <span className="text-xs text-muted-foreground truncate" title={monitor.path}>
-                              {monitor.path}
-                            </span>
-                          )}
+                          <span className="text-xs text-muted-foreground truncate" title={monitor.path}>
+                            {monitor.path}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
