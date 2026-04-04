@@ -752,13 +752,13 @@ export default function FileMonitorPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead className="w-[140px]">网盘</TableHead>
-                  <TableHead>监控目录</TableHead>
+                  <TableHead className="w-[120px]">网盘</TableHead>
+                  <TableHead className="max-w-[200px]">监控目录</TableHead>
                   <TableHead className="w-[180px]">推送目标</TableHead>
-                  <TableHead className="w-[130px]">检测频率</TableHead>
-                  <TableHead className="w-[120px]">最近扫描</TableHead>
+                  <TableHead className="w-[160px]">检测频率</TableHead>
+                  <TableHead className="w-[140px]">最近扫描</TableHead>
                   <TableHead className="w-[80px]">状态</TableHead>
-                  <TableHead className="w-[120px] text-center">操作</TableHead>
+                  <TableHead className="w-[100px] text-center">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -788,12 +788,12 @@ export default function FileMonitorPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm truncate max-w-[200px]" title={displayName}>
+                        <div className="flex flex-col gap-0.5 max-w-[200px]">
+                          <span className="font-medium text-sm truncate" title={displayName}>
                             {displayName}
                           </span>
                           {showPath && (
-                            <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={monitor.path}>
+                            <span className="text-xs text-muted-foreground truncate" title={monitor.path}>
                               {monitor.path}
                             </span>
                           )}
@@ -801,17 +801,17 @@ export default function FileMonitorPage() {
                       </TableCell>
                       <TableCell>
                         {monitor.push_channels_list && monitor.push_channels_list.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1.5">
                             {monitor.push_channels_list.map(ch => (
                               <Badge 
                                 key={ch.id} 
                                 variant="outline" 
-                                className="text-[10px] px-1.5 py-0 h-5 gap-1"
+                                className="text-xs px-2 py-0.5 h-6 gap-1.5"
                               >
-                                <span className="w-3 h-3 flex items-center justify-center">
+                                <span className="w-4 h-4 flex items-center justify-center">
                                   {getPushChannelIcon(ch.channel_type)}
                                 </span>
-                                <span className="truncate max-w-[50px]">{ch.channel_name}</span>
+                                <span className="truncate max-w-[60px]">{ch.channel_name}</span>
                               </Badge>
                             ))}
                           </div>
@@ -820,31 +820,31 @@ export default function FileMonitorPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded whitespace-nowrap">
                           {monitor.cron_expression || '*/10 7-23 * * *'}
                         </code>
                       </TableCell>
                       <TableCell>
                         {isScanning ? (
-                          <div className="flex items-center gap-1 text-xs text-blue-600">
-                            <Loader2 className="h-3 w-3 animate-spin" />
+                          <div className="flex items-center gap-1.5 text-xs text-blue-600">
+                            <Loader2 className="h-4 w-4 animate-spin" />
                             扫描中...
                           </div>
                         ) : scanStats && lastScanTime ? (
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-1 text-xs">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5 text-xs">
                               {scanStatus === 'success' ? (
-                                <CheckCircle2 className="h-3 w-3 text-green-500" />
+                                <CheckCircle2 className="h-4 w-4 text-green-500" />
                               ) : scanStatus === 'partial' ? (
-                                <AlertCircle className="h-3 w-3 text-yellow-500" />
+                                <AlertCircle className="h-4 w-4 text-yellow-500" />
                               ) : scanStatus === 'failed' ? (
-                                <XCircle className="h-3 w-3 text-red-500" />
+                                <XCircle className="h-4 w-4 text-red-500" />
                               ) : (
-                                <Clock className="h-3 w-3 text-muted-foreground" />
+                                <Clock className="h-4 w-4 text-muted-foreground" />
                               )}
-                              <span className="text-muted-foreground text-[10px]">{lastScanTime}</span>
+                              <span className="text-muted-foreground">{lastScanTime}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-[10px]">
+                            <div className="flex items-center gap-2 text-xs">
                               <span className="text-green-600">分享 {scanStats.shared}</span>
                               <span className="text-blue-600">推送 {scanStats.pushed}</span>
                             </div>
