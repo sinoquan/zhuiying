@@ -117,6 +117,58 @@ export class TMDBService {
     this.cacheTTL = config.cacheTTL || 86400 // 默认24小时
   }
   
+  /**
+   * 计算标题匹配度分数 (0-100)
+   * 用于在没有季集信息时，判断应该选择电影还是电视剧
+   */
+  private calculateMatchScore(originalTitle: string, matchedTitle: string): number {
+    if (!originalTitle || !matchedTitle) return 0
+    
+    const s1 = originalTitle.toLowerCase().trim()
+    const s2 = matchedTitle.toLowerCase().trim()
+    
+    // 完全匹配
+    if (s1 === s2) return 100
+    
+    // 包含关系
+    if (s1.includes(s2) || s2.includes(s1)) {
+      // 计算长度比例
+      const ratio = Math.min(s1.length, s2.length) / Math.max(s1.length, s2.length)
+      return Math.round(80 * ratio)
+    }
+    
+    // 计算编辑距离
+    const editDistance = this.levenshteinDistance(s1, s2)
+    const maxLength = Math.max(s1.length, s2.length)
+    const similarity = 1 - editDistance / maxLength
+    
+    return Math.round(similarity * 100)
+  }
+  
+  /**
+   * 计算编辑距离（Levenshtein距离）
+   */
+  private levenshteinDistance(s1: string, s2: string): number {
+    const m = s1.length
+    const n = s2.length
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
+    
+    for (let i = 0; i <= m; i++) dp[i][0] = i
+    for (let j = 0; j <= n; j++) dp[0][j] = j
+    
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (s1[i - 1] === s2[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1]
+        } else {
+          dp[i][j] = Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]) + 1
+        }
+      }
+    }
+    
+    return dp[m][n]
+  }
+  
   // 生成缓存key
   private getCacheKey(endpoint: string, params: Record<string, string> = {}): string {
     const sortedParams = Object.keys(params)
@@ -307,9 +359,43 @@ export class TMDBService {
           }
         }
       } else {
-        // 尝试搜索电影
-        const movieResults = await this.searchMovie(parsed.title, parsed.year || undefined)
+        // 没有季集信息，同时搜索电影和电视剧
+        const [movieResults, tvResults] = await Promise.all([
+          this.searchMovie(parsed.title, parsed.year || undefined),
+          this.searchTV(parsed.title, parsed.year || undefined),
+        ])
         
+        // 计算匹配度，选择更匹配的结果
+        const movieScore = movieResults.length > 0 ? this.calculateMatchScore(parsed.title, movieResults[0].title || movieResults[0].original_title || '') : 0
+        const tvScore = tvResults.length > 0 ? this.calculateMatchScore(parsed.title, tvResults[0].name || tvResults[0].original_name || '') : 0
+        
+        console.log(`[TMDB] 搜索结果: 电影=${movieResults.length}条(匹配度${movieScore}), 电视剧=${tvResults.length}条(匹配度${tvScore})`)
+        
+        // 如果电视剧匹配度更高或相当，优先选择电视剧（因为文件夹形式更可能是电视剧）
+        if (tvResults.length > 0 && tvScore >= movieScore * 0.9) {
+          const show = tvResults[0]
+          const details = await this.getTVDetails(show.id, 'credits')
+          
+          return {
+            type: 'tv',
+            title: show.name || show.original_name,
+            original_title: show.original_name,
+            year: parsed.year || (show.first_air_date ? parseInt(show.first_air_date.split('-')[0]) : null),
+            season: parsed.season,
+            episode: parsed.episode,
+            tmdb_id: show.id,
+            poster_url: show.poster_path ? `${this.imageBaseUrl}${show.poster_path}` : null,
+            overview: show.overview,
+            is_completed: details.status === 'Ended' || details.status === '已完结',
+            rating: show.vote_average,
+            genres: details.genres?.map((g: { name: string }) => g.name),
+            cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
+            original_language: show.original_language,
+            production_countries: details.production_countries?.map((c: { iso_3166_1: string }) => c.iso_3166_1),
+          }
+        }
+        
+        // 否则选择电影
         if (movieResults.length > 0) {
           const movie = movieResults[0]
           const details = await this.getMovieDetails(movie.id, 'credits')
@@ -333,9 +419,7 @@ export class TMDBService {
           }
         }
         
-        // 尝试搜索电视剧
-        const tvResults = await this.searchTV(parsed.title, parsed.year || undefined)
-        
+        // 电影没结果，再尝试电视剧
         if (tvResults.length > 0) {
           const show = tvResults[0]
           const details = await this.getTVDetails(show.id, 'credits')
