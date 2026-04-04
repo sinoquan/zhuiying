@@ -518,10 +518,11 @@ export class FileMonitorService {
       
       // 初始文件大小
       let fileSize = file.size || shareInfo.total_size || 0
+      let videoQuality = parsedInfo  // 视频质量参数
       
-      // 如果是文件夹且大小为0，尝试访问分享链接获取真实大小
-      if (isFileDirectory(file) && fileSize === 0 && shareInfo.share_url) {
-        console.log(`[Monitor] 文件夹大小为0，尝试获取真实大小: ${file.name}`)
+      // 如果是文件夹，尝试访问分享链接获取真实大小和视频质量参数
+      if (isFileDirectory(file) && shareInfo.share_url) {
+        console.log(`[Monitor] 文件夹，尝试获取真实大小和质量参数: ${file.name}`)
         try {
           // 提取分享ID
           const shareIdMatch = shareInfo.share_url.match(/115cdn\.com\/s\/([a-z0-9]+)/i) || 
@@ -529,13 +530,79 @@ export class FileMonitorService {
           if (shareIdMatch) {
             const shareId = shareIdMatch[1]
             const shareData = await driveService.getShareInfo(shareId, shareInfo.share_code)
+            
+            // 获取文件大小
             if (shareData && shareData.file_size) {
               fileSize = shareData.file_size
               console.log(`[Monitor] 获取到真实大小: ${this.formatFileSize(fileSize)}`)
             }
+            
+            // 从内部视频文件获取质量参数
+            let foundQualityFromInternal = false
+            if (shareData?.files && shareData.files.length > 0) {
+              const videoFile = shareData.files.find((f: any) => {
+                const ext = f.file_name?.toLowerCase().split('.').pop() || ''
+                return ['mkv', 'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm2ts'].includes(ext)
+              })
+              
+              if (videoFile?.file_name) {
+                console.log(`[Monitor] 找到内部视频文件: ${videoFile.file_name}`)
+                const { parseFileName } = await import('@/lib/assistant/file-name-parser')
+                const videoParsed = parseFileName(videoFile.file_name)
+                if (videoParsed?.resolution) {
+                  videoQuality = videoParsed
+                  foundQualityFromInternal = true
+                  console.log(`[Monitor] 解析到质量参数:`, {
+                    resolution: videoQuality.resolution,
+                    video_codec: videoQuality.video_codec,
+                    hdr_format: videoQuality.hdr_format,
+                  })
+                }
+              }
+            }
+            
+            // 如果无法从内部文件获取，从文件夹名称解析质量参数
+            if (!foundQualityFromInternal) {
+              console.log(`[Monitor] 无法从内部文件获取质量参数，尝试从文件夹名称解析: ${file.name}`)
+              const { parseFileName } = await import('@/lib/assistant/file-name-parser')
+              const folderParsed = parseFileName(file.name)
+              if (folderParsed?.resolution) {
+                videoQuality = folderParsed
+                console.log(`[Monitor] 从文件夹名称解析到质量参数:`, {
+                  resolution: videoQuality.resolution,
+                  video_codec: videoQuality.video_codec,
+                  hdr_format: videoQuality.hdr_format,
+                })
+              }
+            }
           }
         } catch (e) {
-          console.log('[Monitor] 获取文件夹大小失败:', e)
+          console.log('[Monitor] 获取文件夹信息失败:', e)
+          
+          // 出错时，尝试从文件夹名称解析质量参数
+          console.log(`[Monitor] 回退到从文件夹名称解析: ${file.name}`)
+          const { parseFileName } = await import('@/lib/assistant/file-name-parser')
+          const folderParsed = parseFileName(file.name)
+          if (folderParsed?.resolution) {
+            videoQuality = folderParsed
+            console.log(`[Monitor] 从文件夹名称解析到质量参数:`, {
+              resolution: videoQuality.resolution,
+              video_codec: videoQuality.video_codec,
+              hdr_format: videoQuality.hdr_format,
+            })
+          }
+        }
+      } else if (!isFileDirectory(file)) {
+        // 对于单个视频文件，直接从文件名解析质量参数
+        const { parseFileName } = await import('@/lib/assistant/file-name-parser')
+        const fileParsed = parseFileName(file.name)
+        if (fileParsed?.resolution) {
+          videoQuality = fileParsed
+          console.log(`[Monitor] 从视频文件名解析到质量参数:`, {
+            resolution: videoQuality.resolution,
+            video_codec: videoQuality.video_codec,
+            hdr_format: videoQuality.hdr_format,
+          })
         }
       }
       
@@ -556,14 +623,14 @@ export class FileMonitorService {
         status: seriesInfo.contentInfo.status,
         totalEpisodes: seriesInfo.contentInfo.totalEpisodes,
         runtime: seriesInfo.contentInfo.runtime,
-        // 视频质量参数
-        resolution: parsedInfo?.resolution,
-        source: parsedInfo?.source,
-        video_codec: parsedInfo?.video_codec,
-        audio_codec: parsedInfo?.audio_codec,
-        hdr_format: parsedInfo?.hdr_format,
-        bit_depth: parsedInfo?.bit_depth,
-        quality_type: parsedInfo?.quality_type || 'normal',
+        // 视频质量参数 - 使用从文件夹内部视频解析的参数
+        resolution: videoQuality?.resolution,
+        source: videoQuality?.source,
+        video_codec: videoQuality?.video_codec,
+        audio_codec: videoQuality?.audio_codec,
+        hdr_format: videoQuality?.hdr_format,
+        bit_depth: videoQuality?.bit_depth,
+        quality_type: videoQuality?.quality_type || 'normal',
       }
       
       // 记录分享

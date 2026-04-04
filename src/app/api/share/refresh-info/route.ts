@@ -240,6 +240,18 @@ export async function POST(request: NextRequest) {
         mediaInfo.audio_codec = parsed.audio_codec
         mediaInfo.hdr_format = parsed.hdr_format
       }
+    } else {
+      // 文件夹但无法获取内部文件列表，从文件夹名称解析质量参数
+      console.log(`[RefreshInfo] 无法获取内部文件列表，从文件夹名称解析: ${record.file_name}`)
+      const folderParsed = parseFileName(record.file_name)
+      if (folderParsed) {
+        mediaInfo.resolution = folderParsed.resolution
+        mediaInfo.source = folderParsed.source
+        mediaInfo.video_codec = folderParsed.video_codec
+        mediaInfo.audio_codec = folderParsed.audio_codec
+        mediaInfo.hdr_format = folderParsed.hdr_format
+        console.log(`[RefreshInfo] 从文件夹名称解析到质量参数: resolution=${mediaInfo.resolution}, video_codec=${mediaInfo.video_codec}`)
+      }
     }
     
     // 更新分享记录

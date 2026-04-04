@@ -465,11 +465,36 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
             } else {
               console.log(`[SharePushService] 未找到视频文件`)
             }
+          } else {
+            // 无法从API获取文件列表，从文件夹名称解析质量参数
+            console.log(`[SharePushService] 无法从API获取文件列表，从文件夹名称解析: ${shareRecord.file_name}`)
+            const folderParsed = parseFileName(shareRecord.file_name)
+            if (folderParsed?.resolution) {
+              parsedQuality = folderParsed
+              console.log(`[SharePushService] 从文件夹名称解析到质量参数:`, {
+                resolution: parsedQuality.resolution,
+                video_codec: parsedQuality.video_codec,
+                hdr_format: parsedQuality.hdr_format,
+              })
+            }
           }
         }
       }
     } catch (err) {
       console.log('[SharePushService] 获取文件夹内部信息失败:', err)
+      // 出错时也尝试从文件夹名称解析
+      if (!parsedQuality?.resolution && shareRecord.file_name) {
+        console.log(`[SharePushService] 回退到从文件夹名称解析: ${shareRecord.file_name}`)
+        const folderParsed = parseFileName(shareRecord.file_name)
+        if (folderParsed?.resolution) {
+          parsedQuality = folderParsed
+          console.log(`[SharePushService] 从文件夹名称解析到质量参数:`, {
+            resolution: parsedQuality.resolution,
+            video_codec: parsedQuality.video_codec,
+            hdr_format: parsedQuality.hdr_format,
+          })
+        }
+      }
     }
   }
   
