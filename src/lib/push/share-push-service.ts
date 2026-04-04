@@ -137,12 +137,15 @@ function buildTemplateData(
                            (shareRecord.file_name && /S\d{1,2}E\d{1,4}/i.test(shareRecord.file_name))
   
   // 确定类型 - 如果有季集信息，强制为电视剧
+  // 优先使用 tmdbData.type（最新搜索结果），而不是 tmdbInfo.type（可能错误存储的）
   let contentType: string
   if (hasSeasonEpisode) {
     contentType = 'tv'
-    console.log(`[SharePushService] 检测到季集信息，强制类型为电视剧`)
+    console.log(`[SharePushService] buildTemplateData: 检测到季集信息，强制类型为电视剧`)
   } else {
-    contentType = tmdbInfo.type || tmdbData?.type || shareRecord.content_type || 'movie'
+    // 优先使用 tmdbData.type（最新搜索结果）
+    contentType = tmdbData?.type || tmdbInfo.type || shareRecord.content_type || 'movie'
+    console.log(`[SharePushService] buildTemplateData: 类型判断 - tmdbData.type=${tmdbData?.type}, tmdbInfo.type=${tmdbInfo.type}, 最终contentType=${contentType}`)
   }
   const isTV = contentType === 'tv' || contentType === 'tv_series'
   
@@ -345,9 +348,13 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
                            (shareRecord.tmdb_info?.episode && shareRecord.tmdb_info.episode > 0) ||
                            (shareRecord.file_name && /S\d{1,2}E\d{1,4}/i.test(shareRecord.file_name))
   
+  // 从文件名提取标题用于重新搜索
+  const fileNameTitle = shareRecord.file_name?.replace(/[\(\[【].*?[\)\]】]/g, '').replace(/\.\w+$/, '').trim() || ''
+  
   // 确定类型
   const storedType = shareRecord.tmdb_info?.type
   let type: 'movie' | 'tv' = 'movie'
+  
   if (hasSeasonEpisode) {
     // 有季集信息，强制为电视剧
     type = 'tv'
@@ -355,7 +362,23 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
   } else if (storedType === 'tv' || storedType === 'tv_series') {
     type = 'tv'
   } else if (storedType === 'movie') {
-    type = 'movie'
+    // 存储的类型是 movie，但可能是错误的，需要重新验证
+    // 使用 identifyFromFileName 重新识别
+    console.log(`[SharePushService] 存储类型是 movie，重新验证...`)
+    try {
+      const tmdbService = new TMDBService({ apiKey: config.tmdbApiKey, proxyUrl: config.proxyUrl })
+      const identified = await tmdbService.identifyFromFileName(shareRecord.file_name || '')
+      if (identified && identified.type === 'tv') {
+        type = 'tv'
+        console.log(`[SharePushService] 重新识别结果: tv，修正类型`)
+      } else {
+        type = 'movie'
+        console.log(`[SharePushService] 重新识别结果: movie`)
+      }
+    } catch (e) {
+      console.log(`[SharePushService] 重新识别失败，使用存储类型: movie`)
+      type = 'movie'
+    }
   } else {
     // 如果没有存储类型，才用 content_type 判断
     const contentType = shareRecord.content_type || 'movie'
