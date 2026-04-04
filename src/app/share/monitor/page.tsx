@@ -913,28 +913,24 @@ export default function FileMonitorPage() {
                                 <Clock className="h-4 w-4 text-muted-foreground" />
                               )}
                               <span className="text-muted-foreground">{lastScanTime}</span>
+                              {(() => {
+                                const schedulerMonitor = schedulerInfo.monitors.find(m => m.id === monitor.id)
+                                const nextRun = schedulerMonitor?.nextRunInSeconds
+                                if (nextRun !== null && nextRun !== undefined && nextRun > 0) {
+                                  const minutes = Math.ceil(nextRun / 60)
+                                  return (
+                                    <span className="text-orange-500 ml-1">
+                                      下一次 {minutes}分钟后
+                                    </span>
+                                  )
+                                }
+                                return null
+                              })()}
                             </div>
                             <div className="flex items-center gap-2 text-xs">
                               <span className="text-green-600">分享 {scanStats.shared}</span>
                               <span className="text-blue-600">推送 {scanStats.pushed}</span>
                             </div>
-                            {(() => {
-                              const schedulerMonitor = schedulerInfo.monitors.find(m => m.id === monitor.id)
-                              const nextRun = schedulerMonitor?.nextRunInSeconds
-                              if (nextRun !== null && nextRun !== undefined) {
-                                const minutes = Math.floor(nextRun / 60)
-                                const seconds = nextRun % 60
-                                const timeText = minutes > 0 
-                                  ? `${minutes}分${seconds}秒后` 
-                                  : `${seconds}秒后`
-                                return (
-                                  <div className="text-xs text-orange-500">
-                                    下次扫描: {timeText}
-                                  </div>
-                                )
-                              }
-                              return null
-                            })()}
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">暂无记录</span>
