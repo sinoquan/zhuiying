@@ -9,7 +9,14 @@ import { schedulerService } from '@/lib/scheduler/service'
 // GET - 获取调度器状态
 export async function GET() {
   try {
-    const status = schedulerService.getStatus()
+    let status = schedulerService.getStatus()
+    
+    // 如果调度器为空，自动重新加载
+    if (status.monitorCount === 0) {
+      console.log('[Scheduler API] 调度器为空，自动重新加载...')
+      await schedulerService.loadMonitors()
+      status = schedulerService.getStatus()
+    }
     
     // 计算每个任务的下次扫描时间
     const monitorsWithNextRun = status.monitors.map(m => ({

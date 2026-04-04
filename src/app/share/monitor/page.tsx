@@ -181,15 +181,35 @@ export default function FileMonitorPage() {
     const timer = setInterval(() => {
       setCountdownUpdate(n => n + 1)
       // 每秒减少 nextRunInSeconds
-      setSchedulerInfo(prev => ({
-        ...prev,
-        monitors: prev.monitors.map(m => ({
-          ...m,
-          nextRunInSeconds: m.nextRunInSeconds !== null && m.nextRunInSeconds !== undefined 
-            ? Math.max(0, m.nextRunInSeconds - 1) 
-            : m.nextRunInSeconds
-        }))
-      }))
+      setSchedulerInfo(prev => {
+        const newMonitors = prev.monitors.map(m => {
+          if (m.nextRunInSeconds !== null && m.nextRunInSeconds !== undefined && m.nextRunInSeconds > 0) {
+            return { ...m, nextRunInSeconds: m.nextRunInSeconds - 1 }
+          }
+          return m
+        })
+        
+        // 检查是否有任务到达0秒，需要重新获取状态
+        const hasZeroTask = newMonitors.some(m => m.nextRunInSeconds === 0)
+        if (hasZeroTask) {
+          // 延迟1秒后重新获取调度器状态（等待扫描执行）
+          setTimeout(() => {
+            fetch("/api/scheduler")
+              .then(res => res.json())
+              .then(data => {
+                if (data.success) {
+                  setSchedulerInfo({ monitors: data.monitors || [] })
+                  // 同时刷新监控任务数据
+                  fetch("/api/share/monitor")
+                    .then(res => res.json())
+                    .then(monitorsData => setMonitors(monitorsData))
+                }
+              })
+          }, 1000)
+        }
+        
+        return { ...prev, monitors: newMonitors }
+      })
     }, 1000)
     return () => clearInterval(timer)
   }, [])
@@ -201,18 +221,9 @@ export default function FileMonitorPage() {
     }
   }, [formData.cloud_drive_id, dialogOpen, editingMonitor])
 
-  const fetchData = async (ensureScheduler = true) => {
+  const fetchData = async () => {
     setLoading(true)
     try {
-      // 确保调度器已加载
-      if (ensureScheduler) {
-        await fetch("/api/scheduler", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "reload" }),
-        })
-      }
-      
       const [monitorsRes, drivesRes, channelsRes, schedulerRes] = await Promise.all([
         fetch("/api/share/monitor"),
         fetch("/api/cloud-drives"),
@@ -227,7 +238,20 @@ export default function FileMonitorPage() {
       setDrives(drivesData.filter((d: CloudDrive) => d.is_active))
       setChannels(channelsData || [])
       if (schedulerData.success) {
-        setSchedulerInfo({ monitors: schedulerData.monitors || [] })
+        // 如果调度器没有加载任务，才触发 reload
+        if (schedulerData.monitorCount === 0 && monitorsData.length > 0) {
+          const reloadRes = await fetch("/api/scheduler", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "reload" }),
+          })
+          const reloadData = await reloadRes.json()
+          if (reloadData.success) {
+            setSchedulerInfo({ monitors: reloadData.monitors || [] })
+          }
+        } else {
+          setSchedulerInfo({ monitors: schedulerData.monitors || [] })
+        }
       }
     } catch {
       toast.error("获取数据失败")
@@ -723,7 +747,7 @@ export default function FileMonitorPage() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => fetchData(false)}
+            onClick={fetchData}
             disabled={loading}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />

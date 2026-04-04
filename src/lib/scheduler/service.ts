@@ -14,8 +14,26 @@ interface MonitorSchedule {
   isRunning: boolean
 }
 
+// 使用全局变量存储调度器实例，避免热重载时丢失状态
+declare global {
+  // eslint-disable-next-line no-var
+  var __schedulerMonitors: Map<number, MonitorSchedule> | undefined
+}
+
 class SchedulerService {
-  private monitors: Map<number, MonitorSchedule> = new Map()
+  private monitors: Map<number, MonitorSchedule>
+
+  constructor() {
+    // 使用全局变量存储，避免热重载丢失
+    if (typeof globalThis !== 'undefined' && globalThis.__schedulerMonitors) {
+      this.monitors = globalThis.__schedulerMonitors
+    } else {
+      this.monitors = new Map()
+      if (typeof globalThis !== 'undefined') {
+        globalThis.__schedulerMonitors = this.monitors
+      }
+    }
+  }
 
   /**
    * 添加或更新监控任务的调度
@@ -77,7 +95,7 @@ class SchedulerService {
         isRunning: false,
       })
 
-      console.log(`[Scheduler] 监控任务 ${monitorId} 已调度: ${cronExpression}`)
+      console.log(`[Scheduler] 监控任务 ${monitorId} 已调度: ${cronExpression}, 下次执行将在约 ${this.getNextRunInSeconds(cronExpression)} 秒后`)
       return true
     } catch (error) {
       console.error(`[Scheduler] 监控任务 ${monitorId} 调度失败:`, error)
@@ -188,62 +206,79 @@ class SchedulerService {
    */
   getNextRunInSeconds(cronExpression: string): number | null {
     try {
-      // 解析 cron 表达式，计算下次执行时间
-      const parts = cronExpression.split(' ')
+      const parts = cronExpression.trim().split(/\s+/)
       if (parts.length !== 5) return null
 
       const [minute, hour, dayOfMonth, month, dayOfWeek] = parts
       const now = new Date()
       
-      // 简单实现：根据 minute 和 hour 计算下一次执行时间
-      // 只处理常见的 */N 格式
-      let nextRun = new Date(now)
+      // 简单实现：根据分钟和小时计算下一次执行时间
+      // 只处理常见的 */N 格式和具体数字
+      let nextMinute: number
+      let nextHour = now.getHours()
+      let addDay = 0
       
       // 处理分钟
-      if (minute.startsWith('*/')) {
+      if (minute === '*') {
+        nextMinute = now.getMinutes() + 1
+      } else if (minute.startsWith('*/')) {
         const interval = parseInt(minute.slice(2))
-        const currentMinute = now.getMinutes()
-        const nextMinute = Math.ceil(currentMinute / interval) * interval
+        if (isNaN(interval) || interval <= 0) return null
+        nextMinute = Math.ceil((now.getMinutes() + 1) / interval) * interval
         if (nextMinute >= 60) {
-          nextRun.setHours(nextRun.getHours() + 1)
-          nextRun.setMinutes(0)
-        } else {
-          nextRun.setMinutes(nextMinute)
+          nextMinute = 0
+          nextHour += 1
         }
-        nextRun.setSeconds(0)
-        nextRun.setMilliseconds(0)
-      } else if (minute === '*') {
-        // 每分钟
-        nextRun.setMinutes(nextRun.getMinutes() + 1)
-        nextRun.setSeconds(0)
-        nextRun.setMilliseconds(0)
       } else {
-        // 具体分钟值
-        const targetMinute = parseInt(minute)
-        nextRun.setMinutes(targetMinute)
-        nextRun.setSeconds(0)
-        nextRun.setMilliseconds(0)
-        if (nextRun <= now) {
-          nextRun.setHours(nextRun.getHours() + 1)
+        nextMinute = parseInt(minute)
+        if (isNaN(nextMinute) || nextMinute < 0 || nextMinute > 59) return null
+        // 如果当前时间已经过了这个分钟，则下一小时
+        if (nextMinute <= now.getMinutes()) {
+          nextHour += 1
         }
       }
-
-      // 处理小时范围（如 7-23）
+      
+      // 处理小时
+      let hourStart = 0
+      let hourEnd = 23
+      
       if (hour.includes('-') && !hour.startsWith('*')) {
-        const [startHour, endHour] = hour.split('-').map(Number)
-        const currentHour = nextRun.getHours()
-        if (currentHour < startHour) {
-          nextRun.setHours(startHour)
-          nextRun.setMinutes(0)
-        } else if (currentHour > endHour) {
-          // 超出时间范围，明天再执行
-          nextRun.setDate(nextRun.getDate() + 1)
-          nextRun.setHours(startHour)
-          nextRun.setMinutes(0)
+        const match = hour.match(/^(\d+)-(\d+)$/)
+        if (match) {
+          hourStart = parseInt(match[1])
+          hourEnd = parseInt(match[2])
+        }
+      } else if (hour !== '*') {
+        // 具体小时值
+        const targetHour = parseInt(hour)
+        if (!isNaN(targetHour)) {
+          if (nextHour > targetHour || (nextHour === targetHour && nextMinute <= now.getMinutes())) {
+            addDay = 1
+          }
+          nextHour = targetHour
         }
       }
-
-      return Math.max(0, Math.floor((nextRun.getTime() - now.getTime()) / 1000))
+      
+      // 检查是否在小时范围内
+      if (nextHour < hourStart) {
+        nextHour = hourStart
+        nextMinute = 0
+      } else if (nextHour > hourEnd) {
+        addDay = 1
+        nextHour = hourStart
+        nextMinute = 0
+      }
+      
+      // 计算秒数
+      const next = new Date(now)
+      next.setDate(next.getDate() + addDay)
+      next.setHours(nextHour)
+      next.setMinutes(nextMinute)
+      next.setSeconds(0)
+      next.setMilliseconds(0)
+      
+      const diff = Math.floor((next.getTime() - now.getTime()) / 1000)
+      return Math.max(0, diff)
     } catch {
       return null
     }
