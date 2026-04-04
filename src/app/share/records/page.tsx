@@ -988,17 +988,9 @@ export default function ShareRecordsPage() {
                             const FileIcon = fileType.icon
                             return <FileIcon className={`h-4 w-4 flex-shrink-0 ${fileType.color}`} />
                           })()}
-                          <div className="flex flex-col gap-0.5 min-w-0">
-                            <span className="font-medium text-sm truncate" title={record.file_name}>
-                              {record.file_name}
-                            </span>
-                            {/* 只有当有 TMDB 信息且是剧集时显示季集信息 */}
-                            {record.tmdb_info?.season && record.tmdb_info?.episode && (
-                              <span className="text-xs text-blue-500">
-                                S{String(record.tmdb_info.season).padStart(2, '0')}E{String(record.tmdb_info.episode).padStart(2, '0')}
-                              </span>
-                            )}
-                          </div>
+                          <span className="font-medium text-sm truncate" title={record.file_name}>
+                            {record.file_name}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>

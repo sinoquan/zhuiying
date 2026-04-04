@@ -44,7 +44,7 @@ import {
   Bell, RefreshCw, Copy, CheckCircle2, XCircle, 
   Clock, Loader2, ChevronLeft, ChevronRight,
   Search, Send, Trash2, ExternalLink, Film, Folder,
-  Star, Calendar, HardDrive, Link2, FileText, Edit, Image as ImageIcon
+  Star, Edit, Image as ImageIcon
 } from "lucide-react"
 import { toast } from "sonner"
 import { getPushChannelIcon, getCloudDriveIcon } from "@/lib/icons"
@@ -690,30 +690,14 @@ export default function PushRecordsPage() {
                               <Film className="h-4 w-4 mt-0.5 text-red-500 flex-shrink-0" />
                             )}
                             <div className="min-w-0 flex-1">
-                              {/* 文件名 - 始终显示原始文件名 */}
-                              <div className="font-medium text-sm truncate" title={share?.file_name}>
-                                {share?.file_name || '-'}
-                              </div>
-                              {/* 元信息 */}
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                                {/* 年份 */}
-                                {share?.tmdb_info?.year && (
-                                  <span className="flex items-center gap-0.5">
-                                    <Calendar className="h-3 w-3" />
-                                    {share.tmdb_info.year}
-                                  </span>
-                                )}
-                                {/* 评分 */}
+                              {/* 文件名 + 评分 */}
+                              <div className="font-medium text-sm truncate flex items-center gap-2" title={share?.file_name}>
+                                <span>{share?.file_name || '-'}</span>
+                                {/* 评分放在文件名后面 */}
                                 {share?.tmdb_info?.rating && (
-                                  <span className="flex items-center gap-0.5 text-yellow-600">
+                                  <span className="flex items-center gap-0.5 text-yellow-600 text-xs flex-shrink-0">
                                     <Star className="h-3 w-3 fill-yellow-500" />
                                     {share.tmdb_info.rating.toFixed(1)}
-                                  </span>
-                                )}
-                                {/* 季集 */}
-                                {share?.tmdb_info?.season && share?.tmdb_info?.episode && (
-                                  <span className="text-blue-600">
-                                    S{String(share.tmdb_info.season).padStart(2, '0')}E{String(share.tmdb_info.episode).padStart(2, '0')}
                                   </span>
                                 )}
                               </div>
