@@ -129,7 +129,7 @@ export default function FileMonitorPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingMonitor, setEditingMonitor] = useState<FileMonitor | null>(null)
   const [formData, setFormData] = useState({
-    cloud_drive_id: "",
+    cloud_drive_id: undefined as string | undefined,
     cron_expression: "*/10 7-23 * * *",
     push_channel_ids: [] as number[],
     push_template_type: "auto",
@@ -409,7 +409,7 @@ export default function FileMonitorPage() {
 
   const resetForm = () => {
     setFormData({ 
-      cloud_drive_id: "", 
+      cloud_drive_id: undefined,
       cron_expression: "*/10 7-23 * * *",
       push_channel_ids: [],
       push_template_type: "auto",
@@ -957,6 +957,7 @@ export default function FileMonitorPage() {
                     选择网盘
                   </Label>
                   <Select
+                    key={editingMonitor ? `edit-${editingMonitor.id}` : 'create'}
                     value={formData.cloud_drive_id}
                     onValueChange={(value) => {
                       setFormData({ 
