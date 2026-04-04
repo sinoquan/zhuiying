@@ -795,6 +795,41 @@ export class FileMonitorService {
       }
       
       // 记录分享
+      // 先检查分享状态（针对115网盘等需要审核的网盘）
+      let actualStatus = 'active'
+      
+      // 如果是115网盘，检查分享状态
+      if (monitor.cloud_drive_id) {
+        const { data: drive } = await this.client
+          .from('cloud_drives')
+          .select('name')
+          .eq('id', monitor.cloud_drive_id)
+          .single()
+        
+        if (drive?.name === '115' && shareInfo.share_url) {
+          try {
+            // 提取分享码
+            const shareCodeMatch = shareInfo.share_url.match(/115cdn\.com\/s\/([a-z0-9]+)/i) || 
+                                   shareInfo.share_url.match(/115\.com\/s\/([a-z0-9]+)/i)
+            if (shareCodeMatch) {
+              const shareCode = shareCodeMatch[1]
+              const statusInfo = await driveService.getShareStatus(shareCode)
+              console.log(`[Monitor] 115分享状态检查:`, statusInfo)
+              
+              if (statusInfo.status === 'audit') {
+                actualStatus = 'audit'
+                console.log(`[Monitor] 分享处于审核中状态`)
+              } else if (statusInfo.status === 'blocked') {
+                actualStatus = 'blocked'
+                console.log(`[Monitor] 分享已被屏蔽`)
+              }
+            }
+          } catch (e) {
+            console.log('[Monitor] 检查分享状态失败，使用默认状态:', e)
+          }
+        }
+      }
+      
       const { data: shareRecord, error } = await this.client
         .from('share_records')
         .insert({
@@ -805,7 +840,7 @@ export class FileMonitorService {
           file_size: this.formatFileSize(fileSize),
           share_url: shareInfo.share_url,
           share_code: shareInfo.share_code,
-          share_status: 'active',
+          share_status: actualStatus,
           file_created_at: file.created_at,
           content_type: isFileDirectory(file) ? 'folder' : 'video', // 文件类型：文件夹或视频
           tmdb_id: seriesInfo.contentInfo.tmdbId,

@@ -356,10 +356,12 @@ export default function ShareRecordsPage() {
     // 防止重复刷新
     if (isAutoRefreshing.current) return
     
-    // 找出需要刷新的记录：文件夹类型且大小为空或0
+    // 找出需要刷新的记录：文件夹类型且大小为空或0，且不是审核中状态
     const needRefresh = records.filter(r => 
       r.content_type === 'folder' && 
-      (!r.file_size || r.file_size === '0' || r.file_size === '0 B')
+      (!r.file_size || r.file_size === '0' || r.file_size === '0 B') &&
+      r.share_status !== 'audit' && // 审核中的跳过
+      r.share_status !== 'blocked'   // 已屏蔽的跳过
     )
     
     if (needRefresh.length === 0) return
@@ -384,8 +386,9 @@ export default function ShareRecordsPage() {
       }
     }
     
-    // 如果有刷新成功的，延迟重新加载列表
-    if (refreshed > 0) {
+    // 如果有刷新成功的，延迟重新加载列表（最多自动刷新一次，避免循环）
+    if (refreshed > 0 && !sessionStorage.getItem('shareRecordsRefreshed')) {
+      sessionStorage.setItem('shareRecordsRefreshed', 'true')
       setTimeout(() => {
         isAutoRefreshing.current = false
         fetchRecords()
