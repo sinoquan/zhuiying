@@ -970,10 +970,15 @@ export default function FileMonitorPage() {
                     }}
                     disabled={!!editingMonitor}
                   >
-                    <SelectTrigger className="h-10 bg-white dark:bg-slate-900">
+                    <SelectTrigger className="h-10 w-full bg-white dark:bg-slate-900">
                       <SelectValue placeholder="请选择要监控的网盘" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" className="w-[--radix-select-trigger-width]">
+                      {drives.length === 0 && (
+                        <div className="px-2 py-4 text-center text-muted-foreground text-sm">
+                          没有可用的网盘
+                        </div>
+                      )}
                       {drives.map((drive) => (
                         <SelectItem key={drive.id} value={drive.id.toString()}>
                           <div className="flex items-center gap-2">
