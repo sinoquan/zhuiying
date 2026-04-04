@@ -120,18 +120,6 @@ interface ListResult {
   has_more: boolean
 }
 
-// 预设的cron表达式
-const CRON_PRESETS = [
-  { label: '每5分钟', value: '*/5 * * * *' },
-  { label: '每10分钟', value: '*/10 * * * *' },
-  { label: '每30分钟', value: '*/30 * * * *' },
-  { label: '每小时', value: '0 * * * *' },
-  { label: '每天08:00', value: '0 8 * * *' },
-  { label: '工作时间(7-23点)每10分钟', value: '*/10 7-23 * * *' },
-  { label: '工作时间(7-23点)每30分钟', value: '*/30 7-23 * * *' },
-  { label: '自定义', value: 'custom' },
-]
-
 export default function FileMonitorPage() {
   const router = useRouter()
   const [monitors, setMonitors] = useState<FileMonitor[]>([])
@@ -179,10 +167,6 @@ export default function FileMonitorPage() {
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [fileSearchQuery, setFileSearchQuery] = useState("")
   
-  // cron预设选择
-  const [cronPreset, setCronPreset] = useState("*/10 7-23 * * *")
-  const [customCron, setCustomCron] = useState("")
-
   useEffect(() => {
     fetchData()
   }, [])
@@ -319,7 +303,6 @@ export default function FileMonitorPage() {
     })
     selectedFoldersRef.current = []
     forceUpdate(n => n + 1)
-    setCronPreset(monitor.cron_expression || "*/10 7-23 * * *")
     setDialogOpen(true)
     toast.info("已复制配置，请选择新的监控目录")
   }
@@ -332,8 +315,6 @@ export default function FileMonitorPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const cronExpr = cronPreset === 'custom' ? customCron : cronPreset
-
     try {
       // 编辑模式
       if (editingMonitor) {
@@ -341,7 +322,7 @@ export default function FileMonitorPage() {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
-            cron_expression: cronExpr,
+            cron_expression: formData.cron_expression,
             push_channel_ids: formData.push_channel_ids,
             push_template_type: formData.push_template_type,
           }),
@@ -367,7 +348,7 @@ export default function FileMonitorPage() {
               cloud_drive_id: formData.cloud_drive_id,
               path: folder.path,
               path_name: folder.name,
-              cron_expression: cronExpr,
+              cron_expression: formData.cron_expression,
               push_channel_ids: formData.push_channel_ids,
               push_template_type: formData.push_template_type,
             }),
@@ -439,8 +420,6 @@ export default function FileMonitorPage() {
     setPathHistory([{ path: "/", name: "根目录" }])
     selectedFoldersRef.current = []
     forceUpdate(n => n + 1)
-    setCronPreset("*/10 7-23 * * *")
-    setCustomCron("")
     setFileSearchQuery("")
   }
 
@@ -458,7 +437,6 @@ export default function FileMonitorPage() {
     })
     selectedFoldersRef.current = [{ path: monitor.path, name: monitor.path_name || monitor.path.split('/').pop() || monitor.path }]
     forceUpdate(n => n + 1)
-    setCronPreset(monitor.cron_expression || "*/10 7-23 * * *")
     setDialogOpen(true)
   }
 
@@ -569,14 +547,6 @@ export default function FileMonitorPage() {
       guangya: "光鸭网盘",
     }
     return drive.alias || labels[drive.name] || drive.name
-  }
-
-  // 解析cron表达式显示人类可读的描述
-  const getCronDescription = (cron?: string) => {
-    if (!cron) return '默认'
-    const preset = CRON_PRESETS.find(p => p.value === cron)
-    if (preset) return preset.label
-    return cron
   }
 
   // 获取所有可用的推送渠道，按类型分组
@@ -818,12 +788,6 @@ export default function FileMonitorPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {getCronDescription(monitor.cron_expression)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium text-sm truncate max-w-[200px]" title={displayName}>
                             {displayName}
@@ -854,6 +818,11 @@ export default function FileMonitorPage() {
                         ) : (
                           <span className="text-xs text-muted-foreground">未配置</span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                          {monitor.cron_expression || '*/10 7-23 * * *'}
+                        </code>
                       </TableCell>
                       <TableCell>
                         {isScanning ? (
@@ -1022,36 +991,29 @@ export default function FileMonitorPage() {
                 <div className="space-y-2">
                   <Label className="text-sm font-medium flex items-center gap-2">
                     <span className="w-5 h-5 rounded bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-xs text-green-600 dark:text-green-400">2</span>
-                    检测频率
+                    检测频率 (Cron 表达式)
                   </Label>
-                  <Select
-                    value={cronPreset}
-                    onValueChange={(value) => {
-                      setCronPreset(value)
-                      if (value !== 'custom') {
-                        setFormData({ ...formData, cron_expression: value })
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-10 bg-white dark:bg-slate-900">
-                      <SelectValue placeholder="选择检测周期" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CRON_PRESETS.map((preset) => (
-                        <SelectItem key={preset.value} value={preset.value}>
-                          {preset.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {cronPreset === 'custom' && (
-                    <Input
-                      value={customCron}
-                      onChange={(e) => setCustomCron(e.target.value)}
-                      placeholder="输入cron表达式"
-                      className="h-9 text-sm"
-                    />
-                  )}
+                  <Input
+                    value={formData.cron_expression}
+                    onChange={(e) => setFormData({ ...formData, cron_expression: e.target.value })}
+                    placeholder="*/10 7-23 * * *"
+                    className="h-10 bg-white dark:bg-slate-900"
+                  />
+                  <div className="text-xs text-muted-foreground space-y-1 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg">
+                    <p className="font-medium mb-2">Cron 表达式示例：</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <code>*/5 * * * *</code><span>每 5 分钟</span>
+                      <code>*/10 * * * *</code><span>每 10 分钟</span>
+                      <code>*/30 * * * *</code><span>每 30 分钟</span>
+                      <code>0 */3 * * *</code><span>每 3 小时</span>
+                      <code>0 */5 * * *</code><span>每 5 小时</span>
+                      <code>0 20 * * *</code><span>每天 20:00</span>
+                      <code>0 8,20 * * *</code><span>每天 8:00 和 20:00</span>
+                      <code>*/10 7-23 * * *</code><span>7:00-23:59 每 10 分钟</span>
+                      <code>*/30 7-23 * * *</code><span>7:00-23:59 每 30 分钟</span>
+                      <code>0 9-23 * * *</code><span>每天 9:00 到 23:00 整点</span>
+                    </div>
+                  </div>
                 </div>
                 
                 {/* 推送目标 */}
