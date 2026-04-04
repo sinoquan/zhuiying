@@ -140,6 +140,9 @@ interface CloudDrive {
   alias: string | null
   config: CloudDriveConfig | null
   is_active: boolean
+  connection_status?: 'online' | 'offline' | 'unknown'
+  last_check_at?: string | null
+  last_error?: string | null
   created_at: string
   updated_at: string | null
 }
@@ -513,14 +516,16 @@ export default function CloudDrivesPage() {
                         )}
                         
                         <Badge 
-                          variant={drive.is_active ? "default" : "secondary"} 
+                          variant={drive.connection_status === 'online' ? "default" : "secondary"} 
                           className={`text-[10px] px-1.5 py-0 h-5 ${
-                            drive.is_active 
+                            drive.connection_status === 'online' 
                               ? 'bg-green-500/10 text-green-600 hover:bg-green-500/20' 
-                              : ''
+                              : drive.connection_status === 'offline'
+                              ? 'bg-red-500/10 text-red-600 hover:bg-red-500/20'
+                              : 'bg-gray-500/10 text-gray-600 hover:bg-gray-500/20'
                           }`}
                         >
-                          {drive.is_active ? '在线' : '离线'}
+                          {drive.connection_status === 'online' ? '在线' : drive.connection_status === 'offline' ? '离线' : '未知'}
                         </Badge>
                         
                         <span className="text-xs text-muted-foreground">

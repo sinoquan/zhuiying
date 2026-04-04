@@ -376,8 +376,39 @@ export class FileMonitorService {
           result.errors.push(`处理剧集失败: ${seriesKey} - ${error}`)
         }
       }
+      
+      // 扫描成功，更新网盘状态为在线
+      await this.client
+        .from('cloud_drives')
+        .update({
+          connection_status: 'online',
+          last_check_at: new Date().toISOString(),
+          last_error: null,
+        })
+        .eq('id', monitor.cloud_drive_id)
+      
     } catch (error) {
       result.errors.push(`扫描失败: ${error}`)
+      
+      // 更新网盘连接状态为离线
+      const errorMessage = String(error)
+      const isCookieExpired = errorMessage.includes('Cookie') || 
+                              errorMessage.includes('405') || 
+                              errorMessage.includes('过期') ||
+                              errorMessage.includes('非JSON')
+      
+      await this.client
+        .from('cloud_drives')
+        .update({
+          connection_status: 'offline',
+          last_check_at: new Date().toISOString(),
+          last_error: errorMessage.slice(0, 500),
+        })
+        .eq('id', monitor.cloud_drive_id)
+      
+      if (isCookieExpired) {
+        console.log(`[Monitor] 网盘 ${monitor.cloud_drives?.name} Cookie已过期，状态已更新为离线`)
+      }
     }
     
     // 记录操作日志

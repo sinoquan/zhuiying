@@ -15,6 +15,9 @@ export const cloudDrives = pgTable(
 		alias: varchar("alias", { length: 100 }), // 用户自定义别名
 		config: jsonb("config"), // 配置信息（账号、cookie等敏感信息）
 		is_active: boolean("is_active").default(true).notNull(),
+		connection_status: varchar("connection_status", { length: 20 }).default("unknown"), // online/offline/unknown
+		last_check_at: timestamp("last_check_at", { withTimezone: true }), // 最后检查时间
+		last_error: varchar("last_error", { length: 500 }), // 最后错误信息
 		created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updated_at: timestamp("updated_at", { withTimezone: true }),
 	},
