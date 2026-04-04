@@ -425,7 +425,7 @@ export class FileMonitorService {
       .select('id, share_status')
       .eq('cloud_drive_id', cloudDriveId)
       .eq('file_path', filePath)
-      .eq('share_status', 'success')
+      .in('share_status', ['success', 'active'])  // 兼容两种状态
       .single()
     
     return !!data
@@ -608,51 +608,75 @@ export class FileMonitorService {
       if (isFileDirectory(file) && shareInfo.share_url) {
         console.log(`[Monitor] 文件夹，尝试获取真实大小和质量参数: ${file.name}`)
         try {
-          // 提取分享ID
+          // 提取分享ID - 支持多种网盘格式
           const shareIdMatch = shareInfo.share_url.match(/115cdn\.com\/s\/([a-z0-9]+)/i) || 
-                               shareInfo.share_url.match(/115\.com\/s\/([a-z0-9]+)/i)
+                               shareInfo.share_url.match(/115\.com\/s\/([a-z0-9]+)/i) ||
+                               shareInfo.share_url.match(/123pan\.com\/s\/([a-zA-Z0-9]+)/i) ||
+                               shareInfo.share_url.match(/aliyundrive\.com\/s\/([a-zA-Z0-9]+)/i) ||
+                               shareInfo.share_url.match(/alipan\.com\/s\/([a-zA-Z0-9]+)/i)
+          
+          let foundQualityFromInternal = false
+          let internalFiles: any[] = []
+          
+          // 方法1：尝试通过分享链接获取文件列表
           if (shareIdMatch) {
-            const shareId = shareIdMatch[1]
-            const shareData = await driveService.getShareInfo(shareId, shareInfo.share_code)
-            
-            // 获取文件大小
-            if (shareData && shareData.file_size) {
-              fileSize = shareData.file_size
-              console.log(`[Monitor] 获取到真实大小: ${this.formatFileSize(fileSize)}`)
-            }
-            
-            // 从内部视频文件获取质量参数
-            let foundQualityFromInternal = false
-            if (shareData?.files && shareData.files.length > 0) {
-              const videoFile = shareData.files.find((f: any) => {
-                const ext = f.file_name?.toLowerCase().split('.').pop() || ''
-                return ['mkv', 'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm2ts'].includes(ext)
-              })
+            try {
+              const shareId = shareIdMatch[1]
+              const shareData = await driveService.getShareInfo(shareId, shareInfo.share_code)
               
-              if (videoFile?.file_name) {
-                console.log(`[Monitor] 找到内部视频文件: ${videoFile.file_name}`)
-                const { parseFileName } = await import('@/lib/assistant/file-name-parser')
-                const videoParsed = parseFileName(videoFile.file_name)
-                if (videoParsed?.resolution) {
-                  videoQuality = videoParsed
-                  foundQualityFromInternal = true
-                  console.log(`[Monitor] 解析到质量参数:`, {
-                    resolution: videoQuality.resolution,
-                    video_codec: videoQuality.video_codec,
-                    hdr_format: videoQuality.hdr_format,
-                  })
+              // 获取文件大小
+              if (shareData && shareData.file_size) {
+                fileSize = shareData.file_size
+                console.log(`[Monitor] 获取到真实大小: ${this.formatFileSize(fileSize)}`)
+              }
+              
+              // 从内部视频文件获取质量参数
+              if (shareData?.files && shareData.files.length > 0) {
+                internalFiles = shareData.files
+              }
+            } catch (e) {
+              console.log('[Monitor] 通过分享链接获取失败，尝试备用方法:', e)
+            }
+          }
+          
+          // 方法2：如果分享链接获取失败，直接列出文件夹内部文件
+          if (internalFiles.length === 0 && file.id) {
+            try {
+              console.log(`[Monitor] 尝试直接列出文件夹内容: ${file.path || file.id}`)
+              const listResult = await driveService.listFiles(file.path || file.id, 1, 50)
+              if (listResult?.files && listResult.files.length > 0) {
+                internalFiles = listResult.files.map((f: any) => ({
+                  file_name: f.name,
+                  file_size: f.size,
+                  is_dir: f.is_dir,
+                }))
+                // 计算总大小
+                const totalSize = internalFiles.reduce((sum: number, f: any) => sum + (f.file_size || 0), 0)
+                if (totalSize > 0) {
+                  fileSize = totalSize
+                  console.log(`[Monitor] 从文件夹内容获取到总大小: ${this.formatFileSize(fileSize)}`)
                 }
               }
+            } catch (e) {
+              console.log('[Monitor] 列出文件夹内容失败:', e)
             }
+          }
+          
+          // 从内部文件中查找视频并解析质量参数
+          if (internalFiles.length > 0) {
+            const videoFile = internalFiles.find((f: any) => {
+              const ext = f.file_name?.toLowerCase().split('.').pop() || ''
+              return ['mkv', 'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm2ts'].includes(ext) && !f.is_dir
+            })
             
-            // 如果无法从内部文件获取，从文件夹名称解析质量参数
-            if (!foundQualityFromInternal) {
-              console.log(`[Monitor] 无法从内部文件获取质量参数，尝试从文件夹名称解析: ${file.name}`)
+            if (videoFile?.file_name) {
+              console.log(`[Monitor] 找到内部视频文件: ${videoFile.file_name}`)
               const { parseFileName } = await import('@/lib/assistant/file-name-parser')
-              const folderParsed = parseFileName(file.name)
-              if (folderParsed?.resolution) {
-                videoQuality = folderParsed
-                console.log(`[Monitor] 从文件夹名称解析到质量参数:`, {
+              const videoParsed = parseFileName(videoFile.file_name, videoFile.file_size)
+              if (videoParsed?.resolution) {
+                videoQuality = videoParsed
+                foundQualityFromInternal = true
+                console.log(`[Monitor] 解析到质量参数:`, {
                   resolution: videoQuality.resolution,
                   video_codec: videoQuality.video_codec,
                   hdr_format: videoQuality.hdr_format,

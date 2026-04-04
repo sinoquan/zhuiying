@@ -7,6 +7,15 @@
 
 import { ICloudDriveService, CloudDriveConfig, CloudFile, ListResult, ShareInfo, ShareStatus, SharedFileInfo, SpaceInfo } from './types'
 
+// 格式化文件大小
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
 export class Pan123Service implements ICloudDriveService {
   private token: string
   // 根据token类型选择API端点
@@ -176,9 +185,46 @@ export class Pan123Service implements ICloudDriveService {
   async createShare(fileIds: string[], expireDays: number = 7): Promise<ShareInfo> {
     console.log(`[123] 创建分享: fileIds=${fileIds.join(',')}, expireDays=${expireDays}`)
     
-    // 123云盘分享API - 当前API端点格式要求不明确
-    // 暂时抛出错误，提示用户手动分享
-    throw new Error('123云盘分享功能暂不可用，请使用网页端手动分享。错误原因：API参数格式不兼容')
+    try {
+      // 123云盘分享API - 使用普通用户API
+      // https://www.123pan.com/api/share/create
+      const response = await fetch(`${this.baseUrl}/api/share/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          driveId: 0,
+          shareName: `分享_${Date.now()}`, // 分享名称，必填
+          expiration: expireDays > 0 ? expireDays : undefined, // 过期天数，0表示永久
+          fileIds: fileIds.map(id => parseInt(id)), // 转换为数字数组
+        }),
+      })
+
+      const data = await response.json()
+      console.log(`[123] 分享响应:`, JSON.stringify(data, null, 2))
+      
+      if (data.code !== 0 && data.code !== 200) {
+        throw new Error(data.message || '创建分享失败')
+      }
+
+      // 构建分享链接
+      const shareInfo = data.data
+      const shareUrl = `https://www.123pan.com/s/${shareInfo.shareId}`
+      
+      return {
+        share_url: shareUrl,
+        share_code: shareInfo.sharePwd || '', // 提取码，可能为空
+        expire_time: expireDays > 0 
+          ? new Date(Date.now() + expireDays * 24 * 60 * 60 * 1000).toISOString()
+          : undefined,
+      }
+    } catch (error) {
+      console.error('[123] 创建分享失败:', error)
+      throw error
+    }
   }
 
   async checkNewFiles(path: string, sinceTime: Date): Promise<CloudFile[]> {
@@ -224,10 +270,83 @@ export class Pan123Service implements ICloudDriveService {
   }
 
   /**
-   * 访问分享链接，获取文件信息（暂不支持）
+   * 访问分享链接，获取文件信息（匿名访问）
    */
   async getShareInfo(shareId: string, shareCode?: string): Promise<SharedFileInfo> {
-    throw new Error('123云盘暂不支持访问分享链接')
+    console.log(`[123] 访问分享链接: shareId=${shareId}, shareCode=${shareCode || '无'}`)
+    
+    try {
+      // 使用匿名API访问分享链接
+      const apiUrl = 'https://www.123pan.com/api/share/get'
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Content-Type': 'application/json',
+          'Referer': 'https://www.123pan.com/',
+        },
+        body: JSON.stringify({
+          shareKey: shareId,
+          pwd: shareCode || '',
+        }),
+      })
+      
+      const data = await res.json()
+      console.log(`[123] 分享链接响应: code=${data.code}`)
+      
+      if (data.code !== 0) {
+        if (data.code === 4001) {
+          throw new Error('需要提取码，请提供正确的提取码')
+        }
+        throw new Error(data.message || '获取分享信息失败')
+      }
+      
+      const info = data.data?.Info || {}
+      const fileList = data.data?.Info?.FileList || data.data?.FileList || []
+      
+      const files = fileList.map((item: any) => ({
+        file_id: String(item.FileId || item.fileId || ''),
+        file_name: item.FileName || item.fileName || '',
+        file_size: item.Size || item.size || 0,
+        is_dir: (item.Type || item.type) === 1,
+      }))
+      
+      // 如果是单个文件
+      if (files.length === 1 && !files[0].is_dir) {
+        return {
+          share_id: shareId,
+          share_code: shareCode,
+          file_id: files[0].file_id,
+          file_name: files[0].file_name,
+          file_size: files[0].file_size,
+          is_dir: false,
+        }
+      }
+      
+      // 如果是目录或多个文件
+      const folderName = info.Name || info.name || files[0]?.file_name || '未知文件夹'
+      const totalSize = files.reduce((sum: number, f: { file_size: number }) => sum + f.file_size, 0)
+      
+      console.log(`[123] 文件夹: ${folderName}, 文件数: ${files.length}, 总大小: ${formatBytes(totalSize)}`)
+      
+      return {
+        share_id: shareId,
+        share_code: shareCode,
+        file_id: '0',
+        file_name: folderName,
+        file_size: totalSize,
+        is_dir: true,
+        file_count: files.length,
+        files: files.slice(0, 20).map((f: { file_id: string; file_name: string; file_size: number; is_dir: boolean }) => ({
+          ...f,
+          share_id: shareId,
+          share_code: shareCode,
+        })),
+      }
+    } catch (error) {
+      console.error('[123] 访问分享链接失败:', error)
+      throw error
+    }
   }
 
   async getShareStatus(shareCode: string): Promise<ShareStatus> {
