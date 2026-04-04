@@ -229,6 +229,12 @@ export async function POST(request: NextRequest) {
     if (shareInfo.is_dir && shareInfo.files && shareInfo.files.length > 0) {
       mediaInfo = extractMediaInfo(shareInfo.files)
       
+      // 如果 extractMediaInfo 返回的 totalSize 是 0（内部都是子文件夹），使用 API 返回的大小
+      if (mediaInfo.totalSize === 0 && shareInfo.file_size > 0) {
+        console.log(`[RefreshInfo] 内部文件都是子文件夹，使用 API 返回的大小: ${shareInfo.file_size}`)
+        mediaInfo.totalSize = shareInfo.file_size
+      }
+      
       console.log(`[RefreshInfo] 提取媒体信息: totalSize=${mediaInfo.totalSize}, resolution=${mediaInfo.resolution}, video_codec=${mediaInfo.video_codec}`)
     } else if (!shareInfo.is_dir) {
       mediaInfo.totalSize = shareInfo.file_size
@@ -254,9 +260,18 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // 格式化文件大小
+    const formatFileSize = (bytes: number): string => {
+      if (bytes === 0) return '0 B'
+      const k = 1024
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+      const i = Math.floor(Math.log(bytes) / Math.log(k))
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    }
+    
     // 更新分享记录
     const updateData: Record<string, any> = {
-      file_size: mediaInfo.totalSize.toString(),
+      file_size: formatFileSize(mediaInfo.totalSize),
     }
     
     // 如果有质量参数，保存到 tmdb_info
@@ -289,7 +304,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        file_size: mediaInfo.totalSize,
+        file_size: formatFileSize(mediaInfo.totalSize),
+        file_size_bytes: mediaInfo.totalSize,
         resolution: mediaInfo.resolution,
         source: mediaInfo.source,
         video_codec: mediaInfo.video_codec,
