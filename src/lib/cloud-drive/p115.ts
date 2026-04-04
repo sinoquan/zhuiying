@@ -875,6 +875,77 @@ export class Pan115Service implements ICloudDriveService {
         }
       }
       
+      // 方法4: 尝试 share/downlist 获取文件夹内文件
+      if (!fileListData?.data?.length && !fileListData?.data?.file_list) {
+        try {
+          // 先获取文件ID
+          const shareDownUrl = `https://webapi.115.com/share/downlist?share_code=${shareId}${shareCode ? `&receive_code=${shareCode}` : ''}`
+          console.log('[115] 尝试 share/downlist:', shareDownUrl)
+          
+          const shareDownRes = await fetch(shareDownUrl, {
+            headers: {
+              'Cookie': this.cookie,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          })
+          const shareDownData = await shareDownRes.json()
+          console.log('[115] share/downlist 响应:', JSON.stringify(shareDownData).substring(0, 1000))
+          
+          if (shareDownData.state === true && shareDownData.data) {
+            fileListData = { state: true, data: shareDownData.data }
+          }
+        } catch (e) {
+          console.log('[115] share/downlist 请求失败:', e)
+        }
+      }
+      
+      // 方法5: 尝试 aps_share/info 获取分享详情
+      if (!fileListData?.data?.length && !fileListData?.data?.file_list) {
+        try {
+          const apsUrl = `https://aps.115.com/share/info?share_code=${shareId}${shareCode ? `&receive_code=${shareCode}` : ''}`
+          console.log('[115] 尝试 aps_share/info:', apsUrl)
+          
+          const apsRes = await fetch(apsUrl, {
+            headers: {
+              'Cookie': this.cookie,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          })
+          const apsData = await apsRes.json()
+          console.log('[115] aps_share/info 响应:', JSON.stringify(apsData).substring(0, 1000))
+          
+          if (apsData.state === true && apsData.data) {
+            fileListData = { state: true, data: apsData.data }
+          }
+        } catch (e) {
+          console.log('[115] aps_share/info 请求失败:', e)
+        }
+      }
+      
+      // 方法6: 使用 webapi.115.com/share/getshareinfo
+      if (!fileListData?.data?.length && !fileListData?.data?.file_list) {
+        try {
+          const getShareUrl = `https://webapi.115.com/share/getshareinfo?share_code=${shareId}${shareCode ? `&receive_code=${shareCode}` : ''}`
+          console.log('[115] 尝试 share/getshareinfo:', getShareUrl)
+          
+          const getShareRes = await fetch(getShareUrl, {
+            headers: {
+              'Cookie': this.cookie,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          })
+          const getShareData = await getShareRes.json()
+          console.log('[115] share/getshareinfo 响应:', JSON.stringify(getShareData).substring(0, 1500))
+          
+          if (getShareData.state === true && getShareData.data) {
+            // 尝试从返回数据中获取文件信息
+            fileListData = { state: true, data: getShareData.data }
+          }
+        } catch (e) {
+          console.log('[115] share/getshareinfo 请求失败:', e)
+        }
+      }
+      
       // 检查错误
       if (!fileListData.state && fileListData.errno !== 0) {
         throw new Error(fileListData.error || '获取文件列表失败')

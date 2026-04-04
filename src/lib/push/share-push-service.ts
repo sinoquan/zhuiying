@@ -163,12 +163,21 @@ function buildTemplateData(
   const videoCodec = tmdbData?.video_codec || parsedQuality?.video_codec || tmdbInfo.video_codec
   const audioCodec = tmdbData?.audio_codec || parsedQuality?.audio_codec || tmdbInfo.audio_codec
   
+  console.log('[SharePushService] 质量参数:', {
+    'tmdbData?.resolution': tmdbData?.resolution,
+    'parsedQuality?.resolution': parsedQuality?.resolution,
+    'tmdbInfo.resolution': tmdbInfo.resolution,
+    '最终 resolution': resolution,
+  })
+  
   if (resolution) qualityParts.push(resolution)
   if (hdrFormat) qualityParts.push(hdrFormat)
   if (source) qualityParts.push(source)
   if (videoCodec) qualityParts.push(videoCodec)
   if (audioCodec) qualityParts.push(audioCodec)
   const qualityText = qualityParts.join(' | ') || ''
+  
+  console.log('[SharePushService] 质量信息:', qualityText)
   
   // 文件大小格式化
   let fileSizeText = ''
@@ -280,6 +289,8 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
     file_name: shareRecord.file_name,
     content_type: shareRecord.content_type,
     tmdb_id: shareRecord.tmdb_id,
+    tmdb_info_resolution: shareRecord.tmdb_info?.resolution,
+    tmdb_info_source: shareRecord.tmdb_info?.source,
   })
   
   // 2. 获取 TMDB 完整数据
@@ -387,15 +398,17 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
   
   // 对于文件夹，如果没有质量参数，尝试从分享链接内部获取视频文件信息
   if (shareRecord.content_type === 'folder' && !parsedQuality?.resolution && shareRecord.share_url) {
-    console.log(`[SharePushService] 文件夹无质量参数，尝试从内部获取`)
+    console.log(`[SharePushService] 文件夹无质量参数，尝试从内部获取, cloud_drive_id=${shareRecord.cloud_drive_id}`)
     try {
       // 动态导入网盘服务
       const { createCloudDriveService } = await import('@/lib/cloud-drive')
-      const { data: driveData } = await client
+      const { data: driveData, error: driveError } = await client
         .from('cloud_drives')
         .select('*')
         .eq('id', shareRecord.cloud_drive_id)
         .single()
+      
+      console.log(`[SharePushService] 查询网盘数据:`, { driveData: driveData?.name, error: driveError })
       
       if (driveData) {
         // 根据 name 判断网盘类型
@@ -410,6 +423,7 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
           'guangya': 'guangya',
         }
         const driveType = typeMap[driveName] || '115'
+        console.log(`[SharePushService] 网盘类型: ${driveType}`)
         
         const driveService = createCloudDriveService(driveType, driveData.config || {})
         
@@ -417,9 +431,18 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
         const shareIdMatch = shareRecord.share_url.match(/115cdn\.com\/s\/([a-z0-9]+)/i) || 
                              shareRecord.share_url.match(/115\.com\/s\/([a-z0-9]+)/i)
         
+        console.log(`[SharePushService] 分享链接匹配:`, { shareIdMatch })
+        
         if (shareIdMatch) {
           const shareId = shareIdMatch[1]
+          console.log(`[SharePushService] 获取分享信息: shareId=${shareId}, code=${shareRecord.share_code}`)
           const shareInfo = await driveService.getShareInfo(shareId, shareRecord.share_code)
+          
+          console.log(`[SharePushService] 分享信息结果:`, { 
+            hasFiles: !!shareInfo?.files, 
+            fileCount: shareInfo?.files?.length,
+            files: shareInfo?.files?.slice(0, 3).map((f: any) => f.file_name)
+          })
           
           if (shareInfo?.files && shareInfo.files.length > 0) {
             // 找到第一个视频文件
@@ -439,6 +462,8 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
                   hdr_format: parsedQuality.hdr_format,
                 })
               }
+            } else {
+              console.log(`[SharePushService] 未找到视频文件`)
             }
           }
         }
