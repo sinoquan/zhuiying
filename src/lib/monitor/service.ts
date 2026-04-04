@@ -156,6 +156,71 @@ export class FileMonitorService {
     return intersection.size / Math.max(set1.size, set2.size) * 60
   }
 
+  // ==================== 递归扫描 ====================
+  
+  // 视频文件扩展名
+  private readonly VIDEO_EXTENSIONS = ['mkv', 'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm2ts', 'ts', 'm4v']
+  
+  /**
+   * 递归扫描目录，收集所有视频文件
+   * @param driveService 网盘服务
+   * @param path 当前扫描路径
+   * @param result 收集的视频文件列表
+   * @param depth 当前递归深度（防止无限递归）
+   */
+  private async scanRecursive(
+    driveService: any, 
+    path: string, 
+    result: FileInfo[], 
+    depth: number
+  ): Promise<void> {
+    // 限制递归深度，防止无限递归
+    if (depth > 10) {
+      console.log(`[Monitor] 达到最大递归深度 10，停止扫描: ${path}`)
+      return
+    }
+    
+    try {
+      console.log(`[Monitor] 扫描目录: ${path} (深度: ${depth})`)
+      
+      // 获取当前目录下的所有文件
+      const listResult = await driveService.listFiles(path, 1, 100)
+      let files = listResult.files
+      
+      // 如果有更多页面，继续获取
+      let page = 2
+      while (listResult.has_more) {
+        const moreResult = await driveService.listFiles(path, page, 100)
+        files = [...files, ...moreResult.files]
+        page++
+      }
+      
+      for (const file of files) {
+        if (file.is_dir) {
+          // 如果是目录，递归扫描
+          console.log(`[Monitor] 发现子目录: ${file.name}`)
+          await this.scanRecursive(driveService, file.id, result, depth + 1)
+        } else {
+          // 如果是文件，检查是否为视频文件
+          const ext = file.name?.toLowerCase().split('.').pop() || ''
+          if (this.VIDEO_EXTENSIONS.includes(ext)) {
+            console.log(`[Monitor] 发现视频文件: ${file.name}`)
+            result.push({
+              id: file.id,
+              name: file.name,
+              path: file.id,  // 文件的路径就是它的 ID
+              size: file.size,
+              created_at: file.created_at,
+              is_dir: false,
+            })
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[Monitor] 扫描目录失败: ${path}`, error)
+    }
+  }
+
   // ==================== 主扫描流程 ====================
   
   async runScan(): Promise<ScanResult[]> {
@@ -281,33 +346,16 @@ export class FileMonitorService {
         driveConfig
       )
       
-      // 获取目录中的所有文件
-      console.log(`[Monitor] 扫描目录: ${monitor.path}`)
-      const allFilesResult = await driveService.listFiles(monitor.path, 1, 100)
-      let allFiles = allFilesResult.files
+      // 递归扫描目录，收集所有视频文件
+      console.log(`[Monitor] 递归扫描目录: ${monitor.path}`)
+      const allVideoFiles: FileInfo[] = []
+      await this.scanRecursive(driveService, monitor.path, allVideoFiles, 0)
       
-      // 如果有更多页面，继续获取
-      let page = 2
-      while (allFilesResult.has_more) {
-        const moreResult = await driveService.listFiles(monitor.path, page, 100)
-        allFiles = [...allFiles, ...moreResult.files]
-        page++
-      }
+      console.log(`[Monitor] 共找到 ${allVideoFiles.length} 个视频文件`)
       
-      console.log(`[Monitor] 目录中共有 ${allFiles.length} 个文件`)
+      result.new_files = allVideoFiles.length
       
-      // 调试：打印文件的 is_dir 信息
-      if (allFiles.length > 0) {
-        console.log(`[Monitor] 文件列表示例:`, allFiles.slice(0, 3).map(f => ({
-          name: f.name,
-          is_dir: f.is_dir,
-          size: f.size,
-        })))
-      }
-      
-      result.new_files = allFiles.length
-      
-      if (allFiles.length === 0) {
+      if (allVideoFiles.length === 0) {
         return result
       }
       
@@ -315,7 +363,7 @@ export class FileMonitorService {
       const client = getSupabaseClient()
       const newFiles: FileInfo[] = []
       
-      for (const file of allFiles) {
+      for (const file of allVideoFiles) {
         // 检查是否已有分享记录
         const { data: existingShare } = await client
           .from('share_records')
