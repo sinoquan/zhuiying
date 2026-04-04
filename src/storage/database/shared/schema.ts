@@ -27,8 +27,9 @@ export const fileMonitors = pgTable(
 	{
 		id: serial().primaryKey(),
 		cloud_drive_id: integer("cloud_drive_id").notNull().references(() => cloudDrives.id, { onDelete: "cascade" }),
-		path: varchar("path", { length: 500 }).notNull(), // 监控路径
+		path: varchar("path", { length: 500 }).notNull(), // 监控路径（115网盘为数字ID）
 		path_name: varchar("path_name", { length: 500 }), // 监控路径名称（用于显示）
+		full_path: varchar("full_path", { length: 1000 }), // 完整可读路径（如 /媒体库/外语电影）
 		enabled: boolean("enabled").default(true).notNull(),
 		cron_expression: varchar("cron_expression", { length: 100 }).default("*/10 7-23 * * *"), // cron表达式，默认07:00-23:59每10分钟
 		push_channel_ids: jsonb("push_channel_ids"), // 推送渠道ID数组

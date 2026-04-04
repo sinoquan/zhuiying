@@ -69,6 +69,7 @@ interface FileMonitor {
   cloud_drive_id: number
   path: string
   path_name?: string
+  full_path?: string
   enabled: boolean
   cron_expression?: string
   push_channel_ids?: number[] | string[]
@@ -152,7 +153,7 @@ export default function FileMonitorPage() {
   const [searchQuery, setSearchQuery] = useState("")
   
   // 使用 ref 存储选择状态，避免 React Strict Mode 双重调用
-  const selectedFoldersRef = useRef<{ path: string; name: string }[]>([])
+  const selectedFoldersRef = useRef<{ path: string; name: string; fullPath?: string }[]>([])
   const clickTimerRef = useRef<NodeJS.Timeout | null>(null)
   // 强制重新渲染
   const [, forceUpdate] = useState(0)
@@ -348,6 +349,7 @@ export default function FileMonitorPage() {
               cloud_drive_id: formData.cloud_drive_id,
               path: folder.path,
               path_name: folder.name,
+              full_path: folder.fullPath || folder.path,
               cron_expression: formData.cron_expression,
               push_channel_ids: formData.push_channel_ids,
               push_template_type: formData.push_template_type,
@@ -477,12 +479,23 @@ export default function FileMonitorPage() {
       if (exists) {
         selectedFoldersRef.current = current.filter(f => f.path !== folderPath)
       } else {
-        selectedFoldersRef.current = [...current, { path: folderPath, name: file.name }]
+        // 构建完整路径：从 pathHistory 获取浏览路径，加上当前文件夹名
+        const fullPath = '/' + pathHistory
+          .slice(1) // 去掉"根目录"
+          .map(p => p.name)
+          .concat(file.name)
+          .join('/')
+        
+        selectedFoldersRef.current = [...current, { 
+          path: folderPath, 
+          name: file.name,
+          fullPath: fullPath
+        }]
       }
       forceUpdate(n => n + 1)
       clickTimerRef.current = null
     }, 200)
-  }, [])
+  }, [pathHistory])
 
   // 移除选中的文件夹
   const removeSelectedFolder = useCallback((path: string) => {
@@ -774,6 +787,7 @@ export default function FileMonitorPage() {
                   
                   // 路径显示：第一行显示文件夹名，第二行显示完整路径
                   const folderName = monitor.path_name || monitor.path.split('/').pop() || monitor.path
+                  const displayPath = monitor.full_path || monitor.path
                   
                   return (
                     <TableRow key={monitor.id}>
@@ -790,8 +804,8 @@ export default function FileMonitorPage() {
                           <span className="font-medium text-sm truncate" title={folderName}>
                             {folderName}
                           </span>
-                          <span className="text-xs text-muted-foreground truncate" title={monitor.path}>
-                            {monitor.path}
+                          <span className="text-xs text-muted-foreground truncate" title={displayPath}>
+                            {displayPath}
                           </span>
                         </div>
                       </TableCell>

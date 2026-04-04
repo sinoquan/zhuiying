@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
         cloud_drive_id: parseInt(body.cloud_drive_id),
         path: body.path,
         path_name: body.path_name || body.path.split('/').pop() || body.path,
+        full_path: body.full_path || body.path,
         enabled: true,
         cron_expression: body.cron_expression || '*/10 7-23 * * *',
         push_channel_ids: body.push_channel_ids || [],
