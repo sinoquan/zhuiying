@@ -785,7 +785,6 @@ export default function FileMonitorPage() {
                   <TableHead className="w-[140px]">网盘</TableHead>
                   <TableHead>监控目录</TableHead>
                   <TableHead className="w-[180px]">推送目标</TableHead>
-                  <TableHead className="w-[130px]">检测频率</TableHead>
                   <TableHead className="w-[120px]">最近扫描</TableHead>
                   <TableHead className="w-[80px]">状态</TableHead>
                   <TableHead className="w-[120px] text-center">操作</TableHead>
@@ -848,12 +847,6 @@ export default function FileMonitorPage() {
                         ) : (
                           <span className="text-xs text-muted-foreground">未配置</span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {getCronDescription(monitor.cron_expression)}
-                        </div>
                       </TableCell>
                       <TableCell>
                         {isScanning ? (
@@ -1018,46 +1011,10 @@ export default function FileMonitorPage() {
                   </Select>
                 </div>
                 
-                {/* 检测频率 */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium flex items-center gap-2">
-                    <span className="w-5 h-5 rounded bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-xs text-green-600 dark:text-green-400">2</span>
-                    检测频率
-                  </Label>
-                  <Select
-                    value={cronPreset}
-                    onValueChange={(value) => {
-                      setCronPreset(value)
-                      if (value !== 'custom') {
-                        setFormData({ ...formData, cron_expression: value })
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-10 bg-white dark:bg-slate-900">
-                      <SelectValue placeholder="选择检测周期" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CRON_PRESETS.map((preset) => (
-                        <SelectItem key={preset.value} value={preset.value}>
-                          {preset.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {cronPreset === 'custom' && (
-                    <Input
-                      value={customCron}
-                      onChange={(e) => setCustomCron(e.target.value)}
-                      placeholder="输入cron表达式"
-                      className="h-9 text-sm"
-                    />
-                  )}
-                </div>
-                
                 {/* 推送目标 */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium flex items-center gap-2">
-                    <span className="w-5 h-5 rounded bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-xs text-purple-600 dark:text-purple-400">3</span>
+                    <span className="w-5 h-5 rounded bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-xs text-purple-600 dark:text-purple-400">2</span>
                     推送目标
                     {availableChannels.length > 0 && formData.push_channel_ids.length > 0 && (
                       <Badge variant="secondary" className="ml-auto font-normal">
@@ -1136,7 +1093,7 @@ export default function FileMonitorPage() {
               <div className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium flex items-center gap-2">
-                    <span className="w-5 h-5 rounded bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-xs text-orange-600 dark:text-orange-400">4</span>
+                    <span className="w-5 h-5 rounded bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-xs text-orange-600 dark:text-orange-400">3</span>
                     选择监控目录
                     {!editingMonitor && <span className="text-destructive">*</span>}
                   </Label>
