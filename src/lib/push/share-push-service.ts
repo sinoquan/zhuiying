@@ -44,6 +44,8 @@ export interface PushOptions {
   channelIds: number[]
   // 可选：直接传入分享记录，避免重复查询
   shareRecord?: any
+  // 可选：自定义推送内容（覆盖模板生成的内容）
+  customContent?: string
 }
 
 // 获取系统配置
@@ -569,9 +571,9 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
       
       console.log('[SharePushService] 使用模板:', customTemplate ? '自定义模板' : '默认模板')
       
-      // 渲染消息
+      // 渲染消息（如果提供了自定义内容，优先使用自定义内容）
       const platform = channelType === 'qq' ? 'qq' : channelType === 'dingtalk' ? 'dingtalk' : 'telegram'
-      const content = renderTemplate(template, templateData, platform as 'telegram' | 'qq' | 'dingtalk')
+      const content = options.customContent || renderTemplate(template, templateData, platform as 'telegram' | 'qq' | 'dingtalk')
       
       let success = false
       
