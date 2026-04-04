@@ -174,19 +174,23 @@ function buildTemplateData(
   let fileSizeText = ''
   const rawFileSize = shareRecord.file_size
   if (rawFileSize && rawFileSize !== '0' && rawFileSize !== '未知') {
-    const bytes = typeof rawFileSize === 'string' ? parseInt(rawFileSize) : rawFileSize
-    if (bytes > 0 && !isNaN(bytes)) {
-      if (bytes >= 1024 * 1024 * 1024) {
-        fileSizeText = (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
-      } else if (bytes >= 1024 * 1024) {
-        fileSizeText = (bytes / (1024 * 1024)).toFixed(2) + ' MB'
-      } else if (bytes >= 1024) {
-        fileSizeText = (bytes / 1024).toFixed(2) + ' KB'
-      } else {
-        fileSizeText = bytes + ' B'
-      }
-    } else if (typeof rawFileSize === 'string' && (rawFileSize.includes('GB') || rawFileSize.includes('MB'))) {
+    // 如果已经是格式化的字符串（包含 GB、MB、KB 等）
+    if (typeof rawFileSize === 'string' && /[GMKB]B/i.test(rawFileSize)) {
       fileSizeText = rawFileSize
+    } else {
+      // 尝试解析为字节数
+      const bytes = typeof rawFileSize === 'string' ? parseInt(rawFileSize) : rawFileSize
+      if (bytes > 0 && !isNaN(bytes)) {
+        if (bytes >= 1024 * 1024 * 1024) {
+          fileSizeText = (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+        } else if (bytes >= 1024 * 1024) {
+          fileSizeText = (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+        } else if (bytes >= 1024) {
+          fileSizeText = (bytes / 1024).toFixed(2) + ' KB'
+        } else {
+          fileSizeText = bytes + ' B'
+        }
+      }
     }
   }
   
@@ -284,8 +288,21 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
   
   // 优先使用已有的 TMDB ID
   const existingTMDBId = shareRecord.tmdb_id || shareRecord.tmdb_info?.tmdbId || shareRecord.tmdb_info?.id
-  const contentType = shareRecord.content_type || 'movie'
-  const type = (contentType === 'tv' || contentType === 'tv_series' || contentType === 'folder') ? 'tv' : 'movie'
+  
+  // 优先从已存储的 tmdb_info 获取类型，不要用 content_type（folder 不能判断是电影还是电视剧）
+  const storedType = shareRecord.tmdb_info?.type
+  let type: 'movie' | 'tv' = 'movie'
+  if (storedType === 'tv' || storedType === 'tv_series') {
+    type = 'tv'
+  } else if (storedType === 'movie') {
+    type = 'movie'
+  } else {
+    // 如果没有存储类型，才用 content_type 判断
+    const contentType = shareRecord.content_type || 'movie'
+    type = (contentType === 'tv' || contentType === 'tv_series') ? 'tv' : 'movie'
+  }
+  
+  console.log(`[SharePushService] 类型判断: storedType=${storedType}, content_type=${shareRecord.content_type}, 最终type=${type}`)
   
   if (existingTMDBId) {
     console.log(`[SharePushService] 使用已有 TMDB ID: ${existingTMDBId}`)
@@ -365,6 +382,69 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
       } catch (err) {
         console.error('[SharePushService] TMDBService 识别失败:', err)
       }
+    }
+  }
+  
+  // 对于文件夹，如果没有质量参数，尝试从分享链接内部获取视频文件信息
+  if (shareRecord.content_type === 'folder' && !parsedQuality?.resolution && shareRecord.share_url) {
+    console.log(`[SharePushService] 文件夹无质量参数，尝试从内部获取`)
+    try {
+      // 动态导入网盘服务
+      const { createCloudDriveService } = await import('@/lib/cloud-drive')
+      const { data: driveData } = await client
+        .from('cloud_drives')
+        .select('*')
+        .eq('id', shareRecord.cloud_drive_id)
+        .single()
+      
+      if (driveData) {
+        // 根据 name 判断网盘类型
+        const driveName = driveData.name?.toLowerCase() || '115'
+        const typeMap: Record<string, '115' | 'aliyun' | 'quark' | 'tianyi' | 'baidu' | '123' | 'guangya'> = {
+          '115': '115',
+          'aliyun': 'aliyun',
+          'quark': 'quark',
+          'tianyi': 'tianyi',
+          'baidu': 'baidu',
+          '123': '123',
+          'guangya': 'guangya',
+        }
+        const driveType = typeMap[driveName] || '115'
+        
+        const driveService = createCloudDriveService(driveType, driveData.config || {})
+        
+        // 提取分享ID
+        const shareIdMatch = shareRecord.share_url.match(/115cdn\.com\/s\/([a-z0-9]+)/i) || 
+                             shareRecord.share_url.match(/115\.com\/s\/([a-z0-9]+)/i)
+        
+        if (shareIdMatch) {
+          const shareId = shareIdMatch[1]
+          const shareInfo = await driveService.getShareInfo(shareId, shareRecord.share_code)
+          
+          if (shareInfo?.files && shareInfo.files.length > 0) {
+            // 找到第一个视频文件
+            const videoFile = shareInfo.files.find((f: any) => {
+              const ext = f.file_name?.toLowerCase().split('.').pop() || ''
+              return ['mkv', 'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm2ts'].includes(ext)
+            })
+            
+            if (videoFile?.file_name) {
+              console.log(`[SharePushService] 找到内部视频文件: ${videoFile.file_name}`)
+              const videoParsedQuality = parseFileName(videoFile.file_name)
+              if (videoParsedQuality?.resolution) {
+                parsedQuality = videoParsedQuality
+                console.log(`[SharePushService] 从视频文件解析到质量参数:`, {
+                  resolution: parsedQuality.resolution,
+                  video_codec: parsedQuality.video_codec,
+                  hdr_format: parsedQuality.hdr_format,
+                })
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.log('[SharePushService] 获取文件夹内部信息失败:', err)
     }
   }
   
