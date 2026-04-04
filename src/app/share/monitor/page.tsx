@@ -772,11 +772,6 @@ export default function FileMonitorPage() {
                   const scanStatus = scanStats?.lastScanStatus
                   const isScanning = scanningId === monitor.id
                   
-                  // 判断路径是否为数字ID（115网盘等）
-                  const isNumericPath = /^\d+$/.test(monitor.path.split('/').pop() || '')
-                  const displayName = monitor.path_name || monitor.path.split('/').pop() || monitor.path
-                  const showPath = !isNumericPath && monitor.path !== '/' && monitor.path !== displayName
-                  
                   return (
                     <TableRow key={monitor.id}>
                       <TableCell>
@@ -788,20 +783,13 @@ export default function FileMonitorPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-0.5 max-w-[200px]">
-                          <span className="font-medium text-sm truncate" title={displayName}>
-                            {displayName}
-                          </span>
-                          {showPath && (
-                            <span className="text-xs text-muted-foreground truncate" title={monitor.path}>
-                              {monitor.path}
-                            </span>
-                          )}
-                        </div>
+                        <span className="text-sm truncate block max-w-[200px]" title={monitor.path}>
+                          {monitor.path}
+                        </span>
                       </TableCell>
                       <TableCell>
                         {monitor.push_channels_list && monitor.push_channels_list.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-wrap gap-1.5 max-w-[180px]">
                             {monitor.push_channels_list.map(ch => (
                               <Badge 
                                 key={ch.id} 
@@ -811,7 +799,7 @@ export default function FileMonitorPage() {
                                 <span className="w-4 h-4 flex items-center justify-center">
                                   {getPushChannelIcon(ch.channel_type)}
                                 </span>
-                                <span className="truncate max-w-[60px]">{ch.channel_name}</span>
+                                <span>{ch.channel_name}</span>
                               </Badge>
                             ))}
                           </div>
