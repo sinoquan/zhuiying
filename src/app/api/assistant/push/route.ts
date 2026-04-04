@@ -90,6 +90,9 @@ export async function POST(request: NextRequest) {
         if (file.is_completed !== undefined) tmdbInfo.is_completed = file.is_completed
       }
       
+      // 确定内容类型
+      const recordContentType = tmdbInfo.type || (file?.type === 'tv_series' ? 'tv' : 'video')
+      
       // 创建分享记录
       const { data: newRecord, error } = await client
         .from('share_records')
@@ -100,7 +103,7 @@ export async function POST(request: NextRequest) {
           share_url: link.shareUrl,
           share_code: link.shareCode || '',
           share_status: 'active',
-          content_type: 'video',
+          content_type: recordContentType,
           tmdb_id: tmdb?.id,
           tmdb_title: tmdb?.title,
           tmdb_info: Object.keys(tmdbInfo).length > 0 ? tmdbInfo : null,

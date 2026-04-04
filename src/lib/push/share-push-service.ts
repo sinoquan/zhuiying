@@ -126,10 +126,10 @@ function buildTemplateData(
   const driveName = shareRecord.cloud_drives?.alias || shareRecord.cloud_drives?.name || '网盘'
   
   // 从 tmdb_info 获取已存储的数据
-  const tmdbInfo = shareRecord.tmdb_info || {}
+  const tmdbInfo = (shareRecord.tmdb_info as Record<string, any>) || {}
   
-  // 确定类型
-  const contentType = tmdbData?.type || shareRecord.content_type || 'movie'
+  // 确定类型 - 优先使用 tmdb_info.type（创建记录时已正确设置）
+  const contentType = tmdbInfo.type || tmdbData?.type || shareRecord.content_type || 'movie'
   const isTV = contentType === 'tv' || contentType === 'tv_series'
   
   // 计算进度条（电视剧）
