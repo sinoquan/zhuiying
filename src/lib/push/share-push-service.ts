@@ -147,6 +147,12 @@ function buildTemplateData(
     statusText = tmdbData.status === 'Ended' ? '已完结' : '连载中'
   }
   
+  // 完结打包分享时显示完结状态
+  const isCompleted = shareRecord.is_completed === true || tmdbInfo.is_completed === true
+  if (isTV && isCompleted) {
+    statusText = '已完结'
+  }
+  
   // 时长格式化
   let runtimeText = ''
   if (tmdbData?.runtime && tmdbData.runtime > 0) {
@@ -537,8 +543,17 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
     try {
       // 确定内容类型
       let templateType: TemplateContentType = 'movie'
+      
+      // 检查是否为完结打包分享
+      const isCompleted = shareRecord.is_completed === true || shareRecord.tmdb_info?.is_completed === true
+      
       if (type === 'tv') {
-        templateType = 'tv_series'
+        if (isCompleted) {
+          templateType = 'completed'
+          console.log('[SharePushService] 使用完结模板')
+        } else {
+          templateType = 'tv_series'
+        }
       }
       
       // 从数据库获取自定义模板

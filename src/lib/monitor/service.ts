@@ -320,55 +320,58 @@ export class FileMonitorService {
           // 检测是否完结
           const seriesInfo = await this.detectSeriesCompletion(files, monitor.cloud_drive_id)
           
-          if (seriesInfo.isCompleted && files.length > 1) {
-            // 完结打包分享
-            const shareRecord = await this.shareCompletedSeries(
+          // 判断是否需要打包推送（完结 + 最后一集）
+          const needPackPush = seriesInfo.isCompleted && seriesInfo.isLastEpisode
+          
+          // 单集分享（无论是否完结，都先分享单集）
+          for (const file of files) {
+            // 文件质量检测
+            const parsed = parseFileName(file.name, file.size)
+            if (parsed.is_non_main_content) {
+              console.log(`[Monitor] 跳过非正片: ${file.name} (${parsed.quality_type})`)
+              result.skipped_files++
+              continue
+            }
+            
+            // 去重检查
+            if (await this.isDuplicateFile(monitor.cloud_drive_id, file.path)) {
+              result.skipped_files++
+              continue
+            }
+            
+            const shareRecord = await this.shareSingleFile(
+              driveService, 
+              monitor, 
+              file, 
+              seriesInfo,
+              parsed  // 传递解析结果
+            )
+            
+            if (shareRecord) {
+              result.shared_files++
+              
+              // 推送单集
+              if (await this.autoPush(monitor, shareRecord)) {
+                result.pushed_files++
+              }
+            }
+          }
+          
+          // 如果完结，再打包分享整个文件夹
+          if (needPackPush) {
+            console.log(`[Monitor] 剧集完结，开始打包分享: ${seriesInfo.contentInfo.title}`)
+            const packRecord = await this.shareCompletedSeries(
               driveService, 
               monitor, 
               files, 
               seriesInfo
             )
-            if (shareRecord) {
+            if (packRecord) {
               result.completed_shares++
-              result.shared_files += files.length
               
-              // 推送
-              if (await this.autoPush(monitor, shareRecord)) {
+              // 推送打包
+              if (await this.autoPush(monitor, packRecord)) {
                 result.pushed_files++
-              }
-            }
-          } else {
-            // 单集分享
-            for (const file of files) {
-              // 文件质量检测
-              const parsed = parseFileName(file.name, file.size)
-              if (parsed.is_non_main_content) {
-                console.log(`[Monitor] 跳过非正片: ${file.name} (${parsed.quality_type})`)
-                result.skipped_files++
-                continue
-              }
-              
-              // 去重检查
-              if (await this.isDuplicateFile(monitor.cloud_drive_id, file.path)) {
-                result.skipped_files++
-                continue
-              }
-              
-              const shareRecord = await this.shareSingleFile(
-                driveService, 
-                monitor, 
-                file, 
-                seriesInfo,
-                parsed  // 传递解析结果
-              )
-              
-              if (shareRecord) {
-                result.shared_files++
-                
-                // 推送
-                if (await this.autoPush(monitor, shareRecord)) {
-                  result.pushed_files++
-                }
               }
             }
           }
@@ -488,11 +491,23 @@ export class FileMonitorService {
         contentInfo.cast = tmdbInfo.cast
         contentInfo.runtime = tmdbInfo.runtime
         
+        // 根据 TMDB 返回的信息更新类型
+        // 如果有季集信息，肯定是电视剧
+        if (parsed.season !== null && parsed.episode !== null) {
+          contentInfo.type = 'tv'
+        } else if (tmdbInfo.totalEpisodes && tmdbInfo.totalEpisodes > 1) {
+          // 如果 TMDB 返回的总集数大于 1，说明是电视剧
+          contentInfo.type = 'tv'
+        } else if (tmdbInfo.status === 'Released' && (!tmdbInfo.totalEpisodes || tmdbInfo.totalEpisodes === 1)) {
+          // 如果状态是 Released 且只有 1 集或没有集数信息，可能是电影
+          contentInfo.type = 'movie'
+        }
+        
         // 如果是电视剧，判断完结
-        if (parsed.type === 'tv') {
-          const isEnded = tmdbInfo.status === 'Ended' || tmdbInfo.status === 'Released'
+        if (contentInfo.type === 'tv') {
+          const isEnded = tmdbInfo.status === 'Ended' || tmdbInfo.status === '已完结'
           const maxEpisode = Math.max(...files.map(f => parseFileName(f.name).episode || 0))
-          const isLastEpisode = maxEpisode === tmdbInfo.totalEpisodes
+          const isLastEpisode = tmdbInfo.totalEpisodes > 0 && maxEpisode === tmdbInfo.totalEpisodes
           const isCompleted = isEnded && isLastEpisode
           return { contentInfo, isCompleted, isLastEpisode }
         }
@@ -560,7 +575,7 @@ export class FileMonitorService {
             runtime: (details as any)?.runtime,
           }
         }
-      } else {
+      } else if (type === 'tv') {
         // 电视剧
         const results = await tmdbService.searchTV(title, year)
         
@@ -577,6 +592,44 @@ export class FileMonitorService {
             overview: show.overview,
             poster_url: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : undefined,
             cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
+          }
+        }
+      } else {
+        // unknown 类型，尝试两种搜索
+        // 先搜索电视剧（更常见）
+        const tvResults = await tmdbService.searchTV(title, year)
+        if (tvResults && tvResults.length > 0) {
+          const show = tvResults[0]
+          const details = await tmdbService.getTVDetails(show.id, 'credits')
+          
+          return {
+            tmdbId: show.id,
+            totalEpisodes: details?.number_of_episodes || 0,
+            status: details?.status || 'Returning Series',
+            rating: show.vote_average,
+            genres: (details as any)?.genres?.map((g: any) => g.name) || [],
+            overview: show.overview,
+            poster_url: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : undefined,
+            cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
+          }
+        }
+        
+        // 再搜索电影
+        const movieResults = await tmdbService.searchMovie(title, year)
+        if (movieResults && movieResults.length > 0) {
+          const movie = movieResults[0]
+          const details = await tmdbService.getMovieDetails(movie.id, 'credits')
+          
+          return {
+            tmdbId: movie.id,
+            totalEpisodes: 1,
+            status: 'Released',
+            rating: movie.vote_average,
+            genres: (details as any)?.genres?.map((g: any) => g.name) || [],
+            overview: movie.overview,
+            poster_url: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
+            cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
+            runtime: (details as any)?.runtime,
           }
         }
       }
@@ -788,6 +841,8 @@ export class FileMonitorService {
       // 找到公共父目录
       const parentPath = this.findCommonParentPath(files.map(f => f.path))
       
+      console.log(`[Monitor] 打包分享文件夹: ${parentPath}`)
+      
       // 分享整个文件夹
       const shareInfo = await driveService.createShare([parentPath], true)
       
@@ -801,6 +856,7 @@ export class FileMonitorService {
         ...seriesInfo.contentInfo,
         episode: undefined,  // 完结时清除单集信息
         episodeRange: minEp !== maxEp ? `${minEp}-${maxEp}` : `${minEp}`,
+        is_completed: true,  // 标记为完结
       }
       
       // 记录分享
@@ -818,10 +874,15 @@ export class FileMonitorService {
           content_type: 'folder', // 完结分享的是文件夹
           tmdb_id: seriesInfo.contentInfo.tmdbId,
           tmdb_title: seriesInfo.contentInfo.title,
+          tmdb_info: completedContentInfo,
           file_count: files.length,
           source: 'monitor',
+          is_completed: true,  // 标记为完结
         })
-        .select()
+        .select(`
+          *,
+          cloud_drives (id, name, alias)
+        `)
         .single()
       
       if (error) {
@@ -829,8 +890,9 @@ export class FileMonitorService {
         return null
       }
       
-      // 取消之前的单集分享
-      await this.cancelSingleEpisodeShares(monitor.cloud_drive_id, seriesInfo.contentInfo)
+      console.log(`[Monitor] 完结打包分享成功: ${shareRecord.file_name}`)
+      
+      // 不再取消单集分享，保留单集分享记录
       
       return shareRecord
     } catch (error) {
