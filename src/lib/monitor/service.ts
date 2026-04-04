@@ -479,7 +479,17 @@ export class FileMonitorService {
     
     // 获取 TMDB 信息（电影和电视剧都需要）
     try {
-      const tmdbInfo = await this.getTMDBInfo(parsed.title, parsed.year, parsed.type)
+      // 记录是否有季集信息（这是最可靠的类型判断依据）
+      const hasSeasonEpisode = parsed.season !== null && parsed.episode !== null
+      console.log(`[Monitor] 文件名解析结果: title=${parsed.title}, season=${parsed.season}, episode=${parsed.episode}, type=${parsed.type}, hasSeasonEpisode=${hasSeasonEpisode}`)
+      
+      // 如果有季集信息，强制类型为电视剧
+      if (hasSeasonEpisode) {
+        contentInfo.type = 'tv'
+        console.log(`[Monitor] 检测到季集信息，强制类型为电视剧`)
+      }
+      
+      const tmdbInfo = await this.getTMDBInfo(parsed.title, parsed.year, hasSeasonEpisode ? 'tv' : parsed.type)
       if (tmdbInfo) {
         contentInfo.tmdbId = tmdbInfo.tmdbId
         contentInfo.totalEpisodes = tmdbInfo.totalEpisodes
@@ -491,15 +501,16 @@ export class FileMonitorService {
         contentInfo.cast = tmdbInfo.cast
         contentInfo.runtime = tmdbInfo.runtime
         
-        // 根据 TMDB 返回的信息更新类型
-        // 如果有季集信息，肯定是电视剧
-        if (parsed.season !== null && parsed.episode !== null) {
+        // 【关键】如果文件名有季集信息，强制类型为电视剧，不信任 TMDB 返回的类型
+        if (hasSeasonEpisode) {
           contentInfo.type = 'tv'
+          console.log(`[Monitor] 有季集信息，强制保持类型为电视剧（忽略 TMDB 返回的 ${tmdbInfo.status}）`)
         } else if (tmdbInfo.totalEpisodes && tmdbInfo.totalEpisodes > 1) {
           // 如果 TMDB 返回的总集数大于 1，说明是电视剧
           contentInfo.type = 'tv'
         } else if (tmdbInfo.status === 'Released' && (!tmdbInfo.totalEpisodes || tmdbInfo.totalEpisodes === 1)) {
           // 如果状态是 Released 且只有 1 集或没有集数信息，可能是电影
+          // 但只有在没有季集信息时才设为电影
           contentInfo.type = 'movie'
         }
         
@@ -511,9 +522,19 @@ export class FileMonitorService {
           const isCompleted = isEnded && isLastEpisode
           return { contentInfo, isCompleted, isLastEpisode }
         }
+      } else {
+        // TMDB 搜索失败，但有季集信息，仍然标记为电视剧
+        if (hasSeasonEpisode) {
+          contentInfo.type = 'tv'
+          console.log(`[Monitor] TMDB 搜索无结果，但有季集信息，类型设为电视剧`)
+        }
       }
     } catch (error) {
       console.error('获取 TMDB 信息失败:', error)
+      // 出错时，如果有季集信息，仍然标记为电视剧
+      if (parsed.season !== null && parsed.episode !== null) {
+        contentInfo.type = 'tv'
+      }
     }
     
     return { contentInfo, isCompleted: false, isLastEpisode: false }
@@ -592,6 +613,27 @@ export class FileMonitorService {
             overview: show.overview,
             poster_url: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : undefined,
             cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
+          }
+        }
+        
+        // 电视剧搜索无结果，尝试电影搜索作为备用（但仍标记为电视剧）
+        console.log(`[Monitor] 电视剧搜索无结果，尝试电影搜索作为备用`)
+        const movieResults = await tmdbService.searchMovie(title, year)
+        if (movieResults && movieResults.length > 0) {
+          const movie = movieResults[0]
+          const details = await tmdbService.getMovieDetails(movie.id, 'credits')
+          console.log(`[Monitor] 找到电影结果: ${movie.title}，但文件名有季集信息，仍标记为电视剧`)
+          
+          return {
+            tmdbId: movie.id,
+            totalEpisodes: 1,
+            status: 'Released', // 电影状态
+            rating: movie.vote_average,
+            genres: (details as any)?.genres?.map((g: any) => g.name) || [],
+            overview: movie.overview,
+            poster_url: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
+            cast: (details as any)?.credits?.cast?.slice(0, 5).map((c: any) => c.name),
+            runtime: (details as any)?.runtime,
           }
         }
       } else {
