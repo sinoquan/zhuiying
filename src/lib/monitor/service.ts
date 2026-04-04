@@ -338,8 +338,36 @@ export class FileMonitorService {
         return result
       }
       
+      // 时间过滤：只处理监控任务创建时间之后的文件（只推新文件）
+      const monitorCreatedAt = new Date(monitor.created_at)
+      const filteredFiles: FileInfo[] = []
+      let skippedHistoryFiles = 0
+      
+      for (const file of newFiles) {
+        // 如果文件没有创建时间信息，默认处理
+        if (!file.created_at) {
+          filteredFiles.push(file)
+          continue
+        }
+        
+        const fileCreatedAt = new Date(file.created_at)
+        if (fileCreatedAt > monitorCreatedAt) {
+          filteredFiles.push(file)
+        } else {
+          console.log(`[Monitor] 跳过历史文件: ${file.name} (文件时间: ${fileCreatedAt.toISOString()}, 监控时间: ${monitorCreatedAt.toISOString()})`)
+          skippedHistoryFiles++
+        }
+      }
+      
+      result.skipped_files += skippedHistoryFiles
+      console.log(`[Monitor] 时间过滤后剩余文件: ${filteredFiles.length} 个 (跳过历史文件: ${skippedHistoryFiles} 个)`)
+      
+      if (filteredFiles.length === 0) {
+        return result
+      }
+      
       // 按剧集分组检测完结
-      const seriesMap = await this.groupFilesBySeries(newFiles)
+      const seriesMap = await this.groupFilesBySeries(filteredFiles)
       
       // 处理每个文件/剧集
       for (const [seriesKey, files] of seriesMap.entries()) {
