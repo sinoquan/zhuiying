@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
           } else if (parsed.title) {
             // 否则搜索 TMDB
             try {
-              const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year)
+              const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year, parsed.season, parsed.episode)
               if (tmdbResult) {
                 result.tmdb = tmdbResult
               }
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
             // 尝试匹配 TMDB
             if (parsed.title) {
               try {
-                const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year)
+                const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year, parsed.season, parsed.episode)
                 if (tmdbResult) {
                   result.tmdb = tmdbResult
                 }
@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
           // 尝试匹配 TMDB
           if (parsed.title) {
             try {
-              const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year)
+              const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year, parsed.season, parsed.episode)
               if (tmdbResult) {
                 result.tmdb = tmdbResult
               }
@@ -249,7 +249,7 @@ export async function POST(request: NextRequest) {
         // 尝试匹配 TMDB
         if (parsed.title) {
           try {
-            const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year)
+            const tmdbResult = await searchTMDB(parsed.title, parsed.content_type, parsed.year, parsed.season, parsed.episode)
             if (tmdbResult) {
               result.tmdb = tmdbResult
             }
@@ -281,7 +281,13 @@ export async function POST(request: NextRequest) {
  * 搜索 TMDB + 豆瓣联合识别
  * 优先 TMDB（国际数据），备用豆瓣（中文数据）
  */
-async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'unknown', year?: number) {
+async function searchTMDB(
+  title: string, 
+  contentType: 'movie' | 'tv_series' | 'unknown', 
+  year?: number,
+  season?: number,
+  episode?: number
+) {
   try {
     const client = getSupabaseClient()
     
@@ -327,12 +333,19 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
           proxyUrl,  // 传递代理配置
         })
         
-        const tmdbResult = await tmdbService.identifyFromFileName(
-          year ? `${title} (${year})` : title
-        )
+        // 构建包含季集信息的文件名
+        let fileName = title
+        if (year) fileName += ` (${year})`
+        if (season && episode) {
+          fileName += ` - S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
+        } else if (season) {
+          fileName += ` - S${String(season).padStart(2, '0')}`
+        }
+        
+        const tmdbResult = await tmdbService.identifyFromFileName(fileName)
         
         if (tmdbResult && tmdbResult.tmdb_id) {
-          console.log(`[智能助手] TMDB识别成功: ${title} -> ${tmdbResult.title} (ID: ${tmdbResult.tmdb_id})`)
+          console.log(`[智能助手] TMDB识别成功: ${title} -> ${tmdbResult.title} (ID: ${tmdbResult.tmdb_id}, type: ${tmdbResult.type})`)
           return {
             id: tmdbResult.tmdb_id,
             title: tmdbResult.title,
@@ -344,6 +357,7 @@ async function searchTMDB(title: string, contentType: 'movie' | 'tv_series' | 'u
             genres: tmdbResult.genres,
             cast: tmdbResult.cast,
             source: 'tmdb' as const,
+            type: tmdbResult.type,
           }
         }
       } catch (error) {
