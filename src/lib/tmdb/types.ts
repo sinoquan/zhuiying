@@ -333,12 +333,15 @@ export class TMDBService {
     try {
       // 根据是否有季/集信息判断类型
       if (parsed.season !== null || parsed.episode !== null) {
-        // 电视剧
-        const results = await this.searchTV(parsed.title, parsed.year || undefined)
+        // 有季集信息，优先搜索电视剧
+        console.log(`[TMDB] 检测到季集信息 S${parsed.season}E${parsed.episode}，优先搜索电视剧`)
+        const tvResults = await this.searchTV(parsed.title, parsed.year || undefined)
         
-        if (results.length > 0) {
-          const show = results[0]
+        if (tvResults.length > 0) {
+          const show = tvResults[0]
           const details = await this.getTVDetails(show.id, 'credits')
+          
+          console.log(`[TMDB] 电视剧搜索成功: ${show.name} (ID: ${show.id})`)
           
           return {
             type: 'tv',
@@ -355,6 +358,43 @@ export class TMDBService {
             genres: details.genres?.map((g: { name: string }) => g.name),
             cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
             original_language: show.original_language,
+            production_countries: details.production_countries?.map((c: { iso_3166_1: string }) => c.iso_3166_1),
+          }
+        }
+        
+        // 电视剧没结果，但文件名有季集信息，仍然尝试搜索电影作为备用
+        // 但要记录警告
+        console.log(`[TMDB] 电视剧搜索无结果，尝试电影搜索作为备用`)
+        const movieResults = await this.searchMovie(parsed.title, parsed.year || undefined)
+        
+        if (movieResults.length > 0) {
+          const movie = movieResults[0]
+          const movieScore = this.calculateMatchScore(parsed.title, movie.title || movie.original_title || '')
+          
+          console.log(`[TMDB] 电影搜索结果: ${movie.title} (匹配度: ${movieScore})`)
+          
+          // 即使找到电影，因为有季集信息，仍然返回电视剧类型
+          // 但使用电影的 TMDB ID 和信息
+          const details = await this.getMovieDetails(movie.id, 'credits')
+          
+          // 警告：文件名表示是电视剧，但 TMDB 只找到电影
+          console.warn(`[TMDB] 警告: 文件名包含季集信息 S${parsed.season}E${parsed.episode}，但 TMDB 只找到电影结果`)
+          
+          return {
+            type: 'tv', // 强制类型为电视剧
+            title: movie.title,
+            original_title: movie.original_title,
+            year: parsed.year || (movie.release_date ? parseInt(movie.release_date.split('-')[0]) : null),
+            season: parsed.season,
+            episode: parsed.episode,
+            tmdb_id: movie.id,
+            poster_url: movie.poster_path ? `${this.imageBaseUrl}${movie.poster_path}` : null,
+            overview: movie.overview,
+            is_completed: true,
+            rating: movie.vote_average,
+            genres: details.genres?.map((g: { name: string }) => g.name),
+            cast: details.credits?.cast?.slice(0, 5).map((c: { name: string }) => c.name),
+            original_language: movie.original_language,
             production_countries: details.production_countries?.map((c: { iso_3166_1: string }) => c.iso_3166_1),
           }
         }

@@ -129,8 +129,21 @@ function buildTemplateData(
   // 从 tmdb_info 获取已存储的数据
   const tmdbInfo = (shareRecord.tmdb_info as Record<string, any>) || {}
   
-  // 确定类型 - 优先使用 tmdb_info.type（创建记录时已正确设置）
-  const contentType = tmdbInfo.type || tmdbData?.type || shareRecord.content_type || 'movie'
+  // 检查文件名中是否有季集信息（最可靠的类型判断依据）
+  const hasSeasonEpisode = (tmdbInfo.season && tmdbInfo.season > 0) || 
+                           (tmdbInfo.episode && tmdbInfo.episode > 0) ||
+                           (tmdbData?.season && tmdbData.season > 0) ||
+                           (tmdbData?.episode && tmdbData.episode > 0) ||
+                           (shareRecord.file_name && /S\d{1,2}E\d{1,4}/i.test(shareRecord.file_name))
+  
+  // 确定类型 - 如果有季集信息，强制为电视剧
+  let contentType: string
+  if (hasSeasonEpisode) {
+    contentType = 'tv'
+    console.log(`[SharePushService] 检测到季集信息，强制类型为电视剧`)
+  } else {
+    contentType = tmdbInfo.type || tmdbData?.type || shareRecord.content_type || 'movie'
+  }
   const isTV = contentType === 'tv' || contentType === 'tv_series'
   
   // 计算进度条（电视剧）- 只有 total_episodes 有效时才计算
@@ -327,10 +340,19 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
   // 优先使用已有的 TMDB ID
   const existingTMDBId = shareRecord.tmdb_id || shareRecord.tmdb_info?.tmdbId || shareRecord.tmdb_info?.id
   
-  // 优先从已存储的 tmdb_info 获取类型，不要用 content_type（folder 不能判断是电影还是电视剧）
+  // 检查文件名中是否有季集信息（最可靠的类型判断依据）
+  const hasSeasonEpisode = (shareRecord.tmdb_info?.season && shareRecord.tmdb_info.season > 0) || 
+                           (shareRecord.tmdb_info?.episode && shareRecord.tmdb_info.episode > 0) ||
+                           (shareRecord.file_name && /S\d{1,2}E\d{1,4}/i.test(shareRecord.file_name))
+  
+  // 确定类型
   const storedType = shareRecord.tmdb_info?.type
   let type: 'movie' | 'tv' = 'movie'
-  if (storedType === 'tv' || storedType === 'tv_series') {
+  if (hasSeasonEpisode) {
+    // 有季集信息，强制为电视剧
+    type = 'tv'
+    console.log(`[SharePushService] 检测到季集信息，强制类型为电视剧`)
+  } else if (storedType === 'tv' || storedType === 'tv_series') {
     type = 'tv'
   } else if (storedType === 'movie') {
     type = 'movie'
@@ -340,7 +362,7 @@ export async function pushShareRecord(options: PushOptions): Promise<PushResult[
     type = (contentType === 'tv' || contentType === 'tv_series') ? 'tv' : 'movie'
   }
   
-  console.log(`[SharePushService] 类型判断: storedType=${storedType}, content_type=${shareRecord.content_type}, 最终type=${type}`)
+  console.log(`[SharePushService] 类型判断: hasSeasonEpisode=${hasSeasonEpisode}, storedType=${storedType}, content_type=${shareRecord.content_type}, 最终type=${type}`)
   
   if (existingTMDBId) {
     console.log(`[SharePushService] 使用已有 TMDB ID: ${existingTMDBId}`)
