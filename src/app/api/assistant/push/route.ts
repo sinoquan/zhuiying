@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
         .insert({
           cloud_drive_id: cloudDriveId,
           file_path: link.shareUrl,
-          file_name: file?.name ? `${file.name}${file.season ? ` - S${String(file.season).padStart(2, '0')}` : ''}${file.episode ? `E${String(file.episode).padStart(2, '0')}` : ''}` : link.shareId,
+          file_name: file?.name || link.shareId,  // 保持原始文件名，不修改
           share_url: link.shareUrl,
           share_code: link.shareCode || '',
           share_status: 'active',

@@ -132,12 +132,13 @@ function buildTemplateData(
   const contentType = tmdbInfo.type || tmdbData?.type || shareRecord.content_type || 'movie'
   const isTV = contentType === 'tv' || contentType === 'tv_series'
   
-  // 计算进度条（电视剧）
+  // 计算进度条（电视剧）- 只有 total_episodes 有效时才计算
   let progressBar = ''
   let progressPercent = ''
-  if (isTV && (tmdbData?.total_episodes || tmdbInfo.totalEpisodes)) {
-    const total = tmdbData?.total_episodes || tmdbInfo.totalEpisodes || 1
-    const current = tmdbData?.episode || tmdbInfo.episode || tmdbInfo.season || 1
+  const totalEpisodes = tmdbInfo.totalEpisodes || tmdbData?.total_episodes
+  if (isTV && totalEpisodes && totalEpisodes > 0) {
+    const total = totalEpisodes
+    const current = tmdbInfo.episode || tmdbData?.episode || 1
     const progress = calculateProgress(current, total)
     progressBar = progress.bar
     progressPercent = progress.percent
@@ -212,30 +213,30 @@ function buildTemplateData(
   }
   
   return {
-    // 基本信息
-    title: tmdbData?.title || shareRecord.tmdb_title || shareRecord.file_name,
-    year: tmdbData?.year || '',
-    tmdb_id: tmdbData?.tmdb_id || shareRecord.tmdb_id || '',
+    // 基本信息 - 优先从 tmdbInfo 获取（已存储的正确信息）
+    title: tmdbInfo.title || tmdbData?.title || shareRecord.tmdb_title || extractCleanTitle(shareRecord.file_name),
+    year: tmdbInfo.year || tmdbData?.year || '',
+    tmdb_id: tmdbInfo.tmdbId || tmdbData?.tmdb_id || shareRecord.tmdb_id || '',
     
     // 评分和类型
-    rating: (tmdbData?.rating !== undefined && tmdbData?.rating !== null) 
-      ? `${tmdbData.rating.toFixed(1)}/10` 
+    rating: (tmdbInfo.rating || tmdbData?.rating) 
+      ? `${(tmdbInfo.rating || tmdbData?.rating).toFixed(1)}/10` 
       : '',
-    genres: tmdbData?.genres?.slice(0, 3).join(', ') || '',
+    genres: (tmdbInfo.genres || tmdbData?.genres)?.slice?.(0, 3)?.join?.(', ') || '',
     
     // 演员
-    cast: tmdbData?.cast?.slice(0, 5).join(', ') || '',
+    cast: (tmdbInfo.cast || tmdbData?.cast)?.slice?.(0, 5)?.join?.(', ') || '',
     
     // 简介
-    overview: tmdbData?.overview || '',
+    overview: tmdbInfo.overview || tmdbData?.overview || '',
     
     // 海报
-    poster_url: posterCacheUrl || tmdbData?.poster_url || '',
+    poster_url: posterCacheUrl || tmdbInfo.poster_url || tmdbData?.poster_url || '',
     
-    // 剧集信息
+    // 剧集信息 - 优先从 tmdbInfo 获取
     season: tmdbInfo.season || tmdbData?.season || 1,
     episode: tmdbInfo.episode || tmdbData?.episode || 1,
-    total_episodes: tmdbData?.total_episodes || 1,
+    total_episodes: tmdbInfo.totalEpisodes || tmdbData?.total_episodes || 0,
     progress_bar: progressBar,
     progress_percent: progressPercent,
     status: statusText,
@@ -260,6 +261,23 @@ function buildTemplateData(
     // 备注
     note: shareRecord.remark || '',
   }
+}
+
+/**
+ * 从文件名中提取干净的标题（去除季集信息和质量标签）
+ */
+function extractCleanTitle(fileName: string): string {
+  if (!fileName) return ''
+  let title = fileName
+  // 移除扩展名
+  title = title.replace(/\.[^.]+$/, '')
+  // 移除季集信息
+  title = title.replace(/\s*-\s*S\d+E\d+.*$/i, '')
+  title = title.replace(/\s+S\d+E\d+.*$/i, '')
+  // 移除质量标签
+  title = title.replace(/\s*-\s*\d+p.*$/i, '')
+  title = title.replace(/\s*\d+p.*$/i, '')
+  return title.trim()
 }
 
 /**
