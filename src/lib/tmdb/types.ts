@@ -490,8 +490,8 @@ export class TMDBService {
     let season: number | null = null
     let episode: number | null = null
     
-    // 匹配 S01E05 格式
-    const seMatch = name.match(/S(\d{1,2})E(\d{1,2})/i)
+    // 匹配 S01E05 格式 - 支持 1-4 位集数
+    const seMatch = name.match(/S(\d{1,2})E(\d{1,4})/i)
     if (seMatch) {
       season = parseInt(seMatch[1])
       episode = parseInt(seMatch[2])
