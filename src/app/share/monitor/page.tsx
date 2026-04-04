@@ -772,6 +772,9 @@ export default function FileMonitorPage() {
                   const scanStatus = scanStats?.lastScanStatus
                   const isScanning = scanningId === monitor.id
                   
+                  // 路径显示：第一行显示文件夹名，第二行显示完整路径
+                  const folderName = monitor.path_name || monitor.path.split('/').pop() || monitor.path
+                  
                   return (
                     <TableRow key={monitor.id}>
                       <TableCell>
@@ -783,9 +786,14 @@ export default function FileMonitorPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm truncate block max-w-[200px]" title={monitor.path}>
-                          {monitor.path}
-                        </span>
+                        <div className="flex flex-col gap-0.5 max-w-[200px]">
+                          <span className="font-medium text-sm truncate" title={folderName}>
+                            {folderName}
+                          </span>
+                          <span className="text-xs text-muted-foreground truncate" title={monitor.path}>
+                            {monitor.path}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         {monitor.push_channels_list && monitor.push_channels_list.length > 0 ? (
